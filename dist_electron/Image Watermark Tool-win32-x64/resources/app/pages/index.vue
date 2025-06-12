@@ -1,0 +1,824 @@
+<script setup>
+const {locale, locales, setLocale} = useI18n()
+// import imageCompression from "browser-image-compression";
+
+const availableLocales = computed(() => {
+  return (locales.value).filter(i => i.code !== locale.value)
+})
+const switchLocalePath = useSwitchLocalePath()
+
+const repeatTextStatus = ref(true)
+const singleXPos = ref(0)
+const singleYPos = ref(0)
+const singleInitStatus = ref(true)
+const multiInitStatus = ref(true)
+
+const canvas = ref(null)
+const canvasImage = ref()
+const fileObj = ref({
+  name: '',
+  type: ''
+})
+const fileObject = ref({})
+const onFileChange = (event) => {
+  const file = event.target.files[0]
+  const ctx = canvas.value.getContext('2d')
+
+  if (!file) return
+
+  fileObject.value = file
+  if (repeatTextStatus.value) {
+    multiInitStatus.value = true
+  } else {
+    singleInitStatus.value = true
+  }
+
+  fileObj.value.name = file.name
+  fileObj.value.type = file.type
+
+  const reader = new FileReader()
+  reader.onload = function (event) {
+    canvasImage.value = new Image();
+    canvasImage.value.onload = function () {
+      // 清除画布
+      // ctx.clearRect(0, 0, canvas.value.width, canvas.value.height);
+
+      canvas.value.width = canvasImage.value.width
+      canvas.value.height = canvasImage.value.height
+
+      // 将上传的图片绘制到Canvas上
+      ctx.drawImage(canvasImage.value, 0, 0, canvas.value.width, canvas.value.height);
+      // 添加水印
+      setWatermark(ctx)
+    };
+    canvasImage.value.src = event.target.result;
+  };
+
+  reader.readAsDataURL(file)
+}
+
+// 添加目录选择和批量处理功能
+const folderProcessing = ref(false)
+const processedImages = ref(0)
+const totalImages = ref(0)
+const processingProgress = ref(0)
+
+const onFolderChange = async (event) => {
+  const files = event.target.files
+  if (!files || files.length === 0) return
+  
+  // 筛选图片文件
+  const imageFiles = Array.from(files).filter(file => 
+    file.type.startsWith('image/') || 
+    /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name)
+  )
+  
+  if (imageFiles.length === 0) {
+    alert('未找到图片文件')
+    return
+  }
+  
+  totalImages.value = imageFiles.length
+  processedImages.value = 0
+  processingProgress.value = 0
+  folderProcessing.value = true
+  
+  // 创建一个临时处理队列
+  const processQueue = [...imageFiles]
+  
+  // 批量处理图片
+  await processImagesInBatch(processQueue)
+}
+
+// 批量处理图片
+const processImagesInBatch = async (imageQueue) => {
+  // 创建临时画布用于处理
+  const tempCanvas = document.createElement('canvas')
+  const tempCtx = tempCanvas.getContext('2d')
+  
+  for (let i = 0; i < imageQueue.length; i++) {
+    const file = imageQueue[i]
+    await processImage(file, tempCanvas, tempCtx)
+    
+    processedImages.value++
+    processingProgress.value = Math.round((processedImages.value / totalImages.value) * 100)
+  }
+  
+  folderProcessing.value = false
+  alert(`处理完成！成功处理 ${processedImages.value} 张图片`)
+}
+
+// 使用Electron的文件系统API选择目录
+const selectDirectoryWithElectron = async () => {
+  const { $electron } = useNuxtApp();
+  
+  if (!$electron.isElectron) {
+    alert('此功能仅在桌面应用中可用');
+    return;
+  }
+  
+  const directoryPath = await $electron.selectDirectory();
+  if (!directoryPath) return;
+  
+  // 读取目录中的图片
+  const imageFiles = await $electron.readDirectoryImages(directoryPath);
+  
+  if (imageFiles.length === 0) {
+    alert('所选目录中没有找到图片文件');
+    return;
+  }
+  
+  totalImages.value = imageFiles.length;
+  processedImages.value = 0;
+  processingProgress.value = 0;
+  folderProcessing.value = true;
+  
+  // 批量处理图片
+  await processElectronImages(imageFiles);
+}
+
+// 处理来自Electron的图片文件
+const processElectronImages = async (imageFiles) => {
+  const { $electron } = useNuxtApp();
+  const tempCanvas = document.createElement('canvas');
+  const tempCtx = tempCanvas.getContext('2d');
+  
+  for (let i = 0; i < imageFiles.length; i++) {
+    const file = imageFiles[i];
+    
+    // 使用Electron文件系统读取图片
+    try {
+      const img = new Image();
+      
+      // 等待图片加载
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = `file://${file.path}`;
+      });
+      
+      // 设置画布尺寸
+      tempCanvas.width = img.width;
+      tempCanvas.height = img.height;
+      
+      // 绘制图片
+      tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // 应用水印
+      if (watermarkType.value === 'text') {
+        applyTextWatermark(tempCtx, tempCanvas);
+      } else {
+        applyImageWatermark(tempCtx, tempCanvas);
+      }
+      
+      // 保存图片
+      const dataURL = tempCanvas.toDataURL('image/png');
+      const fileName = `watermarked_${file.name}`;
+      
+      // 使用Electron保存图片
+      await $electron.saveImage({ dataURL, fileName });
+      
+      processedImages.value++;
+      processingProgress.value = Math.round((processedImages.value / totalImages.value) * 100);
+    } catch (error) {
+      console.error(`处理图片 ${file.name} 时出错:`, error);
+    }
+  }
+  
+  folderProcessing.value = false;
+  alert(`处理完成！成功处理 ${processedImages.value} 张图片`);
+}
+
+// 处理单个图片
+const processImage = (file, tempCanvas, tempCtx) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    
+    reader.onload = function(event) {
+      const img = new Image()
+      
+      img.onload = function() {
+        // 设置画布尺寸
+        tempCanvas.width = img.width
+        tempCanvas.height = img.height
+        
+        // 绘制图片
+        tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height)
+        
+        // 应用水印
+        if (watermarkType.value === 'text') {
+          applyTextWatermark(tempCtx, tempCanvas)
+        } else {
+          applyImageWatermark(tempCtx, tempCanvas)
+        }
+        
+        // 导出图片并下载
+        const dataURL = tempCanvas.toDataURL(file.type || 'image/png')
+        const link = document.createElement('a')
+        link.href = dataURL
+        link.download = `watermarked_${file.name}`
+        link.click()
+        link.remove()
+        
+        resolve()
+      }
+      
+      img.src = event.target.result
+    }
+    
+    reader.readAsDataURL(file)
+  })
+}
+
+// 文字水印
+const watermarkText = ref(locale.value === 'cn' ? '仅供 xxx 验证使用' : 'Only for xxx verification use')
+const watermarkColor = ref('#0000ff')
+const watermarkOpacity = ref(0.3)
+const watermarkSpacing = ref(5)
+const watermarkTextSize = ref(2)
+const watermarkAngle = ref(30)
+const watermarkSingleAngle = ref(0)
+
+// 水印类型选择
+const watermarkType = ref('text') // text 或 image
+
+// 图片水印相关
+const watermarkImage = ref(null)
+const watermarkImageSize = ref(20) // 百分比
+
+// 上传水印图片
+const onWatermarkImageChange = (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  const reader = new FileReader()
+  reader.onload = function(event) {
+    watermarkImage.value = new Image()
+    watermarkImage.value.src = event.target.result
+    watermarkImage.value.onload = function() {
+      // 如果有画布和图片，重新应用水印
+      if (canvasImage.value && canvas.value) {
+        waterMarkTextChange()
+      }
+    }
+  }
+  reader.readAsDataURL(file)
+}
+
+// 应用图片水印
+const applyImageWatermark = (ctx, targetCanvas) => {
+  if (!watermarkImage.value) return
+  
+  ctx.save()
+  ctx.globalAlpha = watermarkOpacity.value  // 使用与文字水印相同的透明度设置
+  
+  if (repeatTextStatus.value) {
+    // 计算水印尺寸
+    const watermarkWidth = targetCanvas.width * (watermarkImageSize.value / 100)
+    const scaleFactor = watermarkWidth / watermarkImage.value.width
+    const watermarkHeight = watermarkImage.value.height * scaleFactor
+    
+    // 计算间距
+    const spacingX = watermarkWidth * 1.5
+    const spacingY = watermarkHeight * 1.5
+    
+    // 旋转
+    ctx.translate(targetCanvas.width / 2, targetCanvas.height / 2)
+    ctx.rotate(watermarkAngle.value * Math.PI / 180)
+    ctx.translate(-targetCanvas.width / 2, -targetCanvas.height / 2)
+    
+    // 计算需要的水印数量
+    const diagonalLength = Math.sqrt(targetCanvas.width ** 2 + targetCanvas.height ** 2)
+    const cols = Math.ceil(diagonalLength / spacingX) + 1
+    const rows = Math.ceil(diagonalLength / spacingY) + 1
+    
+    // 计算起始位置偏移
+    const offsetX = -diagonalLength / 2
+    const offsetY = -diagonalLength / 2
+    
+    // 绘制重复水印
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const x = offsetX + i * spacingX
+        const y = offsetY + j * spacingY
+        ctx.drawImage(
+          watermarkImage.value, 
+          x, y, 
+          watermarkWidth, watermarkHeight
+        )
+      }
+    }
+  } else {
+    // 单个水印
+    // 计算水印尺寸
+    const watermarkWidth = targetCanvas.width * (watermarkImageSize.value / 100)
+    const scaleFactor = watermarkWidth / watermarkImage.value.width
+    const watermarkHeight = watermarkImage.value.height * scaleFactor
+    
+    // 保存当前状态
+    ctx.save()
+    
+    // 移动到水印位置中心点
+    ctx.translate(singleXPos.value, singleYPos.value)
+    
+    // 旋转
+    ctx.rotate(watermarkSingleAngle.value * Math.PI / 180)
+    
+    // 绘制水印
+    ctx.drawImage(
+      watermarkImage.value, 
+      -watermarkWidth / 2, -watermarkHeight / 2, 
+      watermarkWidth, watermarkHeight
+    )
+    
+    // 恢复状态
+    ctx.restore()
+  }
+  
+  ctx.restore()
+}
+
+const setWatermark = (ctx) => {
+  // 根据水印类型应用不同的水印
+  if (watermarkType.value === 'text') {
+    applyTextWatermark(ctx, canvas.value)
+  } else {
+    applyImageWatermark(ctx, canvas.value)
+  }
+};
+
+// 文字水印应用
+const applyTextWatermark = (ctx, targetCanvas) => {
+  const lines = watermarkText.value.split('\n');
+  const textSize = watermarkTextSize.value * Math.max(15, Math.min(targetCanvas.width, targetCanvas.height) / 25);
+
+  ctx.font = `bold ${textSize}px -apple-system,"Helvetica Neue",Helvetica,Arial,"PingFang SC","Hiragino Sans GB","WenQuanYi Micro Hei",sans-serif`;
+  ctx.fillStyle = watermarkColor.value;
+  ctx.globalAlpha = watermarkOpacity.value;
+
+  // 保存当前绘图状态
+  ctx.save();
+
+  //当水印是铺满图片场景下
+  if (repeatTextStatus.value) {
+    if (multiInitStatus.value) {
+      multiInitStatus.value = false
+      watermarkAngle.value = 30
+    }
+    // 设置文字倾斜角度
+    ctx.rotate(watermarkAngle.value * Math.PI / 180);
+
+    lines.forEach((line, lineIndex) => {
+      const textWidth = ctx.measureText(line).width;
+      const textHeight = textSize; // 估算文字高度
+      const textMargin = ctx.measureText('哈').width;
+      // 计算每行文字的高度，包括行间距
+      const lineHeight = textSize + watermarkSpacing.value * textSize;
+      // 计算水印的宽度
+      const diagonalLength = Math.sqrt(targetCanvas.width ** 2 + targetCanvas.height ** 2);
+
+      if(watermarkAngle.value >= 0){
+
+        const x = Math.ceil(diagonalLength / (textWidth + textMargin));
+        const y = Math.ceil(targetCanvas.height / (watermarkSpacing.value * textHeight));
+
+        // 计算绘制文本的 y 坐标，考虑行索引和行高
+        const startY = lineHeight * lineIndex;
+
+        for (let i = 0; i < x; i++) {
+          for (let j = -y; j < y; j++) {
+            // 计算绘制文本的y坐标，考虑行间距和行索引
+            const yPos = startY + j * watermarkSpacing.value * textHeight;
+
+            ctx.fillText(line, (textWidth + textMargin) * i, yPos);
+          }
+        }
+      }else{
+        const x = Math.ceil(diagonalLength / (textWidth + textMargin));
+        const y = Math.ceil(diagonalLength / (watermarkSpacing.value * textHeight));
+        // 计算绘制文本的 y 坐标，考虑行索引和行高
+        const startY = lineHeight * lineIndex;
+
+        // watermarkAngle.value < 0
+        for (let i = -x; i < x; i++) {
+          for (let j = -y; j < y; j++) {
+            // 计算绘制文本的y坐标，考虑行间距和行索引
+            const yPos = startY + j * watermarkSpacing.value * textHeight;
+            ctx.fillText(line, (textWidth + textMargin) * i, yPos);
+          }
+        }
+      }
+
+    })
+  } else {
+    if (singleInitStatus.value) {
+      watermarkSingleAngle.value = 0
+    }
+    ctx.rotate(watermarkSingleAngle.value * Math.PI / 180);
+    // 当水印不是铺满图片场景下
+    lines.forEach((line, lineIndex) => {
+
+      if (singleInitStatus.value) {
+        singleInitStatus.value = false
+        singleXPos.value = Math.ceil((targetCanvas.width - ctx.measureText(line).width) / 2)
+        singleYPos.value = Math.ceil((targetCanvas.height - textSize) / 2)
+      }
+
+      // 计算绘制文本的 y 坐标，考虑行索引和行高
+      const startY = textSize * lineIndex + singleYPos.value;
+
+      ctx.fillText(line, singleXPos.value, startY);
+    })
+
+  }
+
+  // 恢复之前保存的绘图状态
+  ctx.restore();
+
+  ctx.globalAlpha = 1; // 重置全局透明度
+}
+
+const downloadLoading = ref(false)
+const handleDownload = () => {
+  if (!canvas.value) return;
+
+  downloadPercentStatus.value = true
+  downloadLoading.value = true;
+
+  setTimeout(() => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', canvas.value.toDataURL());
+    xhr.responseType = 'blob';
+
+    xhr.onloadstart = () => {
+      // downloadLoading.value = true;
+    };
+
+    xhr.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = (event.loaded / event.total) * 100;
+        // 更新进度条
+        updateProgressBar(percentComplete);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const link = document.createElement('a');
+        const blob = new Blob([xhr.response], {type: fileObject.value.type});
+        const url = URL.createObjectURL(blob);
+
+        link.href = url;
+        link.download = fileObj.value.name || 'image.png';
+        link.click();
+
+        URL.revokeObjectURL(url);
+        link.remove();
+      }
+    };
+
+    xhr.onloadend = () => {
+      downloadLoading.value = false;
+      // 重置进度条
+      resetProgressBar();
+    };
+
+    xhr.send();
+  }, 500)
+};
+
+// 使用Electron保存图片
+const handleSaveWithElectron = async () => {
+  if (!canvas.value) return;
+  
+  downloadLoading.value = true;
+  
+  try {
+    const { $electron } = useNuxtApp();
+    const dataURL = canvas.value.toDataURL();
+    const fileName = fileObj.value.name || 'image.png';
+    
+    const result = await $electron.saveImage({ dataURL, fileName });
+    
+    if (result.success) {
+      console.log('图片已保存至:', result.filePath);
+    } else {
+      console.error('保存失败:', result.message);
+    }
+  } catch (error) {
+    console.error('保存过程中出错:', error);
+  } finally {
+    downloadLoading.value = false;
+  }
+};
+
+const downloadPercentStatus = ref(false)
+const downloadPercentComplete = ref(0);
+const updateProgressBar = (percentComplete) => {
+  // 更新进度条的显示
+  // 你可以根据下载进度来更新你的进度条的样式或长度等
+  downloadPercentComplete.value = percentComplete;
+};
+
+const resetProgressBar = () => {
+  // 重置进度条的显示
+  // 可能是隐藏进度条或将进度条长度重置为初始状态等
+  setTimeout(() => {
+    downloadPercentStatus.value = false;
+    downloadPercentComplete.value = 0;
+  }, 3000)
+};
+
+const handleDownload1 = () => {
+  if (!canvas.value) return
+  downloadLoading.value = true
+  setTimeout(() => {
+    // 保存图片
+    const dataURL = canvas.value.toDataURL();
+    const link = document.createElement('a');
+    link.href = dataURL;
+    link.download = fileObj.value.name || 'image.png';
+    link.click();
+    link.remove();
+    downloadLoading.value = false
+  }, 2000)
+}
+
+const waterMarkColorChange = (e) => {
+  watermarkColor.value = e
+  waterMarkTextChange()
+}
+const waterMarkTextChange = () => {
+
+  if (!canvasImage.value) return;
+
+  const ctx = canvas.value.getContext('2d');
+
+  // 清除画布
+  ctx.clearRect(0, 0, canvas.value.width, canvas.value.height);
+
+  // 将上传的图片绘制到Canvas上
+  ctx.drawImage(canvasImage.value, 0, 0, canvas.value.width, canvas.value.height);
+
+  // 添加水印
+  setWatermark(ctx);
+
+  ctx.globalAlpha = 1; // 重置全局透明度
+}
+const repeatStatusChange = (e) => {
+  repeatTextStatus.value = e
+  if (repeatTextStatus.value) {
+    multiInitStatus.value = true
+  } else {
+    singleInitStatus.value = true
+  }
+  if (!canvasImage.value) return;
+  waterMarkTextChange()
+}
+
+// 切换水印类型
+const switchWatermarkType = (type) => {
+  watermarkType.value = type
+  if (canvasImage.value) {
+    waterMarkTextChange()
+  }
+}
+</script>
+
+<template>
+  <div>
+    <p class="text-center p-[10px] sm:p-[0] sm:h-[40px] sm:leading-[40px] text-[12px] font-bold text-white bg-[#5d5cde]">
+      {{ $t('yourImageWillNotBeSentToAnyServer') }}
+    </p>
+
+    <div class="flex flex-col sm:flex-row">
+      <div class="bg-[#8881] sm:h-[calc(100vh-40px)] w-full sm:w-[520px] overflow-y-auto relative">
+        <div class="sm:h-[calc(100vh-180px)] sm:overflow-y-auto">
+          <div class="p-[20px]">
+            <NuxtLink v-for="locale in availableLocales" :key="locale.code" :to="switchLocalePath(locale.code)">
+              🌐 {{ locale.name }}
+            </NuxtLink>
+            <h1 class="text-[22px] font-bold my-[20px] flex gap-1 flex-row items-center ">
+              {{ $t('websiteName') }}
+              <nuxt-link class="text-[12px] text-red-500"
+                         href="https://github.com/unilei/image-watermark-tool.git" target="_blank">
+<!--                <Icon name="uil:github" color="black" size="24"/>-->
+                <img style="width: 24px;height: 24px;" src="@/assets/icon/mdi--github.svg" alt="github">
+              </nuxt-link>
+            </h1>
+          </div>
+
+          <ul class="flex flex-col gap-[12px]">
+            <!-- 水印类型选择 -->
+            <li class="flex flex-col gap-1 px-[20px]">
+              <label class="min-w-[70px] font-bold text-[12px]">
+                {{ $t('watermarkType') || '水印类型' }}
+              </label>
+              <div class="flex gap-2">
+                <el-radio-group v-model="watermarkType" @change="waterMarkTextChange">
+                  <el-radio label="text">{{ $t('textWatermark') || '文字水印' }}</el-radio>
+                  <el-radio label="image">{{ $t('imageWatermark') || '图片水印' }}</el-radio>
+                </el-radio-group>
+              </div>
+            </li>
+            
+            <li class="flex flex-col gap-1  px-[20px] ">
+              <label class="min-w-[70px] font-bold text-[12px]">
+                {{ $t('imageFullyCoveredTheWatermark') }}
+              </label>
+              <el-switch v-model="repeatTextStatus"
+                         style="--el-switch-on-color: #5d5cde; --el-switch-off-color: #ff4949"
+                         @change="repeatStatusChange"
+              >
+
+              </el-switch>
+            </li>
+            
+            <!-- 文字水印选项 -->
+            <template v-if="watermarkType === 'text'">
+              <li class="flex flex-col gap-1  px-[20px] ">
+                <label class="min-w-[70px] font-bold text-[12px]">{{ $t('watermarkText') }}</label>
+                <el-input v-model="watermarkText" type="textarea" placeholder="请输入内容"
+                          @change="waterMarkTextChange"></el-input>
+              </li>
+              <li class="flex flex-col  px-[20px]   gap-1">
+                <label class="min-w-[70px] font-bold text-[12px]">{{ $t('watermarkColor') }}</label>
+                <client-only>
+                  <el-color-picker v-model="watermarkColor" @active-change="waterMarkColorChange"></el-color-picker>
+                </client-only>
+              </li>
+            </template>
+            
+            <!-- 图片水印选项 -->
+            <template v-if="watermarkType === 'image'">
+              <li class="flex flex-col gap-1 px-[20px]">
+                <label class="min-w-[70px] font-bold text-[12px]">
+                  {{ $t('watermarkImage') || '水印图片' }}
+                </label>
+                <input type="file" accept="image/*" @change="onWatermarkImageChange">
+              </li>
+              <li class="flex flex-col px-[20px] gap-1">
+                <label class="min-w-[70px] font-bold text-[12px]">
+                  {{ $t('watermarkImageSize') || '水印图片大小' }}
+                </label>
+                <client-only>
+                  <el-slider v-model="watermarkImageSize" :min="1" :max="50" :step="1"
+                            @change="waterMarkTextChange"></el-slider>
+                </client-only>
+              </li>
+            </template>
+            
+            <li class="flex flex-col  px-[20px]  gap-1">
+              <label class="min-w-[70px] font-bold text-[12px]">{{ $t('watermarkOpacity') }}</label>
+              <client-only>
+                <el-slider
+                    v-model="watermarkOpacity" :min="0" :max="1" :step="0.1"
+                    @change="waterMarkTextChange">
+                </el-slider>
+              </client-only>
+            </li>
+            <li class="flex flex-col px-[20px]  gap-1" v-if="repeatTextStatus && watermarkType === 'text'">
+              <label class="min-w-[70px] font-bold text-[12px]">{{ $t('watermarkSpacing') }}</label>
+              <client-only>
+                <el-slider v-model="watermarkSpacing" :min="1" :max="16" :step="0.5"
+                           @change="waterMarkTextChange"></el-slider>
+              </client-only>
+            </li>
+            <li class="flex flex-col  px-[20px]  gap-1" v-if="watermarkType === 'text'">
+              <label class="min-w-[70px] font-bold text-[12px]">{{ $t('watermarkSize') }}</label>
+              <client-only>
+                <el-slider v-model="watermarkTextSize" :min="0.1" :max="10" :step="0.1"
+                           @change="waterMarkTextChange"></el-slider>
+              </client-only>
+            </li>
+            <li class="flex flex-col  px-[20px]  gap-1" v-if="repeatTextStatus">
+              <label class="min-w-[70px] font-bold text-[12px]">{{ $t('watermarkAngle') }}</label>
+              <client-only>
+                <el-slider v-model="watermarkAngle" :min="-90" :max="90" :step="1"
+                           @change="waterMarkTextChange"></el-slider>
+              </client-only>
+            </li>
+            <li class="flex flex-col  px-[20px]  gap-1" v-if="!repeatTextStatus">
+              <label class="min-w-[70px] font-bold text-[12px]">{{ $t('watermarkAngle') }}</label>
+              <client-only>
+                <el-slider v-model="watermarkSingleAngle" :min="-90" :max="90" :step="1"
+                           @change="waterMarkTextChange"></el-slider>
+              </client-only>
+            </li>
+            <li class="flex flex-col  px-[20px]  gap-1" v-if="!repeatTextStatus">
+              <label class="min-w-[70px] font-bold text-[12px]">{{ $t('watermarkleftright') }}</label>
+              <client-only>
+                <el-slider v-model="singleXPos" :min="0" :max="canvas.width" :step="1"
+                           @change="waterMarkTextChange"></el-slider>
+              </client-only>
+            </li>
+            <li class="flex flex-col  px-[20px]  gap-1" v-if="!repeatTextStatus">
+              <label class="min-w-[70px] font-bold text-[12px]">{{ $t('watermarktopbottom') }}</label>
+              <client-only>
+                <el-slider v-model="singleYPos" :min="0" :max="canvas.height" :step="1"
+                           @change="waterMarkTextChange"></el-slider>
+              </client-only>
+            </li>
+          </ul>
+        </div>
+        <p class="hidden sm:block h-[120px] absolute bottom-0 left-0 right-0 w-full text-[12px] font-semibold text-[#666] p-[10px]">
+          <Icon name="emojione-v1:circled-information-source"></Icon>
+          {{ $t('websiteDesc') }}
+        </p>
+      </div>
+      <div class="bg-[#8881] sm:bg-white p-[20px] sm:h-[calc(100vh-40px)] w-full sm:overflow-y-auto">
+
+        <h1 class="hidden sm:flex text-center text-[22px] font-bold mt-[40px] sm:gap-1 sm:flex-row sm:items-center sm:justify-center">
+          {{ $t('websiteName') }}
+
+          <nuxt-link class="text-[12px] text-red-500"
+                     href="https://github.com/unilei/image-watermark-tool.git" target="_blank">
+            <img style="width: 24px;height: 24px;" src="@/assets/icon/mdi--github.svg" alt="github">
+          </nuxt-link>
+        </h1>
+
+        <div class="text-center mt-[14px] sm:mt-[40px]">
+          <div class="flex flex-col gap-4 items-center">
+            <!-- 单张图片上传 -->
+            <div>
+              <h3 class="text-[16px] font-bold mb-2">{{ $t('singleImageUpload') || '单张图片上传' }}</h3>
+              <input type="file" accept="image/*" @change="onFileChange">
+            </div>
+            
+            <!-- 批量处理目录 -->
+            <div>
+              <h3 class="text-[16px] font-bold mb-2">{{ $t('batchProcessFolder') || '批量处理目录' }}</h3>
+              <div class="flex flex-col gap-2">
+                <input type="file" accept="image/*" @change="onFolderChange" webkitdirectory directory multiple>
+                
+                <!-- Electron原生选择目录按钮 -->
+                <el-button 
+                  type="primary" 
+                  size="small" 
+                  @click="selectDirectoryWithElectron" 
+                  v-if="$electron?.isElectron"
+                >
+                  {{ $t('selectDirectoryNative') || '选择目录(桌面版)' }}
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 批量处理进度 -->
+        <div class="max-w-[520px] w-full mx-auto my-[12px] sm:my-[20px] p-[10px] text-center" v-if="folderProcessing">
+          <div class="flex flex-col gap-2">
+            <p class="text-[14px]">{{ $t('processingBatch') || '批量处理中...' }} ({{ processedImages }}/{{ totalImages }})</p>
+            <el-progress :percentage="processingProgress" color="#5d5cde"></el-progress>
+          </div>
+        </div>
+
+        <div class="max-w-[520px] w-full mx-auto my-[12px] sm:my-[40px] p-[10px] text-center" v-show="canvasImage">
+          <div class="flex gap-2 justify-center">
+            <el-button :loading="downloadLoading"
+                     color="#5d5cde" type="primary"
+                     @click="handleDownload">
+              {{ $t('download') }}
+            </el-button>
+            
+            <!-- 桌面版保存按钮 -->
+            <el-button 
+              v-if="$electron?.isElectron"
+              :loading="downloadLoading"
+              color="#5d5cde" 
+              type="primary"
+              @click="handleSaveWithElectron"
+            >
+              {{ $t('saveImageAs') }}
+            </el-button>
+          </div>
+          
+          <el-progress class="mt-3"
+                       v-if="downloadPercentStatus"
+                       :percentage="downloadPercentComplete"
+                       color="#5d5cde"
+          />
+        </div>
+
+        <div class="text-center my-[40px] max-w-[520px]  w-full mx-auto p-[10px]" v-show="canvasImage">
+          <canvas ref="canvas"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</template>
+
+<style scoped>
+canvas {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px dashed #AAA;
+  border-radius: 8px;
+}
+
+:deep(.el-slider) {
+  --el-slider-main-bg-color: #5d5cde;
+}
+</style>
