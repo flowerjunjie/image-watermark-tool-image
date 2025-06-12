@@ -1,21 +1,22 @@
-# Image Watermark Tool
-Image Watermark Tool 是一个开源项目，用户可以在本地设备上给自己的图片（如身份证、驾照、护照等）添加水印，无需任何网络连接，并具有轻松的一键网站部署功能。
-👉 [Image Watermark Tool](https://watermark.aicompasspro.com)
+## 图片水印工具
+
+图片水印工具是一个开源项目，可以让用户在本地设备上为图片（如证件照、驾照、护照等）添加水印，无需网络连接。同时具备一键部署网站的功能。
+
+👉 [在线体验](https://watermark.aicompasspro.com)
 
 [English](https://github.com/unilei/image-watermark-tool/blob/master/README.EN.md) | 简体中文
 
-## 快速开始
+### 快速开始
 
-### 在 Vercel 上部署
+### 在Vercel上部署
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/unilei/image-watermark-tool.git&project-name=image-watermark-tool&repository-name=image-watermark-tool)
 
-### 在 Vercel 上手动部署 操作方法
-
+### 手动在Vercel上部署
 ```
-1. fork 本项目
-2. 在 [Vercel] 官网点击 [New Project]
-3. 点击 [Import Git Repository] 并选择你 fork 的此项目并点击 [import]
-4. 然后直接点 [Deploy] 接着等部署完成即可
+1. Fork本项目
+2. 在[Vercel]网站上，点击[New Project]
+3. 点击[Import Git Repository]并选择你fork的项目，然后点击[import]
+4. 点击[Deploy]，等待部署完成
 ```
 
 ### 1. 克隆项目
@@ -35,7 +36,8 @@ pnpm install
 # yarn
 yarn install
 ```
-### 3. 运行到浏览器
+
+### 3. 在浏览器中运行
 
 ```bash
 # npm
@@ -48,129 +50,137 @@ pnpm run dev
 yarn dev
 ```
 
-### 4. 在浏览器打开 [http://localhost:3001](http://localhost:3001)
-![success_deploy.jpg](https://www.aicompasspro.com/api/imghosting/file/fddc13c78a10d7f841ac1.png)
+### 4. 在浏览器中打开 [http://localhost:3001](http://localhost:3001)
+![success_deploy.jpg](https://www.aicompasspro.com/api/imghosting/file/b9e193a2375d8122c95af.png)
 
-#### 如何部署到自己服务器？ NUXT.JS 打包部署文档
-[部署文档](https://nuxt.com/docs/getting-started/deployment)
+## 独立版本打包指南
 
-### 如何通过 Docker 部署
+图片水印工具提供了独立版本（standalone-app.html），该版本集成了所有功能且不依赖于外部资源，是构建桌面应用的首选版本。
 
-### 1. 方式一
-```bash
-docker pull ghcr.io/chung1912/image-watermark-tool:master
-```
+### 打包步骤
 
-```bash
-docker run -it --name image-watermark-tool \
--p 3000:3000 \
---restart always \
-ghcr.io/chung1912/image-watermark-tool:master
-```
+1. **准备环境**
 
-### 2. 方式二
-```bash
-docker pull ghcr.io/chung1912/image-watermark-tool-nginx:master
-```
+   确保已安装所有依赖：
+   ```bash
+   npm install
+   ```
 
-```bash
-docker run -it --name image-watermark-tool-nginx \
--p 8080:80 \
--p 8443:443 \
--v /path/to/private.pem:/etc/nginx/private.pem  \
--v /path/to/private.key:/etc/nginx/private.key \
---restart always \
-ghcr.io/chung1912/image-watermark-tool-nginx:master
-```
+2. **构建应用**
 
-## 功能特点
+   使用以下命令打包应用：
+   ```bash
+   npm run electron:build
+   ```
 
-- 添加文字水印
-- 支持调整水印的透明度、大小、角度和颜色
-- 支持单张图片和批量处理
-- 支持平铺水印和单个水印模式
-- 完全本地处理，不需要联网
+3. **修复资源路径**
 
-## 安装使用
+   打包完成后，运行修复脚本以确保资源正确加载：
+   ```bash
+   # 完整修复（推荐）
+   fix-app.bat
 
-1. 下载最新的安装包
-2. 解压后直接运行 `Image Watermark Tool.exe`
+   # 或使用快速修复
+   quick-fix.bat
+   ```
 
-## 开发指南
+4. **启动应用**
 
-### 环境要求
+   打包和修复完成后，可以在以下位置找到应用：
+   ```
+   dist_electron\Image Watermark Tool-win32-x64\Image Watermark Tool.exe
+   ```
 
-- Node.js 16+
-- npm 或 yarn
+### 避坑指南
 
-### 安装依赖
+1. **资源路径问题**
 
-```bash
-# 安装依赖
-npm install
+   - **问题**: 打包后的应用可能找不到资源文件，导致界面空白或功能失效
+   - **解决**: 始终在打包后运行`fix-app.bat`脚本，该脚本会自动复制所需的资源文件
 
-# 开发模式启动
-npm run dev
+2. **打包后应用界面空白**
 
-# 打包应用
-npm run electron:build
-```
+   - **问题**: 打包后启动应用发现界面空白，没有任何内容
+   - **解决**: 
+     - 确保`standalone-app.html`文件已正确复制到应用目录
+     - 检查主进程是否正确加载了独立版本的HTML文件
+     - 使用`fix-app.bat`脚本修复资源路径
 
-### 应用结构
+3. **依赖问题**
 
-- `app/` - 主应用组件
-- `electron/` - Electron主进程代码
-- `components/` - 可复用的Vue组件
-- `pages/` - 应用页面
-- `plugins/` - Nuxt插件
-- `assets/` - 静态资源文件
+   - **问题**: 某些依赖可能在打包过程中丢失或不兼容
+   - **解决**: 确保`package.json`中的依赖版本正确，必要时可以手动复制`node_modules`中的关键依赖
 
-## 常见问题解决
+4. **文件缺失**
 
-### 应用加载失败 (ERR_FILE_NOT_FOUND)
+   - **问题**: 打包后缺少关键文件如`electron/main.js`
+   - **解决**: 运行`fix-app.bat`脚本，它会自动复制所有必要的文件
 
-如果应用显示"页面加载失败: -6 ERR_FILE_NOT_FOUND"错误，可以尝试以下方法：
+### 推荐的打包流程
 
-1. 运行应用根目录下的`fix-app.bat`脚本
-2. 或者运行`quick-fix.bat`脚本（更轻量级的修复）
+为确保打包成功并避免常见问题，建议按照以下流程操作：
 
-这些脚本会修复应用加载路径问题，重新生成必要的HTML文件。
+1. 清理旧的构建文件：
+   ```bash
+   rd /s /q dist_electron
+   ```
 
-### 页面资源加载失败
+2. 执行构建命令：
+   ```bash
+   npm run electron:build
+   ```
 
-如果应用能够打开，但显示资源加载错误，可能是由于以下原因：
+3. 运行修复脚本：
+   ```bash
+   fix-app.bat
+   ```
 
-1. Nuxt资源路径问题 - 在Electron环境中，资源路径需要使用相对路径而非绝对路径
-2. 应用资源未正确打包 - 确保`.output`目录的内容被正确复制到应用资源目录
+4. 测试应用是否正常运行：
+   ```
+   dist_electron\Image Watermark Tool-win32-x64\Image Watermark Tool.exe
+   ```
 
-运行`fix-app.bat`脚本通常可以解决这些问题。
+### 独立版本使用指南
 
-## 开发笔记
+独立版本（standalone-app.html）提供了完整的水印功能，包括：
 
-### Electron与Nuxt集成
+1. **上传图片**：点击"选择图片"按钮或拖放图片到预览区域
 
-本应用使用了三种HTML入口文件作为加载策略：
+2. **添加水印**：
+   - 文本水印：输入水印文本，设置字体大小、颜色和透明度
+   - 位置调整：可通过拖拽直接调整水印位置，或使用滑块控制水平和垂直偏移
+   - 旋转角度：调整水印旋转角度
 
-1. `app.html` - 主应用入口，包含完整的应用UI
-2. `static-app.html` - 静态加载器，负责加载Nuxt应用
-3. `direct-app.html` - 重定向页面，直接跳转到app.html
+3. **导出图片**：
+   - 在桌面版中，点击"保存图片"按钮将图片保存到本地
+   - 水印处理在本地完成，不会上传图片到任何服务器
 
-### 路径处理策略
+4. **其他功能**：
+   - 支持调整水印透明度
+   - 支持设置水印文本颜色
+   - 支持设置水印大小和角度
 
-为了解决Electron中的路径问题，应用使用了以下策略：
+### 常见问题解答
 
-1. 使用`url.format()`正确处理file://协议URL
-2. 将绝对路径(`/`)转换为相对路径(`./`)
-3. 为动态加载的资源实现拦截器和修复
+1. **独立版本与网页版的区别？**
+   - 独立版本（standalone-app.html）集成了所有资源，不依赖网络连接
+   - 网页版需要加载外部资源，但功能相同
 
-### 构建注意事项
+2. **如何修改默认水印文本？**
+   - 打开`standalone-app.html`文件，找到默认水印文本设置部分进行修改
 
-在构建过程中：
+3. **打包后的应用体积较大，如何优化？**
+   - 可以使用`electron-builder`的配置选项减小打包体积
+   - 删除不必要的依赖和资源文件
 
-1. 确保electron目录被正确复制到资源目录
-2. 确保所有HTML入口文件存在
-3. 修复.output/public/index.html中的资源路径
+4. **如何更新已打包的应用？**
+   - 修改源代码后重新执行打包流程
+   - 记得更新版本号（在`package.json`中）
 
-## 许可证
+## 贡献
 
-MIT
+欢迎提交Pull Request或提出Issues。
+
+## 许可
+
+本项目采用MIT许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。

@@ -684,7 +684,7 @@
       const img = document.createElement('img');
       img.src = watermarkState.watermarkImage.src;
       
-      // 计算大小
+      // 计算大小 - 使用容器宽度的百分比，与画布计算一致
       const containerWidth = previewContainer.clientWidth;
       const imageWidth = containerWidth * (watermarkState.watermarkImageSize / 100);
       const imageHeight = imageWidth / watermarkState.watermarkImage.aspectRatio;
@@ -704,16 +704,22 @@
     // 定位水印
     function positionWatermark(watermark) {
       const containerRect = previewContainer.getBoundingClientRect();
-      const watermarkRect = watermark.getBoundingClientRect();
       
-      const maxX = containerRect.width - watermarkRect.width;
-      const maxY = containerRect.height - watermarkRect.height;
+      // 使用百分比定位，确保在预览和导出时位置一致
+      const x = (watermarkState.x / 100) * containerRect.width;
+      const y = (watermarkState.y / 100) * containerRect.height;
       
-      const x = (watermarkState.x / 100) * maxX;
-      const y = (watermarkState.y / 100) * maxY;
-      
-      watermark.style.left = `${x}px`;
-      watermark.style.top = `${y}px`;
+      // 对于图片水印，应当考虑图片中心点
+      if (watermarkState.type === 'image' && watermark.firstChild && watermark.firstChild.tagName === 'IMG') {
+        // 对于图片，我们要考虑中心点
+        const watermarkRect = watermark.getBoundingClientRect();
+        watermark.style.left = `${x - watermarkRect.width/2}px`;
+        watermark.style.top = `${y - watermarkRect.height/2}px`;
+      } else {
+        // 对于文字水印
+        watermark.style.left = `${x}px`;
+        watermark.style.top = `${y}px`;
+      }
     }
     
     // 设置可拖拽
@@ -775,8 +781,21 @@
         
         // 更新水印位置状态（百分比）
         const containerRect = previewContainer.getBoundingClientRect();
-        watermarkState.x = (newX / (containerRect.width - element.offsetWidth)) * 100;
-        watermarkState.y = (newY / (containerRect.height - element.offsetHeight)) * 100;
+        
+        // 判断是否为图片水印，如果是需要考虑中心点
+        if (watermarkState.type === 'image' && element.firstChild && element.firstChild.tagName === 'IMG') {
+          // 计算中心点位置
+          const watermarkRect = element.getBoundingClientRect();
+          const centerX = newX + watermarkRect.width/2;
+          const centerY = newY + watermarkRect.height/2;
+          
+          watermarkState.x = (centerX / containerRect.width) * 100;
+          watermarkState.y = (centerY / containerRect.height) * 100;
+        } else {
+          // 文字水印直接使用左上角
+          watermarkState.x = (newX / containerRect.width) * 100;
+          watermarkState.y = (newY / containerRect.height) * 100;
+        }
         
         // 限制在0-100范围内
         watermarkState.x = Math.max(0, Math.min(100, watermarkState.x));
@@ -824,7 +843,7 @@
       ctx.fillStyle = watermarkState.color;
       ctx.globalAlpha = watermarkState.opacity / 100;
       
-      // 计算位置
+      // 计算位置 - 使用百分比位置而非像素位置，确保所见即所得
       const x = (watermarkState.x / 100) * width;
       const y = (watermarkState.y / 100) * height;
       
@@ -840,49 +859,32 @@
     
     // 在画布上绘制图片水印
     function drawImageWatermarkOnCanvas(ctx, width, height) {
-      ctx.save();
-      
-      // 计算位置和大小
-      const x = (watermarkState.x / 100) * width;
-      const y = (watermarkState.y / 100) * height;
-      
-      // 计算水印图片大小
-      const scaleFactor = Math.max(width, height) / Math.max(previewImage.width, previewImage.height);
-      const watermarkImgWidth = width * (watermarkState.watermarkImageSize / 100);
-      const watermarkImgHeight = watermarkImgWidth / watermarkState.watermarkImage.aspectRatio;
-      
-      // 应用透明度
-      ctx.globalAlpha = watermarkState.opacity / 100;
-      
-      // 绘制水印图片
-      ctx.translate(x, y);
-      ctx.rotate(watermarkState.rotation * Math.PI / 180);
-      
-      // 创建临时图像对象
+      // 创建图片对象并加载完成后绘制
       const img = new Image();
+      img.onload = () => {
+        ctx.save();
+        
+        // 计算位置 - 使用百分比位置确保一致性
+        const x = (watermarkState.x / 100) * width;
+        const y = (watermarkState.y / 100) * height;
+        
+        // 计算水印图片大小 - 使用百分比大小确保一致性
+        const watermarkImgWidth = width * (watermarkState.watermarkImageSize / 100);
+        const watermarkImgHeight = watermarkImgWidth / watermarkState.watermarkImage.aspectRatio;
+        
+        // 应用透明度
+        ctx.globalAlpha = watermarkState.opacity / 100;
+        
+        // 绘制水印图片
+        ctx.translate(x, y);
+        ctx.rotate(watermarkState.rotation * Math.PI / 180);
+        
+        // 绘制图片，中心点对齐
+        ctx.drawImage(img, -watermarkImgWidth/2, -watermarkImgHeight/2, watermarkImgWidth, watermarkImgHeight);
+        
+        ctx.restore();
+      };
       img.src = watermarkState.watermarkImage.src;
-      
-      // 绘制图片，中心点对齐
-      ctx.drawImage(img, -watermarkImgWidth/2, -watermarkImgHeight/2, watermarkImgWidth, watermarkImgHeight);
-      
-      ctx.restore();
-    }
-    
-    // 创建平铺文字水印
-    function createTiledTextWatermarks() {
-      const containerWidth = previewContainer.clientWidth;
-      const containerHeight = previewContainer.clientHeight;
-      const spacing = parseInt(watermarkState.tileSpacing);
-      
-      for (let y = 0; y < containerHeight; y += spacing) {
-        for (let x = 0; x < containerWidth; x += spacing) {
-          const watermark = createTextWatermarkElement();
-          watermarkContainer.appendChild(watermark);
-          
-          watermark.style.left = `${x}px`;
-          watermark.style.top = `${y}px`;
-        }
-      }
     }
     
     // 在画布上绘制平铺水印
@@ -898,9 +900,14 @@
       ctx.fillStyle = watermarkState.color;
       ctx.globalAlpha = watermarkState.opacity / 100;
       
-      // 绘制平铺水印
-      for (let y = 0; y < height; y += spacing) {
-        for (let x = 0; x < width; x += spacing) {
+      // 平铺水印的起始位置应该从左上角开始
+      // 我们使用负的半间距来确保边缘区域也有水印
+      const startX = -spacing / 2;
+      const startY = -spacing / 2;
+      
+      // 绘制平铺水印，确保覆盖整个图像
+      for (let y = startY; y < height + spacing; y += spacing) {
+        for (let x = startX; x < width + spacing; x += spacing) {
           ctx.save();
           ctx.translate(x, y);
           ctx.rotate(watermarkState.rotation * Math.PI / 180);
@@ -910,6 +917,28 @@
       }
       
       ctx.restore();
+    }
+    
+    // 创建平铺文字水印
+    function createTiledTextWatermarks() {
+      const containerWidth = previewContainer.clientWidth;
+      const containerHeight = previewContainer.clientHeight;
+      const spacing = parseInt(watermarkState.tileSpacing);
+      
+      // 平铺水印的起始位置应该从左上角开始
+      // 与画布上的计算方式一致
+      const startX = -spacing / 2;
+      const startY = -spacing / 2;
+      
+      for (let y = startY; y < containerHeight + spacing; y += spacing) {
+        for (let x = startX; x < containerWidth + spacing; x += spacing) {
+          const watermark = createTextWatermarkElement();
+          watermarkContainer.appendChild(watermark);
+          
+          watermark.style.left = `${x}px`;
+          watermark.style.top = `${y}px`;
+        }
+      }
     }
     
     // 下载图片
@@ -927,36 +956,88 @@
         canvas.width = previewImage.naturalWidth;
         canvas.height = previewImage.naturalHeight;
         
-        // 绘制图片
-        ctx.drawImage(previewImage, 0, 0);
+        // 创建一个Promise来处理图片加载
+        const generateWatermarkedImage = new Promise((resolve, reject) => {
+          try {
+            // 绘制主图片
+            ctx.drawImage(previewImage, 0, 0);
+            
+            // 根据水印类型绘制水印
+            if (watermarkState.type === 'text') {
+              // 单个文字水印
+              drawTextWatermarkOnCanvas(ctx, canvas.width, canvas.height);
+              resolve();
+            } else if (watermarkState.type === 'tiled') {
+              // 平铺文字水印
+              drawTiledWatermarksOnCanvas(ctx, canvas.width, canvas.height);
+              resolve();
+            } else if (watermarkState.type === 'image' && watermarkState.watermarkImage) {
+              // 图片水印需要先加载图片
+              const watermarkImg = new Image();
+              watermarkImg.onload = () => {
+                // 图片加载完成后绘制水印
+                drawImageWatermarkOnCanvasWithImage(ctx, canvas.width, canvas.height, watermarkImg);
+                resolve();
+              };
+              watermarkImg.onerror = (err) => {
+                reject(new Error('加载水印图片失败: ' + err.message));
+              };
+              watermarkImg.src = watermarkState.watermarkImage.src;
+            } else {
+              resolve(); // 没有水印的情况
+            }
+          } catch (error) {
+            reject(error);
+          }
+        });
         
-        // 绘制水印
-        if (watermarkState.type === 'text') {
-          // 单个水印
-          drawWatermarkOnCanvas(ctx, canvas.width, canvas.height);
-        } else if (watermarkState.type === 'tiled') {
-          // 平铺水印
-          drawTiledWatermarksOnCanvas(ctx, canvas.width, canvas.height);
-        } else if (watermarkState.type === 'image' && watermarkState.watermarkImage) {
-          // 图片水印
-          drawWatermarkOnCanvas(ctx, canvas.width, canvas.height);
-        }
-        
-        // 转换为图片并下载
-        try {
-          const dataUrl = canvas.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.download = 'watermarked-image.png';
-          link.href = dataUrl;
-          link.click();
-          
-          showStatus('图片已下载');
-        } catch (error) {
-          showStatus('下载失败: ' + error.message, 'error');
-        }
+        // 处理图片生成和下载
+        generateWatermarkedImage
+          .then(() => {
+            // 转换为图片并下载
+            try {
+              const dataUrl = canvas.toDataURL('image/png');
+              const link = document.createElement('a');
+              link.download = 'watermarked-image.png';
+              link.href = dataUrl;
+              link.click();
+              
+              showStatus('图片已下载');
+            } catch (error) {
+              showStatus('下载失败: ' + error.message, 'error');
+            }
+          })
+          .catch((error) => {
+            showError(`生成水印图片错误: ${error.message}`);
+          });
       } catch (error) {
         showError(`图片下载错误: ${error.message}`);
       }
+    }
+    
+    // 使用已加载的图片绘制图片水印
+    function drawImageWatermarkOnCanvasWithImage(ctx, width, height, watermarkImg) {
+      ctx.save();
+      
+      // 计算位置 - 使用百分比位置确保一致性
+      const x = (watermarkState.x / 100) * width;
+      const y = (watermarkState.y / 100) * height;
+      
+      // 计算水印图片大小 - 使用百分比大小确保一致性
+      const watermarkImgWidth = width * (watermarkState.watermarkImageSize / 100);
+      const watermarkImgHeight = watermarkImgWidth / watermarkState.watermarkImage.aspectRatio;
+      
+      // 应用透明度
+      ctx.globalAlpha = watermarkState.opacity / 100;
+      
+      // 绘制水印图片
+      ctx.translate(x, y);
+      ctx.rotate(watermarkState.rotation * Math.PI / 180);
+      
+      // 绘制图片，中心点对齐
+      ctx.drawImage(watermarkImg, -watermarkImgWidth/2, -watermarkImgHeight/2, watermarkImgWidth, watermarkImgHeight);
+      
+      ctx.restore();
     }
     
     // 显示状态消息
