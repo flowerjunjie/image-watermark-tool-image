@@ -45,8 +45,8 @@ function createWindow() {
     width: 1200,
     height: 800,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
       webSecurity: false, // 禁用同源策略，允许加载本地资源
       preload: path.join(__dirname, 'preload.js')
     },
@@ -72,7 +72,14 @@ function createWindow() {
   } else {
     console.log('运行环境: 生产模式');
     
-    if (fs.existsSync(directAppPath)) {
+    // 首先尝试加载static-app.html
+    const staticAppPath = path.join(appPath, 'static-app.html');
+    if (fs.existsSync(staticAppPath)) {
+      console.log('发现static-app.html文件:', staticAppPath);
+      contentUrl = `file://${staticAppPath}`;
+    }
+    // 然后尝试加载direct-app.html
+    else if (fs.existsSync(directAppPath)) {
       console.log('发现direct-app.html文件:', directAppPath);
       contentUrl = `file://${directAppPath}`;
     } else {
@@ -121,8 +128,10 @@ function createWindow() {
       // Mac/Linux路径处理 (移除 'file://')
       filePath = contentUrl.replace('file://', '');
     }
-    console.log('加载文件路径:', filePath);
-    mainWindow.loadFile(filePath);
+    console.log('加载文件路径:', contentUrl);
+    
+    // 使用URL直接加载，而不是通过loadFile方法
+    mainWindow.loadURL(contentUrl);
   } else {
     mainWindow.loadURL(contentUrl);
   }

@@ -45,8 +45,8 @@ function createWindow() {
     width: 1200,
     height: 800,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
       webSecurity: false, // 禁用同源策略，允许加载本地资源
       preload: path.join(__dirname, 'preload.js')
     },
@@ -63,22 +63,28 @@ function createWindow() {
 
   // 强制使用direct-app.html
   const directAppPath = path.join(appPath, 'direct-app.html');
-  console.log('检查direct-app.html路径:', directAppPath);
-  
   let contentUrl = null;
   
-  if (fs.existsSync(directAppPath)) {
-    console.log('发现direct-app.html文件:', directAppPath);
-    contentUrl = `file://${directAppPath}`;
-    console.log('使用direct-app.html作为入口');
+  if (process.env.NODE_ENV === 'development') {
+    console.log('运行环境: 开发模式');
+    // 开发模式下使用localhost
+    contentUrl = 'http://localhost:3000';
   } else {
-    console.log('未找到direct-app.html，使用备用方案');
+    console.log('运行环境: 生产模式');
     
-    if (process.env.NODE_ENV === 'development') {
-      console.log('开发模式，使用localhost');
-      contentUrl = 'http://localhost:3000';
+    // 首先尝试加载static-app.html
+    const staticAppPath = path.join(appPath, 'static-app.html');
+    if (fs.existsSync(staticAppPath)) {
+      console.log('发现static-app.html文件:', staticAppPath);
+      contentUrl = `file://${staticAppPath}`;
+    }
+    // 然后尝试加载direct-app.html
+    else if (fs.existsSync(directAppPath)) {
+      console.log('发现direct-app.html文件:', directAppPath);
+      contentUrl = `file://${directAppPath}`;
     } else {
-      console.log('生产模式，创建应急HTML');
+      // 如果找不到direct-app.html，创建一个应急HTML文件
+      console.log('未找到direct-app.html，创建应急HTML');
       const emergencyHtml = `
       <!DOCTYPE html>
       <html>
@@ -122,14 +128,52 @@ function createWindow() {
       // Mac/Linux路径处理 (移除 'file://')
       filePath = contentUrl.replace('file://', '');
     }
-    console.log('加载文件路径:', filePath);
-    mainWindow.loadFile(filePath);
+    console.log('加载文件路径:', contentUrl);
+    
+    // 使用URL直接加载，而不是通过loadFile方法
+    mainWindow.loadURL(contentUrl);
   } else {
     mainWindow.loadURL(contentUrl);
   }
 
   // 打开开发者工具
   mainWindow.webContents.openDevTools();
+
+  // 记录加载失败
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('页面加载失败:', errorCode, errorDescription);
+    
+    // 如果加载失败，尝试加载备用HTML
+    const backupHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Image Watermark Tool</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+        h1 { color: #333; }
+        .error { color: red; margin: 20px 0; }
+        button { padding: 10px 20px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+      </style>
+    </head>
+    <body>
+      <h1>Image Watermark Tool</h1>
+      <p class="error">应用加载失败，请尝试重新启动或联系开发者</p>
+      <p>错误代码: ${errorCode}</p>
+      <p>错误描述: ${errorDescription}</p>
+      <button onclick="window.location.reload()">重新加载</button>
+    </body>
+    </html>
+    `;
+    
+    // 写入临时HTML文件
+    const tempHtmlPath = path.join(app.getPath('temp'), 'backup.html');
+    fs.writeFileSync(tempHtmlPath, backupHtml);
+    
+    // 加载临时HTML
+    mainWindow.loadFile(tempHtmlPath);
+  });
 
   // 当窗口关闭时触发
   mainWindow.on('closed', function () {

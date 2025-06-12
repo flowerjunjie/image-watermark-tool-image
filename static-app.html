@@ -1,178 +1,124 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>图片水印工具</title>
+  <script>
+    // 检测应用运行环境
+    const isElectron = navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
+    console.log('是否为Electron环境:', isElectron);
+
+    // 确定正确的基础路径
+    function getBasePath() {
+      if (isElectron) {
+        // Electron中使用相对路径
+        return './';
+      } else {
+        // 浏览器中使用绝对路径
+        return '/';
+      }
+    }
+
+    // 设置基础路径
+    const basePath = getBasePath();
+    console.log('使用基础路径:', basePath);
+
+    // 动态加载主HTML
+    window.onload = function() {
+      try {
+        // 尝试加载.output/public/index.html的内容
+        fetch(basePath + '.output/public/index.html')
+          .then(response => response.text())
+          .then(html => {
+            // 修改基础路径引用
+            html = html.replace(/\/_nuxt\//g, basePath + '.output/public/_nuxt/');
+            
+            // 替换当前文档内容
+            document.open();
+            document.write(html);
+            document.close();
+            
+            console.log('应用加载成功');
+          })
+          .catch(error => {
+            console.error('加载应用失败:', error);
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-details').textContent = error.toString();
+          });
+      } catch (error) {
+        console.error('初始化错误:', error);
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-details').textContent = error.toString();
+      }
+    };
+  </script>
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: Arial, sans-serif;
       margin: 0;
-      padding: 0;
-      background-color: #f0f2f5;
-      color: #333;
-      height: 100vh;
+      padding: 20px;
+      background-color: #f5f5f5;
       display: flex;
-      flex-direction: column;
-    }
-    
-    header {
-      background-color: #1976d2;
-      color: white;
-      padding: 15px 20px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    h1 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 500;
-    }
-    
-    main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
       justify-content: center;
-      padding: 20px;
+      align-items: center;
+      min-height: 100vh;
     }
-    
     .container {
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      width: 100%;
-      max-width: 500px;
-      padding: 20px;
+      max-width: 800px;
       text-align: center;
     }
-    
-    .upload-area {
-      border: 2px dashed #ccc;
-      border-radius: 8px;
-      padding: 40px 20px;
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .loading {
+      font-size: 18px;
       margin: 20px 0;
-      cursor: pointer;
-      transition: all 0.3s;
     }
-    
-    .upload-area:hover {
-      border-color: #1976d2;
-      background-color: #f5f8ff;
-    }
-    
-    .button {
-      background-color: #1976d2;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 16px;
-      margin: 10px 5px;
-      transition: background-color 0.3s;
-    }
-    
-    .button:hover {
-      background-color: #1565c0;
-    }
-    
-    .watermark-options {
-      margin: 20px 0;
-      text-align: left;
-    }
-    
-    footer {
-      background-color: #f0f2f5;
-      padding: 10px;
-      text-align: center;
-      font-size: 12px;
-      color: #666;
-    }
-    
-    .loader {
-      display: inline-block;
-      width: 30px;
-      height: 30px;
-      border: 3px solid rgba(0,0,0,0.2);
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
-      border-top-color: #1976d2;
+      border-left-color: #09f;
       animation: spin 1s linear infinite;
-      margin-right: 10px;
+      margin: 20px auto;
     }
-    
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .error-message {
+      display: none;
+      color: #d32f2f;
+      background-color: #ffebee;
+      padding: 15px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+    .error-details {
+      margin-top: 10px;
+      font-family: monospace;
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      text-align: left;
+      overflow-x: auto;
     }
   </style>
 </head>
 <body>
-  <header>
+  <div class="container">
     <h1>图片水印工具</h1>
-  </header>
-  
-  <main>
-    <div class="container">
-      <h2>应用加载中</h2>
-      <p>正在初始化应用组件，请稍候...</p>
-      <div>
-        <span class="loader"></span>
-        <span id="loading-text">加载中...</span>
-      </div>
-      <div id="error-message" style="color: red; margin-top: 20px; display: none;">
-        <p>应用加载失败，请尝试重新启动应用程序。</p>
-        <p>错误原因：<span id="error-reason"></span></p>
-        <button class="button" onclick="reload()">重试</button>
-      </div>
+    <div class="spinner"></div>
+    <div class="loading">应用加载中，请稍候...</div>
+    
+    <div id="error-message" class="error-message">
+      <h3>应用加载失败</h3>
+      <p>无法加载应用资源。请尝试重新启动应用或联系开发者。</p>
+      <div id="error-details" class="error-details"></div>
     </div>
-  </main>
-  
-  <footer>
-    <p>图片水印工具 © 2024 - 本地处理，无需联网</p>
-  </footer>
-  
-  <script>
-    // 显示错误信息
-    function showError(message) {
-      document.getElementById('error-reason').textContent = message;
-      document.getElementById('error-message').style.display = 'block';
-    }
-    
-    // 重新加载
-    function reload() {
-      window.location.reload();
-    }
-    
-    // 检测应用资源路径
-    function getAppPath() {
-      // 获取当前脚本的路径
-      const currentPath = window.location.href;
-      const basePath = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
-      return basePath;
-    }
-    
-    // 加载应用
-    function loadApp() {
-      const appPath = getAppPath();
-      const loadingText = document.getElementById('loading-text');
-      
-      // 检查.output/public/index.html是否存在
-      loadingText.textContent = "正在检查应用资源...";
-      
-      // 添加事件监听，5秒后如果仍未加载则显示错误
-      setTimeout(() => {
-        showError("应用资源加载超时，可能是文件路径不正确");
-      }, 5000);
-      
-      // 尝试加载实际应用
-      setTimeout(() => {
-        window.location.href = appPath + '../.output/public/index.html';
-      }, 1500);
-    }
-    
-    // 启动加载
-    window.onload = loadApp;
-  </script>
+  </div>
 </body>
 </html> 
