@@ -6,12 +6,13 @@
   <title>图片水印工具 - 独立版</title>
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       margin: 0;
       padding: 0;
-      background-color: #f0f2f5;
+      background-color: #f5f5f5;
       color: #333;
       height: 100vh;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
     }
@@ -19,17 +20,12 @@
     header {
       background-color: #1976d2;
       color: white;
-      padding: 15px 20px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      padding: 8px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }
-    
-    h1 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 500;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      z-index: 10;
     }
     
     .version {
@@ -38,44 +34,43 @@
     }
     
     main {
-      flex: 1;
       display: flex;
-      padding: 20px;
-      overflow: auto;
+      flex: 1;
+      padding: 10px;
+      gap: 10px;
+      overflow: hidden;
     }
     
     .sidebar {
-      width: 300px;
-      background: white;
-      border-radius: 8px;
+      flex: 0 0 300px;
+      background-color: white;
+      border-radius: 6px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      padding: 20px;
-      margin-right: 20px;
-      height: fit-content;
+      padding: 15px;
+      overflow-y: auto;
+      max-height: 100%;
     }
     
     .preview-area {
       flex: 1;
-      background: white;
-      border-radius: 8px;
+      background-color: white;
+      border-radius: 6px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      padding: 20px;
+      padding: 15px;
+      overflow-y: auto;
+      max-height: 100%;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      overflow: auto;
-      position: relative;
     }
     
     .upload-area {
       border: 2px dashed #ccc;
-      border-radius: 8px;
-      padding: 40px 20px;
-      margin: 20px 0;
-      cursor: pointer;
-      transition: all 0.3s;
+      border-radius: 6px;
+      padding: 15px;
       text-align: center;
+      cursor: pointer;
+      margin-bottom: 15px;
+      transition: border-color 0.3s;
     }
     
     .upload-area:hover {
@@ -83,16 +78,18 @@
       background-color: #f5f8ff;
     }
     
+    .upload-area p {
+      margin: 0;
+    }
+    
     .button {
       background-color: #1976d2;
       color: white;
       border: none;
-      padding: 10px 20px;
+      padding: 8px 16px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 16px;
-      margin: 10px 0;
-      width: 100%;
+      font-size: 14px;
       transition: background-color 0.3s;
     }
     
@@ -101,17 +98,21 @@
     }
     
     .watermark-options {
-      margin: 20px 0;
+      margin: 15px 0;
     }
     
     .form-group {
-      margin-bottom: 15px;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #f0f0f0;
     }
     
     label {
       display: block;
-      margin-bottom: 5px;
+      margin-bottom: 2px;
       font-weight: 500;
+      font-size: 14px;
+      color: #444;
     }
     
     input[type="text"], 
@@ -120,25 +121,110 @@
     input[type="color"],
     select {
       width: 100%;
-      padding: 8px;
+      padding: 6px;
       border: 1px solid #ddd;
       border-radius: 4px;
       box-sizing: border-box;
     }
     
+    /* 滑动条容器样式优化 */
     .range-container {
       display: flex;
       align-items: center;
+      margin-top: 2px;
+      height: 28px;
     }
     
+    /* 滑动条样式优化 */
     .range-container input[type="range"] {
       flex: 1;
+      height: 8px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: linear-gradient(to right, #1976d2, #64b5f6);
+      border-radius: 4px;
+      outline: none;
+      margin: 0;
     }
     
+    /* 滑动条滑块样式 */
+    .range-container input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: #1976d2;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    
+    /* 滑动条值显示样式 */
     .range-container span {
-      width: 30px;
+      width: 40px;
       text-align: right;
       margin-left: 10px;
+      font-size: 13px;
+      color: #555;
+      font-weight: bold;
+    }
+    
+    /* 工具提示图标样式 */
+    .tooltip-icon {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      background-color: #1976d2;
+      color: white;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 16px;
+      font-size: 12px;
+      margin-left: 5px;
+      cursor: help;
+    }
+    
+    /* 帮助卡片样式 */
+    .help-card {
+      background-color: #e3f2fd;
+      border-left: 4px solid #1976d2;
+      border-radius: 4px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+    }
+    
+    .help-card h3 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      color: #1976d2;
+      font-size: 15px;
+    }
+    
+    .help-card ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    
+    .help-card li {
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+    
+    .help-icon {
+      margin-right: 5px;
+    }
+    
+    .batch-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+    
+    .batch-buttons .button {
+      flex: 1;
+      min-width: 80px;
     }
     
     .preview-container {
@@ -190,10 +276,11 @@
     
     footer {
       background-color: #f0f2f5;
-      padding: 10px;
+      padding: 8px;
       text-align: center;
       font-size: 12px;
       color: #666;
+      border-top: 1px solid #e0e0e0;
     }
     
     .status-message {
@@ -239,20 +326,20 @@
     .thumbnails-container {
       display: flex;
       flex-wrap: wrap;
-      margin-top: 20px;
-      max-height: 150px;
+      margin-top: 15px;
+      max-height: 120px;
       overflow-y: auto;
       width: 100%;
-      padding: 10px;
+      padding: 8px;
       background-color: #f9f9f9;
-      border-radius: 8px;
+      border-radius: 6px;
       box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
     }
     
     .thumbnail {
-      width: 80px;
-      height: 80px;
-      margin: 5px;
+      width: 70px;
+      height: 70px;
+      margin: 4px;
       border: 2px solid #ddd;
       border-radius: 4px;
       overflow: hidden;
@@ -302,23 +389,12 @@
     
     .progress-bar {
       height: 100%;
-      background-color: #4CAF50;
+      background-color: #4caf50;
       text-align: center;
       line-height: 20px;
       color: white;
       font-size: 12px;
       transition: width 0.3s;
-    }
-    
-    /* 批处理按钮 */
-    .batch-buttons {
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
-    }
-    
-    .batch-buttons .button {
-      flex: 1;
     }
     
     /* 模态框样式 */
@@ -327,135 +403,26 @@
       position: fixed;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.7);
-      z-index: 1001;
-      align-items: center;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
       justify-content: center;
+      align-items: center;
     }
     
     .modal-content {
       background-color: white;
-      border-radius: 8px;
       padding: 20px;
-      max-width: 500px;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
       width: 80%;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
     }
     
     .modal-title {
-      font-size: 18px;
       margin-top: 0;
-      margin-bottom: 15px;
-      color: #333;
-    }
-    
-    .modal-buttons {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 20px;
-      gap: 10px;
-    }
-    
-    .modal-button {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    
-    .modal-button.primary {
-      background-color: #1976d2;
-      color: white;
-    }
-    
-    .modal-button.secondary {
-      background-color: #e0e0e0;
-      color: #333;
-    }
-    
-    /* 响应式设计 */
-    @media (max-width: 768px) {
-      main {
-        flex-direction: column;
-      }
-      
-      .sidebar {
-        width: 100%;
-        margin-right: 0;
-        margin-bottom: 20px;
-      }
-      
-      .thumbnails-container {
-        max-height: 120px;
-      }
-      
-      .thumbnail {
-        width: 60px;
-        height: 60px;
-      }
-    }
-    
-    /* 帮助卡片样式 */
-    .help-card {
-      background-color: #f8f9fa;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      padding: 15px;
-      margin: 15px 0;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    
-    .help-card h3 {
-      margin-top: 0;
-      margin-bottom: 10px;
-      font-size: 16px;
-      color: #333;
-      border-bottom: 1px solid #eee;
-      padding-bottom: 5px;
-    }
-    
-    .help-card ul {
-      margin: 0;
-      padding-left: 20px;
-    }
-    
-    .help-card li {
-      margin-bottom: 8px;
-      font-size: 14px;
-      list-style-type: none;
-    }
-    
-    .help-icon {
-      margin-right: 5px;
-    }
-    
-    /* 工具提示样式 */
-    .tooltip-icon {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      background-color: #1976d2;
-      color: white;
-      border-radius: 50%;
-      text-align: center;
-      line-height: 16px;
-      font-size: 12px;
-      cursor: help;
-      margin-left: 5px;
-    }
-    
-    .tooltip {
-      position: absolute;
-      background-color: #333;
-      color: white;
-      padding: 5px 10px;
-      border-radius: 4px;
-      font-size: 12px;
-      z-index: 1000;
-      max-width: 200px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      color: #1976d2;
     }
   </style>
 </head>
@@ -467,7 +434,18 @@
   
   <main>
     <div class="sidebar">
+      <!-- 新增通知提示 -->
+      <div id="notification" style="background-color: #e3f2fd; color: #0d47a1; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid #1976d2; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+        <span>进度条已移至顶部，方便查看处理进度！</span>
+        <button onclick="document.getElementById('notification').style.display='none'" style="background: none; border: none; color: #1976d2; cursor: pointer; font-weight: bold;">✕</button>
+      </div>
+      
       <div id="error-container" class="error-container"></div>
+      
+      <!-- 进度条 - 移到最顶部并增强显示效果 -->
+      <div id="progress-container" class="progress-container" style="margin-top: 0; margin-bottom: 15px; height: 30px; border: 2px solid #1976d2; border-radius: 5px; overflow: hidden;">
+        <div id="progress-bar" class="progress-bar" style="width: 0%; font-weight: bold; background-color: #2196F3; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); line-height: 30px;">0%</div>
+      </div>
       
       <div class="upload-area" id="upload-area">
         <p>点击或拖拽图片到这里</p>
@@ -480,11 +458,9 @@
         <div class="batch-buttons">
           <button class="button" id="upload-files-btn">上传图片</button>
           <button class="button" id="upload-folder-btn">上传文件夹</button>
+          <!-- 添加批量处理按钮 -->
+          <button class="button" id="batch-process-btn" style="background-color: #4CAF50; color: white;">开始批量处理</button>
         </div>
-      </div>
-      
-      <div id="progress-container" class="progress-container">
-        <div id="progress-bar" class="progress-bar" style="width: 0%">0%</div>
       </div>
       
       <div class="help-card">
@@ -711,6 +687,36 @@
     // 初始化事件监听
     function initEvents() {
       try {
+        console.log('初始化事件...');
+        
+        // 上传图片按钮事件
+        uploadFilesBtn.addEventListener('click', function() {
+          fileInput.click();
+        });
+
+        // 上传文件夹按钮事件
+        uploadFolderBtn.addEventListener('click', function() {
+          folderInput.click();
+        });
+        
+        // 批量处理按钮事件
+        document.getElementById('batch-process-btn').addEventListener('click', async function() {
+          console.log('批量处理按钮点击');
+          if (batchState.files.length === 0) {
+            showError('请先上传图片后再进行批量处理');
+            return;
+          }
+          
+          // 显示进度条
+          progressContainer.style.display = 'block';
+          
+          // 开始批量处理
+          await batchProcessImages();
+        });
+
+        // 文件输入框变化事件
+        fileInput.addEventListener('change', handleFileSelect);
+        
         // 获取DOM元素
         fileInput = document.getElementById('file-input');
         folderInput = document.getElementById('folder-input');
