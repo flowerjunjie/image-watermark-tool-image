@@ -225,33 +225,46 @@ const selectDirectoryWithElectron = async () => {
     return;
   }
   
-  const directoryPath = await $electron.selectDirectory();
-  if (!directoryPath) return;
+  console.log('调用Electron目录选择器');
+  try {
+    const directoryPath = await $electron.selectDirectory();
+    console.log('选择的目录路径:', directoryPath);
+    
+    if (!directoryPath) {
+      console.log('用户取消了目录选择');
+      return;
+    }
   
-  // 读取目录中的图片
-  const imageFiles = await $electron.readDirectoryImages(directoryPath);
+    // 读取目录中的图片
+    console.log('开始读取目录中的图片');
+    const imageFiles = await $electron.readDirectoryImages(directoryPath);
+    console.log(`找到 ${imageFiles.length} 个图片文件`);
   
-  if (imageFiles.length === 0) {
-    alert('所选目录中没有找到图片文件');
-    return;
-  }
+    if (imageFiles.length === 0) {
+      alert('所选目录中没有找到图片文件');
+      return;
+    }
   
-  totalImages.value = imageFiles.length;
-  processedImages.value = 0;
-  processingProgress.value = 0;
-  folderProcessing.value = true;
+    totalImages.value = imageFiles.length;
+    processedImages.value = 0;
+    processingProgress.value = 0;
+    folderProcessing.value = true;
   
-  // 清空之前的缩略图
-  thumbnails.value = [];
-  currentImageIndex.value = 0;
-  showThumbnails.value = true;
+    // 清空之前的缩略图
+    thumbnails.value = [];
+    currentImageIndex.value = 0;
+    showThumbnails.value = true;
   
-  // 保存待处理图片
-  pendingImages.value = [...imageFiles];
+    // 保存待处理图片
+    pendingImages.value = [...imageFiles];
   
-  // 处理第一张图片
-  if (pendingImages.value.length > 0) {
-    await processFirstElectronImage(pendingImages.value[0]);
+    // 处理第一张图片
+    if (pendingImages.value.length > 0) {
+      await processFirstElectronImage(pendingImages.value[0]);
+    }
+  } catch (error) {
+    console.error('读取目录时出错:', error);
+    alert('读取目录时出错: ' + error.message);
   }
 }
 
@@ -552,20 +565,35 @@ const watermarkImageSize = ref(20) // 百分比
 // 上传水印图片
 const onWatermarkImageChange = (event) => {
   const file = event.target.files[0]
-  if (!file) return
+  if (!file) {
+    console.error('未选择水印图片文件');
+    return;
+  }
+  
+  console.log('选择水印图片:', file.name);
   
   const reader = new FileReader()
   reader.onload = function(event) {
     watermarkImage.value = new Image()
-    watermarkImage.value.src = event.target.result
     watermarkImage.value.onload = function() {
+      console.log('水印图片已加载完成');
       // 如果有画布和图片，重新应用水印
       if (canvasImage.value && canvas.value) {
         waterMarkTextChange()
       }
     }
+    watermarkImage.value.onerror = function(err) {
+      console.error('水印图片加载失败:', err);
+    }
+    watermarkImage.value.src = event.target.result
+  }
+  reader.onerror = function(err) {
+    console.error('读取水印图片失败:', err);
   }
   reader.readAsDataURL(file)
+  
+  // 重置选择器，允许重复选择相同文件
+  event.target.value = ''
 }
 
 // 应用图片水印
@@ -891,30 +919,29 @@ const startDrag = (event) => {
     startDragY.value = event.clientY - rect.top;
   }
   
-  // 计算相对于水印位置的偏移
-  startDragX.value -= singleXPos.value;
-  startDragY.value -= singleYPos.value;
+  // 防止事件冒泡和默认行为
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 const onDrag = (event) => {
   if (!isDragging.value) return;
   
   // 防止触摸时页面滚动
-  if (event.type === 'touchmove') {
-    event.preventDefault();
-  }
+  event.preventDefault();
+  event.stopPropagation();
   
   const rect = canvas.value.getBoundingClientRect();
   
-  // 计算新位置（考虑到起始拖动点与水印中心的偏移）
+  // 计算新位置
   if (event.type === 'touchmove') {
     // 触摸事件
-    singleXPos.value = event.touches[0].clientX - rect.left - startDragX.value;
-    singleYPos.value = event.touches[0].clientY - rect.top - startDragY.value;
+    singleXPos.value = event.touches[0].clientX - rect.left;
+    singleYPos.value = event.touches[0].clientY - rect.top;
   } else {
     // 鼠标事件
-    singleXPos.value = event.clientX - rect.left - startDragX.value;
-    singleYPos.value = event.clientY - rect.top - startDragY.value;
+    singleXPos.value = event.clientX - rect.left;
+    singleYPos.value = event.clientY - rect.top;
   }
   
   // 限制水印不超出画布范围
@@ -971,6 +998,29 @@ const handleProcessRemainingImages = () => {
     // 网页模式
     processRemainingImages();
   }
+}
+
+// 添加鼠标滚轮缩放功能
+const handleWheelZoom = (event) => {
+  // 只在非铺满模式下启用缩放
+  if (!canvasImage.value || repeatTextStatus.value) return;
+  
+  // 阻止默认滚动行为
+  event.preventDefault();
+  
+  // 根据滚轮方向调整大小
+  if (watermarkType.value === 'text') {
+    // 文字水印缩放
+    const delta = event.deltaY > 0 ? -0.1 : 0.1; // 向下滚动减小，向上滚动增大
+    watermarkTextSize.value = Math.max(0.1, Math.min(10, watermarkTextSize.value + delta));
+  } else {
+    // 图片水印缩放
+    const delta = event.deltaY > 0 ? -1 : 1; // 向下滚动减小，向上滚动增大
+    watermarkImageSize.value = Math.max(1, Math.min(50, watermarkImageSize.value + delta));
+  }
+  
+  // 更新水印
+  waterMarkTextChange();
 }
 
 // 修改Electron应用的图片选择和处理函数，适配新的多图片处理方式
@@ -1209,6 +1259,7 @@ const handleProcessRemainingImages = () => {
             @touchmove="onDrag"
             @touchend="onTouchEnd"
             @touchcancel="onTouchEnd"
+            @wheel="handleWheelZoom"
             :class="{ 'cursor-move': !repeatTextStatus }"
           ></canvas>
           <p v-if="!repeatTextStatus" class="text-[12px] text-gray-500 mt-2">

@@ -48,6 +48,7 @@
     "brace-expansion": "^1.1.11",
     "concurrently": "^9.1.2",
     "electron": "^36.4.0",
+    "electron-builder": "^23.6.0",
     "electron-packager": "^17.1.2",
     "minimatch": "^5.1.6",
     "nuxt": "^3.11.2",
@@ -62,7 +63,6 @@
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "browser-image-compression": "^2.0.2",
-    "electron-builder": "^26.0.12",
     "image-type": "^5.2.0",
     "nuxt-proxy": "^0.4.1"
   },

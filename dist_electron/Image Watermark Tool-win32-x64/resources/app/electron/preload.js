@@ -27,6 +27,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isElectron: true,
     preloadVersion: '1.0.2',
     timestamp: new Date().toISOString()
+  },
+  
+  // 菜单事件处理
+  onMenuEvent: (callback) => {
+    // 监听菜单事件
+    const menuEvents = [
+      'menu-open-file',
+      'menu-open-folder',
+      'menu-save',
+      'menu-save-batch',
+      'menu-reset-position',
+      'menu-reset-settings',
+      'menu-toggle-thumbnails',
+      'menu-help',
+      'menu-about'
+    ];
+    
+    // 为每个菜单事件添加监听器
+    menuEvents.forEach(eventName => {
+      ipcRenderer.on(eventName, () => {
+        console.log(`接收到菜单事件: ${eventName}`);
+        callback(eventName);
+      });
+    });
   }
 });
 

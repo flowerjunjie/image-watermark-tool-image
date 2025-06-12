@@ -1,17 +1,25 @@
 ## Image Watermark Tool
 
-Image Watermark Tool is an open-source project that allows users to add watermarks to their images (such as ID cards, driver's licenses, passports, etc.) on their local devices without any network connection. It also features easy one-click website deployment functionality.
+Image Watermark Tool is an open-source project that allows users to add watermarks to images (such as ID photos, driver's licenses, passports, etc.) on local devices without requiring an internet connection. It also features one-click website deployment functionality.
 
-👉 [Try Online](https://watermark.aicompasspro.com)
+👉 [Online Demo](https://watermark.aicompasspro.com)
 
-[简体中文](https://github.com/unilei/image-watermark-tool/blob/master/README.md) | English
+English | [简体中文](https://github.com/unilei/image-watermark-tool/blob/master/README.md)
+
+### Latest Features
+
+- **Top Menu Bar**: Added File, Edit, View, and Help menus for quick access to common functions
+- **Detailed Help Documentation**: Access complete user guide through the Help menu or the question mark button
+- **Image Background Color Switching**: Support for multiple eye-friendly background colors to reduce eye strain
+- **Batch Processing Optimization**: Improved performance and stability for batch processing
+- **Interface Optimization**: More compact layout and better visual experience
 
 ### Quick Start
 
 ### Deploy on Vercel
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/unilei/image-watermark-tool.git&project-name=image-watermark-tool&repository-name=image-watermark-tool)
 
-### Manually Deploy on Vercel
+### Manual Deployment on Vercel
 ```
 1. Fork this project
 2. On the [Vercel] website, click [New Project]
@@ -37,7 +45,7 @@ pnpm install
 yarn install
 ```
 
-### 3. Run in the Browser
+### 3. Run in Browser
 
 ```bash
 # npm
@@ -55,20 +63,20 @@ yarn dev
 
 ## Standalone Version Packaging Guide
 
-The Image Watermark Tool provides a standalone version (standalone-app.html) that integrates all functionality without relying on external resources. This is the preferred version for building desktop applications.
+Image Watermark Tool provides a standalone version (standalone-app.html) that integrates all features without depending on external resources, making it the preferred version for building desktop applications.
 
 ### Packaging Steps
 
 1. **Prepare Environment**
 
-   Make sure all dependencies are installed:
+   Ensure all dependencies are installed:
    ```bash
    npm install
    ```
 
 2. **Build Application**
 
-   Package the application using:
+   Use the following command to package the application:
    ```bash
    npm run electron:build
    ```
@@ -77,7 +85,7 @@ The Image Watermark Tool provides a standalone version (standalone-app.html) tha
 
    After packaging, run the fix script to ensure resources load correctly:
    ```bash
-   # Full fix (recommended)
+   # Complete fix (recommended)
    fix-app.bat
 
    # Or use quick fix
@@ -86,30 +94,58 @@ The Image Watermark Tool provides a standalone version (standalone-app.html) tha
 
 4. **Launch Application**
 
-   After packaging and fixing, find the application at:
+   After packaging and fixing, you can find the application at:
    ```
    dist_electron\Image Watermark Tool-win32-x64\Image Watermark Tool.exe
    ```
+
+### Key Features
+
+1. **Multiple Watermark Types**
+   - Text Watermark: Custom text, font size, color, and transparency
+   - Tiled Watermark: Text covers the entire image in a tiled pattern
+   - Image Watermark: Upload custom images as watermarks
+
+2. **Flexible Watermark Settings**
+   - Freely drag to adjust watermark position
+   - Adjust watermark transparency
+   - Set watermark rotation angle
+   - Customize watermark color
+
+3. **Batch Processing**
+   - Support for uploading and processing multiple images
+   - Preserve folder structure
+   - Batch export as ZIP archive
+
+4. **Eye Protection Mode**
+   - Multiple background color options
+   - Reduce eye strain
+   - Suitable for extended use
+
+5. **Local Processing**
+   - All processing done locally
+   - No images uploaded to servers
+   - Protects user privacy
 
 ### Troubleshooting Guide
 
 1. **Resource Path Issues**
 
-   - **Problem**: Packaged application may not find resource files, causing blank interface or functionality issues
-   - **Solution**: Always run the `fix-app.bat` script after packaging, which automatically copies required resource files
+   - **Problem**: After packaging, the application may not find resource files, resulting in blank interfaces or non-functioning features
+   - **Solution**: Always run the `fix-app.bat` script after packaging, which automatically copies necessary resource files
 
 2. **Blank Interface After Packaging**
 
-   - **Problem**: Application starts with a blank interface after packaging
+   - **Problem**: After packaging, launching the application shows a blank interface with no content
    - **Solution**: 
-     - Ensure `standalone-app.html` file is correctly copied to the application directory
-     - Check if the main process correctly loads the standalone HTML file
+     - Ensure the `standalone-app.html` file is correctly copied to the application directory
+     - Check if the main process is correctly loading the standalone HTML file
      - Use the `fix-app.bat` script to fix resource paths
 
 3. **Dependency Issues**
 
    - **Problem**: Some dependencies may be lost or incompatible during packaging
-   - **Solution**: Ensure correct dependency versions in `package.json`, manually copy critical dependencies from `node_modules` if necessary
+   - **Solution**: Ensure dependency versions in `package.json` are correct, and manually copy critical dependencies from `node_modules` if necessary
 
 4. **Missing Files**
 
@@ -125,7 +161,7 @@ To ensure successful packaging and avoid common issues, follow this workflow:
    rd /s /q dist_electron
    ```
 
-2. Run build command:
+2. Execute build command:
    ```bash
    npm run electron:build
    ```
@@ -135,14 +171,56 @@ To ensure successful packaging and avoid common issues, follow this workflow:
    fix-app.bat
    ```
 
-4. Test if the application runs correctly:
+4. Test if the application runs properly:
    ```
    dist_electron\Image Watermark Tool-win32-x64\Image Watermark Tool.exe
    ```
 
-### How to Deploy to Your Own Server? 
-See NUXT.JS Packaging and Deployment Documentation:
-[Deployment Documentation](https://nuxt.com/docs/getting-started/deployment)
+### Standalone Version User Guide
+
+The standalone version (standalone-app.html) provides complete watermarking functionality, including:
+
+1. **Upload Images**: Click the "Upload Image" button or drag and drop images to the preview area
+
+2. **Add Watermark**:
+   - Text Watermark: Enter watermark text, set font size, color, and transparency
+   - Position Adjustment: Directly drag to adjust watermark position, or use sliders to control horizontal and vertical offset
+   - Rotation Angle: Adjust watermark rotation angle
+
+3. **Export Images**:
+   - In the desktop version, click the "Save Image" button to save to local storage
+   - Watermark processing is done locally, images are not uploaded to any server
+
+4. **Other Features**:
+   - Adjust watermark transparency
+   - Set watermark text color
+   - Set watermark size and angle
+
+### FAQ
+
+1. **What's the difference between standalone version and web version?**
+   - The standalone version (standalone-app.html) integrates all resources and doesn't require internet connection
+   - The web version needs to load external resources but has the same functionality
+
+2. **How to modify default watermark text?**
+   - Open the `standalone-app.html` file and find the default watermark text setting section
+
+3. **How to optimize the packaged application size?**
+   - Use `electron-builder` configuration options to reduce package size
+   - Remove unnecessary dependencies and resource files
+
+4. **How to update a packaged application?**
+   - Modify source code and re-execute the packaging process
+   - Remember to update the version number (in `package.json`)
+
+## Contact & Support
+
+- **Author Email**: [flowerjunjienew@gmail.com](mailto:flowerjunjienew@gmail.com)
+- **GitHub Repository**: [https://github.com/flowerjunjie/image-watermark-tool-image](https://github.com/flowerjunjie/image-watermark-tool-image)
+
+## Contribution
+
+Pull requests and issues are welcome.
 
 ## License
 

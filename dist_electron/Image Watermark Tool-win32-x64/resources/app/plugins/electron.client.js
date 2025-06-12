@@ -21,7 +21,15 @@ export default defineNuxtPlugin((nuxtApp) => {
         console.warn('无法选择目录：不在Electron环境中');
         return null;
       }
-      return await window.electronAPI.openDirectoryDialog();
+      console.log('调用Electron原生目录选择器');
+      try {
+        const directoryPath = await window.electronAPI.openDirectoryDialog();
+        console.log('选择的目录路径:', directoryPath);
+        return directoryPath;
+      } catch (error) {
+        console.error('选择目录时出错:', error);
+        return null;
+      }
     },
     
     // 读取目录中的图片

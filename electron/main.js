@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, session, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const url = require('url');
@@ -252,6 +252,130 @@ function createWindow() {
   });
 }
 
+// 创建应用菜单
+function createMenu() {
+  const template = [
+    {
+      label: '文件',
+      submenu: [
+        {
+          label: '打开图片',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-open-file');
+            }
+          }
+        },
+        {
+          label: '打开文件夹',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-open-folder');
+            }
+          }
+        },
+        {
+          label: '保存图片',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-save');
+            }
+          }
+        },
+        {
+          label: '批量保存',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-save-batch');
+            }
+          }
+        },
+        { type: 'separator' },
+        { role: 'quit', label: '退出' }
+      ]
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { type: 'separator' },
+        {
+          label: '重置水印位置',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-reset-position');
+            }
+          }
+        },
+        {
+          label: '重置所有设置',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-reset-settings');
+            }
+          }
+        }
+      ]
+    },
+    {
+      label: '查看',
+      submenu: [
+        { role: 'reload', label: '重新加载' },
+        { role: 'forceReload', label: '强制重新加载' },
+        { role: 'toggleDevTools', label: '开发者工具' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: '重置缩放' },
+        { role: 'zoomIn', label: '放大' },
+        { role: 'zoomOut', label: '缩小' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: '全屏' },
+        { type: 'separator' },
+        {
+          label: '显示/隐藏缩略图',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-toggle-thumbnails');
+            }
+          }
+        }
+      ]
+    },
+    {
+      label: '帮助',
+      submenu: [
+        {
+          label: '使用帮助',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-help');
+            }
+          }
+        },
+        {
+          label: '关于',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-about');
+            }
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 // 在应用准备就绪前设置CSP规则
 app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
 app.commandLine.appendSwitch('disable-site-isolation-trials');
@@ -271,6 +395,7 @@ app.whenReady().then(() => {
   });
   
   createWindow();
+  createMenu();
 });
 
 // 所有窗口关闭时退出应用
@@ -286,14 +411,24 @@ app.on('activate', function () {
 
 // 文件选择处理
 ipcMain.handle('open-directory-dialog', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog({
-    properties: ['openDirectory']
-  });
-  
-  if (!canceled) {
-    return filePaths[0];
+  console.log('主进程: 打开目录选择对话框');
+  try {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: '选择包含图片的文件夹',
+      buttonLabel: '选择此文件夹'
+    });
+    
+    console.log('目录选择结果:', result);
+    
+    if (!result.canceled) {
+      return result.filePaths[0];
+    }
+    return null;
+  } catch (error) {
+    console.error('打开目录对话框失败:', error);
+    return null;
   }
-  return null;
 });
 
 // 读取目录中的图片文件

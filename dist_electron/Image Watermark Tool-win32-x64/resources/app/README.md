@@ -6,6 +6,14 @@
 
 [English](https://github.com/unilei/image-watermark-tool/blob/master/README.EN.md) | 简体中文
 
+### 最新功能
+
+- **顶部菜单栏**：添加了文件、编辑、查看和帮助菜单，方便快速访问常用功能
+- **详细帮助文档**：通过帮助菜单或右上角问号按钮可访问完整的使用说明
+- **图片背景色切换**：支持多种护眼背景色，避免纯白背景对眼睛的刺激
+- **批量处理优化**：改进了批量处理的性能和稳定性
+- **界面优化**：更紧凑的布局，更好的视觉体验
+
 ### 快速开始
 
 ### 在Vercel上部署
@@ -90,6 +98,34 @@ yarn dev
    ```
    dist_electron\Image Watermark Tool-win32-x64\Image Watermark Tool.exe
    ```
+
+### 主要功能
+
+1. **多种水印类型**
+   - 文字水印：自定义文本、字体大小、颜色和透明度
+   - 平铺水印：文字以平铺方式覆盖整个图片
+   - 图片水印：上传自定义图片作为水印
+
+2. **灵活的水印设置**
+   - 自由拖拽调整水印位置
+   - 调整水印透明度
+   - 设置水印旋转角度
+   - 自定义水印颜色
+
+3. **批量处理功能**
+   - 支持批量上传和处理多张图片
+   - 保留文件夹结构
+   - 批量导出为ZIP压缩包
+
+4. **护眼模式**
+   - 多种背景色选择
+   - 减少对眼睛的刺激
+   - 适合长时间使用
+
+5. **本地处理**
+   - 所有处理在本地完成
+   - 不上传图片到服务器
+   - 保护用户隐私
 
 ### 避坑指南
 
@@ -176,6 +212,11 @@ yarn dev
 4. **如何更新已打包的应用？**
    - 修改源代码后重新执行打包流程
    - 记得更新版本号（在`package.json`中）
+
+## 联系与支持
+
+- **作者邮箱**：[flowerjunjienew@gmail.com](mailto:flowerjunjienew@gmail.com)
+- **GitHub仓库**：[https://github.com/flowerjunjie/image-watermark-tool-image](https://github.com/flowerjunjie/image-watermark-tool-image)
 
 ## 贡献
 
