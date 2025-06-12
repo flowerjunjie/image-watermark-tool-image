@@ -7,61 +7,129 @@ const { promisify } = require('util');
 // 保持对窗口对象的全局引用，否则窗口会在JavaScript对象被垃圾回收时自动关闭
 let mainWindow;
 
+// 检查是否是开发环境
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+console.log('运行环境:', isDev ? '开发模式' : '生产模式');
+
+// 获取额外资源目录
+function getResourcePath() {
+  // 在开发环境中返回项目根目录
+  if (isDev) {
+    return path.join(app.getAppPath());
+  }
+  
+  // 在打包环境中返回resources/app.asar或resources/.output
+  const resourcesPath = path.join(process.resourcesPath);
+  console.log('资源目录路径:', resourcesPath);
+  
+  // 检查是否有app/.output目录（由xcopy复制的）
+  const appOutputPath = path.join(app.getAppPath(), '.output');
+  if (fs.existsSync(appOutputPath)) {
+    console.log('找到app/.output目录:', appOutputPath);
+    return appOutputPath;
+  }
+  
+  // 检查是否有.output目录（由electron-packager --extra-resource添加）
+  const outputPath = path.join(resourcesPath, '.output');
+  if (fs.existsSync(outputPath)) {
+    console.log('找到resources/.output目录:', outputPath);
+    return outputPath;
+  }
+  
+  return app.getAppPath();
+}
+
 function createWindow() {
   // 创建浏览器窗口
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
-      webSecurity: false // 允许加载本地资源
-    }
+      nodeIntegration: true,
+      contextIsolation: false,
+      webSecurity: false, // 禁用同源策略，允许加载本地资源
+      preload: path.join(__dirname, 'preload.js')
+    },
+    icon: path.join(__dirname, '../assets/icon/icon.png')
   });
 
   // 获取应用路径
-  const appPath = app.getAppPath();
+  const appPath = path.join(app.getAppPath());
   console.log('应用路径:', appPath);
-
-  // 禁用webFrame的自动刷新
-  mainWindow.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.executeJavaScript(`
-      if (window.__VUE_HMR_RUNTIME__) {
-        window.__VUE_HMR_RUNTIME__.reload = function() { 
-          console.log('热更新已禁用');
-          return false; 
-        };
-      }
-    `).catch(err => console.error('执行脚本出错:', err));
-  });
-
-  // 加载静态HTML文件而不是开发服务器
-  const indexPath = path.join(appPath, '.output', 'public', 'index.html');
   
-  // 检查文件是否存在
-  if (fs.existsSync(indexPath)) {
-    console.log('加载静态文件:', indexPath);
-    mainWindow.loadFile(indexPath);
+  // 获取资源目录
+  const resourcesPath = process.resourcesPath;
+  console.log('资源目录路径:', resourcesPath);
+
+  // 强制使用direct-app.html
+  const directAppPath = path.join(appPath, 'direct-app.html');
+  console.log('检查direct-app.html路径:', directAppPath);
+  
+  let contentUrl = null;
+  
+  if (fs.existsSync(directAppPath)) {
+    console.log('发现direct-app.html文件:', directAppPath);
+    contentUrl = `file://${directAppPath}`;
+    console.log('使用direct-app.html作为入口');
   } else {
-    // 如果静态文件不存在，则加载开发服务器
-    console.log('静态文件不存在，使用开发服务器:', indexPath);
-    mainWindow.loadURL('http://localhost:3004');
+    console.log('未找到direct-app.html，使用备用方案');
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('开发模式，使用localhost');
+      contentUrl = 'http://localhost:3000';
+    } else {
+      console.log('生产模式，创建应急HTML');
+      const emergencyHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>图片水印工具 - 应急模式</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+          h1 { color: #1976d2; }
+          .error { color: red; margin: 20px 0; }
+          button { padding: 10px 20px; background: #1976d2; color: white; border: none; cursor: pointer; }
+        </style>
+      </head>
+      <body>
+        <h1>图片水印工具 - 应急模式</h1>
+        <p>应用加载失败，请尝试修复应用</p>
+        <div class="error">
+          <p>错误原因: 找不到必要的应用文件</p>
+          <p>应用路径: ${appPath}</p>
+        </div>
+        <button onclick="window.close()">关闭应用</button>
+      </body>
+      </html>
+      `;
+      const tempHtml = path.join(app.getPath('temp'), 'watermark-emergency.html');
+      fs.writeFileSync(tempHtml, emergencyHtml);
+      contentUrl = `file://${tempHtml}`;
+    }
+  }
+
+  // 加载内容
+  console.log('加载内容:', contentUrl);
+  
+  if (contentUrl.startsWith('file://')) {
+    // 从URL中提取文件路径
+    let filePath;
+    if (process.platform === 'win32') {
+      // Windows路径处理 (移除 'file:///')
+      filePath = contentUrl.replace('file:///', '');
+    } else {
+      // Mac/Linux路径处理 (移除 'file://')
+      filePath = contentUrl.replace('file://', '');
+    }
+    console.log('加载文件路径:', filePath);
+    mainWindow.loadFile(filePath);
+  } else {
+    mainWindow.loadURL(contentUrl);
   }
 
   // 打开开发者工具
   mainWindow.webContents.openDevTools();
-
-  // 记录加载失败
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.error('页面加载失败:', errorCode, errorDescription);
-    
-    // 如果加载失败，尝试使用file协议
-    if (fs.existsSync(indexPath)) {
-      console.log('尝试使用file协议加载');
-      mainWindow.loadURL(`file://${indexPath}`);
-    }
-  });
 
   // 当窗口关闭时触发
   mainWindow.on('closed', function () {
@@ -81,6 +149,7 @@ app.whenReady().then(() => {
     callback({});
   });
   
+  // 注册文件协议
   protocol.registerFileProtocol('file', (request, callback) => {
     const pathname = decodeURI(request.url.replace('file:///', ''));
     callback({ path: pathname });

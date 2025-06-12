@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Image Watermark Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    .container {
+      text-align: center;
+      padding: 20px;
+      border-radius: 8px;
+      background-color: white;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #5d5cde;
+    }
+    p {
+      margin: 10px 0;
+    }
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 20px 0;
+    }
+    .loading-bar {
+      width: 200px;
+      height: 10px;
+      background-color: #e0e0e0;
+      border-radius: 5px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+    .loading-bar-progress {
+      height: 100%;
+      background-color: #5d5cde;
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>图片水印工具</h1>
+    <p>正在加载应用，请稍候...</p>
+    
+    <div class="loading">
+      <div class="loading-bar">
+        <div class="loading-bar-progress" id="progress"></div>
+      </div>
+      <p id="status">准备中...</p>
+    </div>
+  </div>
+
+  <script>
+    // 模拟加载进度
+    let progress = 0;
+    const progressBar = document.getElementById('progress');
+    const statusText = document.getElementById('status');
+    
+    // 获取当前脚本的完整路径
+    const scriptPath = document.currentScript.src || window.location.href;
+    // 提取基础目录路径
+    const basePath = scriptPath.substring(0, scriptPath.lastIndexOf('/') + 1);
+    
+    // 从URL获取应用路径的根目录
+    function getAppRoot() {
+      // 示例: file:///D:/workspace/0326/image-watermark-tool/dist_electron/Image Watermark Tool-win32-x64/resources/app/app.html
+      const url = window.location.href;
+      const appPath = url.substring(0, url.lastIndexOf('/') + 1);
+      return appPath;
+    }
+    
+    function updateProgress() {
+      progress += 5;
+      if (progress > 100) progress = 100;
+      progressBar.style.width = progress + '%';
+      
+      if (progress < 30) {
+        statusText.textContent = '检查资源...';
+      } else if (progress < 60) {
+        statusText.textContent = '加载应用组件...';
+      } else if (progress < 90) {
+        statusText.textContent = '准备界面...';
+      } else {
+        statusText.textContent = '即将完成...';
+      }
+      
+      if (progress < 100) {
+        setTimeout(updateProgress, 100);
+      } else {
+        // 尝试重定向到正确的应用页面
+        setTimeout(() => {
+          const appRoot = getAppRoot();
+          console.log('应用根目录:', appRoot);
+          
+          const possiblePaths = [
+            appRoot + '.output/public/index.html',
+            appRoot + 'app/.output/public/index.html'
+          ];
+          
+          // 直接使用file协议加载
+          const publicPath = appRoot + '.output/public/index.html';
+          console.log('尝试加载:', publicPath);
+          window.location.href = publicPath;
+        }, 500);
+      }
+    }
+    
+    // 开始更新进度
+    setTimeout(updateProgress, 200);
+  </script>
+</body>
+</html> 

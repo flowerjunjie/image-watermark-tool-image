@@ -23,6 +23,7 @@ export default defineNuxtConfig({
             script: []
         },
         baseURL: './',
+        buildAssetsDir: '/_nuxt/', // 默认值
     },
     // build modules
     modules: [

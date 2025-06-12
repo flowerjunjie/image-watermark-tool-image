@@ -12,6 +12,9 @@ const singleXPos = ref(0)
 const singleYPos = ref(0)
 const singleInitStatus = ref(true)
 const multiInitStatus = ref(true)
+const isDragging = ref(false)
+const startDragX = ref(0)
+const startDragY = ref(0)
 
 const canvas = ref(null)
 const canvasImage = ref()
@@ -529,21 +532,6 @@ const resetProgressBar = () => {
   }, 3000)
 };
 
-const handleDownload1 = () => {
-  if (!canvas.value) return
-  downloadLoading.value = true
-  setTimeout(() => {
-    // 保存图片
-    const dataURL = canvas.value.toDataURL();
-    const link = document.createElement('a');
-    link.href = dataURL;
-    link.download = fileObj.value.name || 'image.png';
-    link.click();
-    link.remove();
-    downloadLoading.value = false
-  }, 2000)
-}
-
 const waterMarkColorChange = (e) => {
   watermarkColor.value = e
   waterMarkTextChange()
@@ -582,6 +570,68 @@ const switchWatermarkType = (type) => {
   if (canvasImage.value) {
     waterMarkTextChange()
   }
+}
+
+// 添加鼠标拖动功能
+const startDrag = (event) => {
+  if (!canvasImage.value || repeatTextStatus.value) return;
+  
+  // 只在非重复水印模式下启用拖动
+  isDragging.value = true;
+  
+  // 记录起始拖动点
+  const rect = canvas.value.getBoundingClientRect();
+  if (event.type === 'touchstart') {
+    // 触摸事件
+    startDragX.value = event.touches[0].clientX - rect.left;
+    startDragY.value = event.touches[0].clientY - rect.top;
+  } else {
+    // 鼠标事件
+    startDragX.value = event.clientX - rect.left;
+    startDragY.value = event.clientY - rect.top;
+  }
+  
+  // 计算相对于水印位置的偏移
+  startDragX.value -= singleXPos.value;
+  startDragY.value -= singleYPos.value;
+}
+
+const onDrag = (event) => {
+  if (!isDragging.value) return;
+  
+  // 防止触摸时页面滚动
+  if (event.type === 'touchmove') {
+    event.preventDefault();
+  }
+  
+  const rect = canvas.value.getBoundingClientRect();
+  
+  // 计算新位置（考虑到起始拖动点与水印中心的偏移）
+  if (event.type === 'touchmove') {
+    // 触摸事件
+    singleXPos.value = event.touches[0].clientX - rect.left - startDragX.value;
+    singleYPos.value = event.touches[0].clientY - rect.top - startDragY.value;
+  } else {
+    // 鼠标事件
+    singleXPos.value = event.clientX - rect.left - startDragX.value;
+    singleYPos.value = event.clientY - rect.top - startDragY.value;
+  }
+  
+  // 限制水印不超出画布范围
+  singleXPos.value = Math.max(0, Math.min(canvas.value.width, singleXPos.value));
+  singleYPos.value = Math.max(0, Math.min(canvas.value.height, singleYPos.value));
+  
+  // 更新水印
+  waterMarkTextChange();
+}
+
+const endDrag = () => {
+  isDragging.value = false;
+}
+
+// 触摸设备的拖动结束处理
+const onTouchEnd = () => {
+  isDragging.value = false;
 }
 </script>
 
@@ -775,22 +825,29 @@ const switchWatermarkType = (type) => {
 
         <div class="max-w-[520px] w-full mx-auto my-[12px] sm:my-[40px] p-[10px] text-center" v-show="canvasImage">
           <div class="flex gap-2 justify-center">
-            <el-button :loading="downloadLoading"
-                     color="#5d5cde" type="primary"
-                     @click="handleDownload">
-              {{ $t('download') }}
-            </el-button>
+            <!-- 网页环境：只有下载按钮 -->
+            <template v-if="!$electron?.isElectron">
+              <el-button 
+                :loading="downloadLoading"
+                color="#5d5cde" 
+                type="primary"
+                @click="handleDownload"
+              >
+                {{ $t('download') || '下载图片' }}
+              </el-button>
+            </template>
             
-            <!-- 桌面版保存按钮 -->
-            <el-button 
-              v-if="$electron?.isElectron"
-              :loading="downloadLoading"
-              color="#5d5cde" 
-              type="primary"
-              @click="handleSaveWithElectron"
-            >
-              {{ $t('saveImageAs') }}
-            </el-button>
+            <!-- 桌面环境：只保留一个按钮 -->
+            <template v-else>
+              <el-button 
+                :loading="downloadLoading"
+                color="#5d5cde" 
+                type="primary"
+                @click="handleSaveWithElectron"
+              >
+                {{ $t('saveImage') || '保存图片' }}
+              </el-button>
+            </template>
           </div>
           
           <el-progress class="mt-3"
@@ -800,8 +857,24 @@ const switchWatermarkType = (type) => {
           />
         </div>
 
-        <div class="text-center my-[40px] max-w-[520px]  w-full mx-auto p-[10px]" v-show="canvasImage">
-          <canvas ref="canvas"></canvas>
+        <div class="text-center my-[40px] max-w-[520px] w-full mx-auto p-[10px]" v-show="canvasImage">
+          <canvas 
+            ref="canvas" 
+            @mousedown="startDrag" 
+            @mousemove="onDrag" 
+            @mouseup="endDrag" 
+            @mouseleave="endDrag"
+            @touchstart="startDrag"
+            @touchmove="onDrag"
+            @touchend="onTouchEnd"
+            @touchcancel="onTouchEnd"
+            :class="{ 'cursor-move': !repeatTextStatus }"
+          ></canvas>
+          <p v-if="!repeatTextStatus" class="text-[12px] text-gray-500 mt-2">
+            <span>{{ $t('dragWatermarkTip') || '提示：您可以直接拖动水印调整位置' }}</span>
+            <span class="hidden sm:inline">{{ $t('dragWatermarkTipDesktop') || '（移动鼠标到水印上拖动）' }}</span>
+            <span class="sm:hidden">{{ $t('dragWatermarkTipMobile') || '（触摸水印并拖动）' }}</span>
+          </p>
         </div>
       </div>
 
@@ -816,6 +889,10 @@ canvas {
   width: 100%;
   border: 1px dashed #AAA;
   border-radius: 8px;
+}
+
+.cursor-move {
+  cursor: move; /* 显示移动光标 */
 }
 
 :deep(.el-slider) {

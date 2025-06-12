@@ -1,21 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const os = require('os');
-const path = require('path');
-const fs = require('fs');
 
 console.log('Preload script executing...');
-console.log('操作系统:', os.platform(), os.release());
-console.log('Electron 预加载环境初始化');
-
-// 检查文件系统访问
-try {
-  const tempDir = os.tmpdir();
-  console.log('临时目录:', tempDir);
-  const files = fs.readdirSync(tempDir).slice(0, 5);
-  console.log('临时目录文件示例:', files);
-} catch (err) {
-  console.error('文件系统访问错误:', err);
-}
 
 // 暴露给渲染进程的API
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -37,22 +22,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('save-image', options);
   },
   
-  // 获取系统信息
-  getSystemInfo: () => {
-    return {
-      platform: os.platform(),
-      release: os.release(),
-      arch: os.arch(),
-      cpus: os.cpus().length,
-      memory: Math.round(os.totalmem() / (1024 * 1024 * 1024)) + 'GB',
-      hostname: os.hostname()
-    };
-  },
-  
   // 调试信息
   debugInfo: {
     isElectron: true,
-    preloadVersion: '1.0.1',
+    preloadVersion: '1.0.2',
     timestamp: new Date().toISOString()
   }
 });

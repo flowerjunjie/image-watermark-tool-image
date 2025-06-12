@@ -12,6 +12,16 @@ const singleXPos = ref(0)
 const singleYPos = ref(0)
 const singleInitStatus = ref(true)
 const multiInitStatus = ref(true)
+const isDragging = ref(false)
+const startDragX = ref(0)
+const startDragY = ref(0)
+
+// 添加多图片处理相关变量
+const thumbnails = ref([]) // 存储所有图片的缩略图信息
+const currentImageIndex = ref(0) // 当前显示的图片索引
+const pendingImages = ref([]) // 等待处理的图片
+const processedParameters = ref(null) // 第一张图片处理时使用的参数
+const showThumbnails = ref(false) // 是否显示缩略图区域
 
 const canvas = ref(null)
 const canvasImage = ref()
@@ -83,22 +93,100 @@ const onFolderChange = async (event) => {
   processingProgress.value = 0
   folderProcessing.value = true
   
-  // 创建一个临时处理队列
-  const processQueue = [...imageFiles]
+  // 清空之前的缩略图
+  thumbnails.value = []
+  currentImageIndex.value = 0
+  showThumbnails.value = true
   
-  // 批量处理图片
-  await processImagesInBatch(processQueue)
+  // 创建一个临时处理队列
+  pendingImages.value = [...imageFiles]
+  
+  // 先处理第一张图片
+  if (pendingImages.value.length > 0) {
+    // 加载第一张图片显示处理过程
+    await processFirstImage(pendingImages.value[0])
+  }
 }
 
-// 批量处理图片
-const processImagesInBatch = async (imageQueue) => {
-  // 创建临时画布用于处理
-  const tempCanvas = document.createElement('canvas')
-  const tempCtx = tempCanvas.getContext('2d')
+// 处理第一张图片
+const processFirstImage = async (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    
+    reader.onload = function(event) {
+      // 设置当前图片
+      fileObject.value = file
+      fileObj.value.name = file.name
+      fileObj.value.type = file.type
+      
+      canvasImage.value = new Image()
+      canvasImage.value.onload = function() {
+        const ctx = canvas.value.getContext('2d')
+        
+        // 设置画布尺寸
+        canvas.value.width = canvasImage.value.width
+        canvas.value.height = canvasImage.value.height
+        
+        // 绘制图片
+        ctx.drawImage(canvasImage.value, 0, 0, canvas.value.width, canvas.value.height)
+        
+        // 应用水印
+        setWatermark(ctx)
+        
+        // 保存当前使用的水印参数
+        processedParameters.value = {
+          watermarkType: watermarkType.value,
+          watermarkText: watermarkText.value,
+          watermarkColor: watermarkColor.value,
+          watermarkOpacity: watermarkOpacity.value,
+          watermarkSpacing: watermarkSpacing.value,
+          watermarkTextSize: watermarkTextSize.value,
+          watermarkAngle: repeatTextStatus.value ? watermarkAngle.value : watermarkSingleAngle.value,
+          repeatTextStatus: repeatTextStatus.value,
+          singleXPos: singleXPos.value,
+          singleYPos: singleYPos.value,
+          watermarkImageSize: watermarkImageSize.value
+        }
+        
+        // 创建第一张图片的缩略图
+        createThumbnail(file, canvas.value.toDataURL())
+        
+        processedImages.value = 1
+        processingProgress.value = Math.round((processedImages.value / totalImages.value) * 100)
+        
+        resolve()
+      }
+      canvasImage.value.src = event.target.result
+    }
+    
+    reader.readAsDataURL(file)
+  })
+}
+
+// 创建缩略图
+const createThumbnail = (file, processedImageUrl) => {
+  const thumbnail = {
+    original: file,
+    name: file.name,
+    type: file.type,
+    processedUrl: processedImageUrl,
+    isProcessed: true
+  }
   
-  for (let i = 0; i < imageQueue.length; i++) {
-    const file = imageQueue[i]
-    await processImage(file, tempCanvas, tempCtx)
+  thumbnails.value.push(thumbnail)
+  
+  // 如果是第一张图片，设置为当前显示图片
+  if (thumbnails.value.length === 1) {
+    currentImageIndex.value = 0
+  }
+}
+
+// 批量处理剩余图片
+const processRemainingImages = async () => {
+  // 跳过第一张图片
+  for (let i = 1; i < pendingImages.value.length; i++) {
+    const file = pendingImages.value[i]
+    await processImage(file)
     
     processedImages.value++
     processingProgress.value = Math.round((processedImages.value / totalImages.value) * 100)
@@ -190,7 +278,7 @@ const processElectronImages = async (imageFiles) => {
 }
 
 // 处理单个图片
-const processImage = (file, tempCanvas, tempCtx) => {
+const processImage = (file) => {
   return new Promise((resolve) => {
     const reader = new FileReader()
     
@@ -198,6 +286,10 @@ const processImage = (file, tempCanvas, tempCtx) => {
       const img = new Image()
       
       img.onload = function() {
+        // 创建临时画布
+        const tempCanvas = document.createElement('canvas')
+        const tempCtx = tempCanvas.getContext('2d')
+        
         // 设置画布尺寸
         tempCanvas.width = img.width
         tempCanvas.height = img.height
@@ -205,15 +297,123 @@ const processImage = (file, tempCanvas, tempCtx) => {
         // 绘制图片
         tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height)
         
-        // 应用水印
-        if (watermarkType.value === 'text') {
-          applyTextWatermark(tempCtx, tempCanvas)
-        } else {
-          applyImageWatermark(tempCtx, tempCanvas)
+        // 应用相同的水印参数
+        if (processedParameters.value) {
+          tempCtx.save()
+          tempCtx.fillStyle = processedParameters.value.watermarkColor
+          tempCtx.globalAlpha = processedParameters.value.watermarkOpacity
+          
+          if (processedParameters.value.watermarkType === 'text') {
+            // 应用文字水印
+            const lines = processedParameters.value.watermarkText.split('\n')
+            const textSize = processedParameters.value.watermarkTextSize * 
+                            Math.max(15, Math.min(tempCanvas.width, tempCanvas.height) / 25)
+            
+            tempCtx.font = `bold ${textSize}px -apple-system,"Helvetica Neue",Helvetica,Arial,"PingFang SC","Hiragino Sans GB","WenQuanYi Micro Hei",sans-serif`
+            
+            if (processedParameters.value.repeatTextStatus) {
+              // 重复水印
+              tempCtx.rotate(processedParameters.value.watermarkAngle * Math.PI / 180)
+              
+              lines.forEach((line, lineIndex) => {
+                const textWidth = tempCtx.measureText(line).width
+                const textHeight = textSize
+                const textMargin = tempCtx.measureText('哈').width
+                const lineHeight = textSize + processedParameters.value.watermarkSpacing * textSize
+                const diagonalLength = Math.sqrt(tempCanvas.width ** 2 + tempCanvas.height ** 2)
+                
+                const angle = processedParameters.value.watermarkAngle
+                if(angle >= 0){
+                  const x = Math.ceil(diagonalLength / (textWidth + textMargin))
+                  const y = Math.ceil(tempCanvas.height / (processedParameters.value.watermarkSpacing * textHeight))
+                  const startY = lineHeight * lineIndex
+                  
+                  for (let i = 0; i < x; i++) {
+                    for (let j = -y; j < y; j++) {
+                      const yPos = startY + j * processedParameters.value.watermarkSpacing * textHeight
+                      tempCtx.fillText(line, (textWidth + textMargin) * i, yPos)
+                    }
+                  }
+                } else {
+                  const x = Math.ceil(diagonalLength / (textWidth + textMargin))
+                  const y = Math.ceil(diagonalLength / (processedParameters.value.watermarkSpacing * textHeight))
+                  const startY = lineHeight * lineIndex
+                  
+                  for (let i = -x; i < x; i++) {
+                    for (let j = -y; j < y; j++) {
+                      const yPos = startY + j * processedParameters.value.watermarkSpacing * textHeight
+                      tempCtx.fillText(line, (textWidth + textMargin) * i, yPos)
+                    }
+                  }
+                }
+              })
+            } else {
+              // 单个水印
+              tempCtx.translate(processedParameters.value.singleXPos, processedParameters.value.singleYPos)
+              tempCtx.rotate(processedParameters.value.watermarkAngle * Math.PI / 180)
+              
+              lines.forEach((line, lineIndex) => {
+                const startY = textSize * lineIndex
+                tempCtx.fillText(line, 0, startY)
+              })
+            }
+          } else if (processedParameters.value.watermarkType === 'image' && watermarkImage.value) {
+            // 应用图片水印
+            if (processedParameters.value.repeatTextStatus) {
+              // 重复水印
+              const watermarkWidth = tempCanvas.width * (processedParameters.value.watermarkImageSize / 100)
+              const scaleFactor = watermarkWidth / watermarkImage.value.width
+              const watermarkHeight = watermarkImage.value.height * scaleFactor
+              
+              const spacingX = watermarkWidth * 1.5
+              const spacingY = watermarkHeight * 1.5
+              
+              tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2)
+              tempCtx.rotate(processedParameters.value.watermarkAngle * Math.PI / 180)
+              tempCtx.translate(-tempCanvas.width / 2, -tempCanvas.height / 2)
+              
+              const diagonalLength = Math.sqrt(tempCanvas.width ** 2 + tempCanvas.height ** 2)
+              const cols = Math.ceil(diagonalLength / spacingX) + 1
+              const rows = Math.ceil(diagonalLength / spacingY) + 1
+              
+              const offsetX = -diagonalLength / 2
+              const offsetY = -diagonalLength / 2
+              
+              for (let i = 0; i < cols; i++) {
+                for (let j = 0; j < rows; j++) {
+                  const x = offsetX + i * spacingX
+                  const y = offsetY + j * spacingY
+                  tempCtx.drawImage(
+                    watermarkImage.value, 
+                    x, y, 
+                    watermarkWidth, watermarkHeight
+                  )
+                }
+              }
+            } else {
+              // 单个水印
+              const watermarkWidth = tempCanvas.width * (processedParameters.value.watermarkImageSize / 100)
+              const scaleFactor = watermarkWidth / watermarkImage.value.width
+              const watermarkHeight = watermarkImage.value.height * scaleFactor
+              
+              tempCtx.translate(processedParameters.value.singleXPos, processedParameters.value.singleYPos)
+              tempCtx.rotate(processedParameters.value.watermarkAngle * Math.PI / 180)
+              tempCtx.drawImage(
+                watermarkImage.value, 
+                -watermarkWidth / 2, -watermarkHeight / 2, 
+                watermarkWidth, watermarkHeight
+              )
+            }
+          }
+          
+          tempCtx.restore()
         }
         
-        // 导出图片并下载
+        // 创建缩略图
         const dataURL = tempCanvas.toDataURL(file.type || 'image/png')
+        createThumbnail(file, dataURL)
+        
+        // 导出图片并下载
         const link = document.createElement('a')
         link.href = dataURL
         link.download = `watermarked_${file.name}`
@@ -529,21 +729,6 @@ const resetProgressBar = () => {
   }, 3000)
 };
 
-const handleDownload1 = () => {
-  if (!canvas.value) return
-  downloadLoading.value = true
-  setTimeout(() => {
-    // 保存图片
-    const dataURL = canvas.value.toDataURL();
-    const link = document.createElement('a');
-    link.href = dataURL;
-    link.download = fileObj.value.name || 'image.png';
-    link.click();
-    link.remove();
-    downloadLoading.value = false
-  }, 2000)
-}
-
 const waterMarkColorChange = (e) => {
   watermarkColor.value = e
   waterMarkTextChange()
@@ -582,6 +767,68 @@ const switchWatermarkType = (type) => {
   if (canvasImage.value) {
     waterMarkTextChange()
   }
+}
+
+// 添加鼠标拖动功能
+const startDrag = (event) => {
+  if (!canvasImage.value || repeatTextStatus.value) return;
+  
+  // 只在非重复水印模式下启用拖动
+  isDragging.value = true;
+  
+  // 记录起始拖动点
+  const rect = canvas.value.getBoundingClientRect();
+  if (event.type === 'touchstart') {
+    // 触摸事件
+    startDragX.value = event.touches[0].clientX - rect.left;
+    startDragY.value = event.touches[0].clientY - rect.top;
+  } else {
+    // 鼠标事件
+    startDragX.value = event.clientX - rect.left;
+    startDragY.value = event.clientY - rect.top;
+  }
+  
+  // 计算相对于水印位置的偏移
+  startDragX.value -= singleXPos.value;
+  startDragY.value -= singleYPos.value;
+}
+
+const onDrag = (event) => {
+  if (!isDragging.value) return;
+  
+  // 防止触摸时页面滚动
+  if (event.type === 'touchmove') {
+    event.preventDefault();
+  }
+  
+  const rect = canvas.value.getBoundingClientRect();
+  
+  // 计算新位置（考虑到起始拖动点与水印中心的偏移）
+  if (event.type === 'touchmove') {
+    // 触摸事件
+    singleXPos.value = event.touches[0].clientX - rect.left - startDragX.value;
+    singleYPos.value = event.touches[0].clientY - rect.top - startDragY.value;
+  } else {
+    // 鼠标事件
+    singleXPos.value = event.clientX - rect.left - startDragX.value;
+    singleYPos.value = event.clientY - rect.top - startDragY.value;
+  }
+  
+  // 限制水印不超出画布范围
+  singleXPos.value = Math.max(0, Math.min(canvas.value.width, singleXPos.value));
+  singleYPos.value = Math.max(0, Math.min(canvas.value.height, singleYPos.value));
+  
+  // 更新水印
+  waterMarkTextChange();
+}
+
+const endDrag = () => {
+  isDragging.value = false;
+}
+
+// 触摸设备的拖动结束处理
+const onTouchEnd = () => {
+  isDragging.value = false;
 }
 </script>
 
@@ -775,22 +1022,29 @@ const switchWatermarkType = (type) => {
 
         <div class="max-w-[520px] w-full mx-auto my-[12px] sm:my-[40px] p-[10px] text-center" v-show="canvasImage">
           <div class="flex gap-2 justify-center">
-            <el-button :loading="downloadLoading"
-                     color="#5d5cde" type="primary"
-                     @click="handleDownload">
-              {{ $t('download') }}
-            </el-button>
+            <!-- 网页环境：只有下载按钮 -->
+            <template v-if="!$electron?.isElectron">
+              <el-button 
+                :loading="downloadLoading"
+                color="#5d5cde" 
+                type="primary"
+                @click="handleDownload"
+              >
+                {{ $t('download') || '下载图片' }}
+              </el-button>
+            </template>
             
-            <!-- 桌面版保存按钮 -->
-            <el-button 
-              v-if="$electron?.isElectron"
-              :loading="downloadLoading"
-              color="#5d5cde" 
-              type="primary"
-              @click="handleSaveWithElectron"
-            >
-              {{ $t('saveImageAs') }}
-            </el-button>
+            <!-- 桌面环境：只保留一个按钮 -->
+            <template v-else>
+              <el-button 
+                :loading="downloadLoading"
+                color="#5d5cde" 
+                type="primary"
+                @click="handleSaveWithElectron"
+              >
+                {{ $t('saveImage') || '保存图片' }}
+              </el-button>
+            </template>
           </div>
           
           <el-progress class="mt-3"
@@ -800,8 +1054,62 @@ const switchWatermarkType = (type) => {
           />
         </div>
 
-        <div class="text-center my-[40px] max-w-[520px]  w-full mx-auto p-[10px]" v-show="canvasImage">
-          <canvas ref="canvas"></canvas>
+        <div class="text-center my-[40px] max-w-[520px] w-full mx-auto p-[10px]" v-show="canvasImage">
+          <canvas 
+            ref="canvas" 
+            @mousedown="startDrag" 
+            @mousemove="onDrag" 
+            @mouseup="endDrag" 
+            @mouseleave="endDrag"
+            @touchstart="startDrag"
+            @touchmove="onDrag"
+            @touchend="onTouchEnd"
+            @touchcancel="onTouchEnd"
+            :class="{ 'cursor-move': !repeatTextStatus }"
+          ></canvas>
+          <p v-if="!repeatTextStatus" class="text-[12px] text-gray-500 mt-2">
+            <span>{{ $t('dragWatermarkTip') || '提示：您可以直接拖动水印调整位置' }}</span>
+            <span class="hidden sm:inline">{{ $t('dragWatermarkTipDesktop') || '（移动鼠标到水印上拖动）' }}</span>
+            <span class="sm:hidden">{{ $t('dragWatermarkTipMobile') || '（触摸水印并拖动）' }}</span>
+          </p>
+        </div>
+        
+        <!-- 缩略图区域 -->
+        <div class="thumbnails-area my-4 max-w-[520px] w-full mx-auto p-[10px]" v-if="showThumbnails && thumbnails.length > 0">
+          <div class="flex flex-col">
+            <div class="flex justify-between items-center mb-2">
+              <h3 class="text-[16px] font-bold">{{ $t('thumbnailsPreview') || '图片预览' }}</h3>
+              
+              <div v-if="pendingImages.length > 1 && processedImages.value === 1">
+                <el-button 
+                  type="primary" 
+                  size="small" 
+                  @click="processRemainingImages"
+                >
+                  {{ $t('processRemainingImages') || '处理剩余图片' }}
+                </el-button>
+              </div>
+            </div>
+            
+            <div class="flex flex-wrap gap-2">
+              <div 
+                v-for="(thumbnail, index) in thumbnails" 
+                :key="index" 
+                class="thumbnail-item" 
+                :class="{ 'active': index === currentImageIndex }"
+                @click="selectThumbnail(index)"
+              >
+                <img 
+                  :src="thumbnail.processedUrl" 
+                  :alt="thumbnail.name" 
+                  class="w-[60px] h-[60px] object-cover border rounded cursor-pointer hover:border-blue-500"
+                />
+                <span class="text-[10px] block truncate max-w-[60px]" :title="thumbnail.name">
+                  {{thumbnail.name}}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -818,7 +1126,15 @@ canvas {
   border-radius: 8px;
 }
 
+.cursor-move {
+  cursor: move; /* 显示移动光标 */
+}
+
 :deep(.el-slider) {
   --el-slider-main-bg-color: #5d5cde;
+}
+
+.thumbnail-item.active img {
+  border: 2px solid #5d5cde;
 }
 </style>
