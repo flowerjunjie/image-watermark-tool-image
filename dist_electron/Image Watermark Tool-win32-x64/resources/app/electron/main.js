@@ -187,8 +187,19 @@ function createWindow() {
   console.log('加载内容:', contentUrl);
   mainWindow.loadURL(contentUrl);
 
-  // 打开开发者工具
-  mainWindow.webContents.openDevTools();
+  // 开发模式下自动打开开发者工具，生产模式下禁用自动打开
+  if (isDev) {
+    mainWindow.webContents.openDevTools();
+  }
+
+  // 设置快捷键打开开发者工具
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // F12键打开开发者工具
+    if (input.key === 'F12') {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
 
   // 记录加载失败
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
