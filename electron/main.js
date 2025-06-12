@@ -11,6 +11,73 @@ let mainWindow;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 console.log('运行环境:', isDev ? '开发模式' : '生产模式');
 
+// 生成重定向HTML文件
+function generateRedirectHtml(targetPath, destination) {
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0; url=${destination}">
+  <title>图片水印工具 - 重定向中</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      margin-top: 40px;
+      color: #1976d2;
+    }
+    p {
+      margin: 20px 0;
+      font-size: 16px;
+    }
+    .loader {
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #1976d2;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .link {
+      display: inline-block;
+      margin-top: 30px;
+      padding: 10px 20px;
+      background-color: #1976d2;
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+    }
+  </style>
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.location.href = '${destination}';
+      }, 1000);
+    };
+  </script>
+</head>
+<body>
+  <h1>图片水印工具</h1>
+  <p>正在加载应用，请稍候...</p>
+  <div class="loader"></div>
+  <p>如果页面没有自动跳转，请点击下方按钮</p>
+  <a href="${destination}" class="link">手动跳转到应用</a>
+</body>
+</html>`;
+
+  fs.writeFileSync(targetPath, html);
+  console.log(`已生成重定向HTML文件: ${targetPath}`);
+}
+
 // 获取额外资源目录
 function getResourcePath() {
   // 在开发环境中返回项目根目录
@@ -61,8 +128,6 @@ function createWindow() {
   const resourcesPath = process.resourcesPath;
   console.log('资源目录路径:', resourcesPath);
 
-  // 强制使用direct-app.html
-  const directAppPath = path.join(appPath, 'direct-app.html');
   let contentUrl = null;
   
   if (process.env.NODE_ENV === 'development') {
@@ -72,69 +137,55 @@ function createWindow() {
   } else {
     console.log('运行环境: 生产模式');
     
-    // 首先尝试加载static-app.html
-    const staticAppPath = path.join(appPath, 'static-app.html');
-    if (fs.existsSync(staticAppPath)) {
-      console.log('发现static-app.html文件:', staticAppPath);
-      contentUrl = `file://${staticAppPath}`;
+    // 优先加载standalone-app.html作为独立版本
+    const standaloneAppPath = path.join(appPath, 'standalone-app.html');
+    if (fs.existsSync(standaloneAppPath)) {
+      console.log('发现独立版界面文件:', standaloneAppPath);
+      contentUrl = url.format({
+        pathname: standaloneAppPath,
+        protocol: 'file:',
+        slashes: true
+      });
     }
-    // 然后尝试加载direct-app.html
-    else if (fs.existsSync(directAppPath)) {
-      console.log('发现direct-app.html文件:', directAppPath);
-      contentUrl = `file://${directAppPath}`;
-    } else {
-      // 如果找不到direct-app.html，创建一个应急HTML文件
-      console.log('未找到direct-app.html，创建应急HTML');
-      const emergencyHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>图片水印工具 - 应急模式</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-          h1 { color: #1976d2; }
-          .error { color: red; margin: 20px 0; }
-          button { padding: 10px 20px; background: #1976d2; color: white; border: none; cursor: pointer; }
-        </style>
-      </head>
-      <body>
-        <h1>图片水印工具 - 应急模式</h1>
-        <p>应用加载失败，请尝试修复应用</p>
-        <div class="error">
-          <p>错误原因: 找不到必要的应用文件</p>
-          <p>应用路径: ${appPath}</p>
-        </div>
-        <button onclick="window.close()">关闭应用</button>
-      </body>
-      </html>
-      `;
-      const tempHtml = path.join(app.getPath('temp'), 'watermark-emergency.html');
-      fs.writeFileSync(tempHtml, emergencyHtml);
-      contentUrl = `file://${tempHtml}`;
+    // 然后尝试加载app.html
+    else if (fs.existsSync(path.join(appPath, 'app.html'))) {
+      // 检查app.html是否存在，如果不存在则创建一个基本的app.html
+      const appHtmlPath = path.join(appPath, 'app.html');
+      console.log('发现app.html文件:', appHtmlPath);
+      contentUrl = url.format({
+        pathname: appHtmlPath,
+        protocol: 'file:',
+        slashes: true
+      });
+    }
+    // 然后尝试加载static-app.html
+    else {
+      const staticAppPath = path.join(appPath, 'static-app.html');
+      if (!fs.existsSync(staticAppPath)) {
+        console.log('未找到static-app.html，正在生成重定向HTML');
+        generateRedirectHtml(staticAppPath, 'app.html');
+      }
+      
+      console.log('发现static-app.html文件:', staticAppPath);
+      // 使用正确的file://协议格式，避免路径重复
+      contentUrl = url.format({
+        pathname: staticAppPath,
+        protocol: 'file:',
+        slashes: true
+      });
+    }
+    
+    // 确保direct-app.html也存在作为备份
+    const directAppPath = path.join(appPath, 'direct-app.html');
+    if (!fs.existsSync(directAppPath)) {
+      console.log('未找到direct-app.html，正在生成重定向HTML');
+      generateRedirectHtml(directAppPath, 'app.html');
     }
   }
 
   // 加载内容
   console.log('加载内容:', contentUrl);
-  
-  if (contentUrl.startsWith('file://')) {
-    // 从URL中提取文件路径
-    let filePath;
-    if (process.platform === 'win32') {
-      // Windows路径处理 (移除 'file:///')
-      filePath = contentUrl.replace('file:///', '');
-    } else {
-      // Mac/Linux路径处理 (移除 'file://')
-      filePath = contentUrl.replace('file://', '');
-    }
-    console.log('加载文件路径:', contentUrl);
-    
-    // 使用URL直接加载，而不是通过loadFile方法
-    mainWindow.loadURL(contentUrl);
-  } else {
-    mainWindow.loadURL(contentUrl);
-  }
+  mainWindow.loadURL(contentUrl);
 
   // 打开开发者工具
   mainWindow.webContents.openDevTools();
@@ -143,13 +194,21 @@ function createWindow() {
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
     console.error('页面加载失败:', errorCode, errorDescription);
     
-    // 如果加载失败，尝试加载备用HTML
+    // 如果加载失败，直接尝试加载app.html
+    const appHtmlPath = path.join(appPath, 'app.html');
+    if (fs.existsSync(appHtmlPath)) {
+      console.log('尝试加载备用app.html文件');
+      mainWindow.loadFile(appHtmlPath);
+      return;
+    }
+    
+    // 如果app.html也不存在，则加载备用HTML
     const backupHtml = `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
-      <title>Image Watermark Tool</title>
+      <title>图片水印工具 - 加载失败</title>
       <style>
         body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
         h1 { color: #333; }
@@ -158,11 +217,12 @@ function createWindow() {
       </style>
     </head>
     <body>
-      <h1>Image Watermark Tool</h1>
+      <h1>图片水印工具</h1>
       <p class="error">应用加载失败，请尝试重新启动或联系开发者</p>
       <p>错误代码: ${errorCode}</p>
       <p>错误描述: ${errorDescription}</p>
       <button onclick="window.location.reload()">重新加载</button>
+      <p>应用路径: ${appPath}</p>
     </body>
     </html>
     `;

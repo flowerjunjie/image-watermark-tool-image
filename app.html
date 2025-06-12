@@ -1,125 +1,577 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <title>Image Watermark Tool</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图片水印工具</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       margin: 0;
-      background-color: #f5f5f5;
+      padding: 0;
+      background-color: #f0f2f5;
       color: #333;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    .container {
+    
+    header {
+      background-color: #1976d2;
+      color: white;
+      padding: 15px 20px;
       text-align: center;
-      padding: 20px;
-      border-radius: 8px;
-      background-color: white;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     }
+    
     h1 {
-      color: #5d5cde;
+      margin: 0;
+      font-size: 24px;
     }
-    p {
-      margin: 10px 0;
+    
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
     }
-    .loading {
+    
+    .upload-section, .options-section, .preview-section {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .upload-section {
+      text-align: center;
+    }
+    
+    .upload-area {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 40px 20px;
+      margin: 20px 0;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .upload-area:hover {
+      border-color: #1976d2;
+      background-color: #f5f8ff;
+    }
+    
+    .button {
+      background-color: #1976d2;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px;
+      transition: background-color 0.3s;
+    }
+    
+    .button:hover {
+      background-color: #1565c0;
+    }
+    
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 15px;
+    }
+    
+    .option-item {
+      margin-bottom: 15px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+    
+    input[type="text"], 
+    input[type="number"], 
+    input[type="range"],
+    input[type="color"],
+    select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    
+    .preview-section {
       display: flex;
       flex-direction: column;
       align-items: center;
+    }
+    
+    .preview-container {
+      position: relative;
+      max-width: 100%;
       margin: 20px 0;
+      border: 1px dashed #ccc;
+      padding: 10px;
     }
-    .loading-bar {
-      width: 200px;
-      height: 10px;
-      background-color: #e0e0e0;
-      border-radius: 5px;
-      overflow: hidden;
-      margin: 10px 0;
+    
+    .preview-image {
+      max-width: 100%;
+      max-height: 60vh;
+      display: block;
     }
-    .loading-bar-progress {
-      height: 100%;
-      background-color: #5d5cde;
-      width: 0%;
-      transition: width 0.5s ease;
+    
+    .thumbnails {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    .thumbnail {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border: 2px solid transparent;
+      cursor: pointer;
+    }
+    
+    .thumbnail.active {
+      border-color: #1976d2;
+    }
+    
+    footer {
+      background-color: #f0f2f5;
+      padding: 10px;
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+    }
+    
+    @media (max-width: 768px) {
+      .options-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="container">
+  <header>
     <h1>图片水印工具</h1>
-    <p>正在加载应用，请稍候...</p>
-    
-    <div class="loading">
-      <div class="loading-bar">
-        <div class="loading-bar-progress" id="progress"></div>
+  </header>
+  
+  <main>
+    <div class="upload-section">
+      <h2>上传图片</h2>
+      <div class="upload-options">
+        <div>
+          <h3>单张图片上传</h3>
+          <input type="file" id="single-upload" accept="image/*">
+        </div>
+        <div>
+          <h3>批量处理目录</h3>
+          <input type="file" id="batch-upload" accept="image/*" webkitdirectory directory multiple>
+        </div>
       </div>
-      <p id="status">准备中...</p>
     </div>
-  </div>
-
+    
+    <div class="options-section">
+      <h2>水印设置</h2>
+      <div class="options-grid">
+        <div class="option-item">
+          <label>水印类型</label>
+          <select id="watermark-type">
+            <option value="text">文字水印</option>
+            <option value="image">图片水印</option>
+          </select>
+        </div>
+        
+        <div class="option-item">
+          <label>图片铺满水印</label>
+          <input type="checkbox" id="repeat-watermark">
+        </div>
+        
+        <div class="option-item text-option">
+          <label>水印文字</label>
+          <input type="text" id="watermark-text" value="仅供验证使用">
+        </div>
+        
+        <div class="option-item text-option">
+          <label>水印颜色</label>
+          <input type="color" id="watermark-color" value="#0000ff">
+        </div>
+        
+        <div class="option-item">
+          <label>水印透明度</label>
+          <input type="range" id="watermark-opacity" min="0" max="1" step="0.1" value="0.3">
+        </div>
+        
+        <div class="option-item text-option repeat-option">
+          <label>水印间距</label>
+          <input type="range" id="watermark-spacing" min="1" max="16" step="0.5" value="5">
+        </div>
+        
+        <div class="option-item text-option">
+          <label>水印大小</label>
+          <input type="range" id="watermark-size" min="0.1" max="10" step="0.1" value="2">
+        </div>
+        
+        <div class="option-item repeat-option">
+          <label>水印角度</label>
+          <input type="range" id="watermark-angle" min="-90" max="90" step="1" value="30">
+        </div>
+        
+        <div class="option-item single-option">
+          <label>水印角度</label>
+          <input type="range" id="watermark-single-angle" min="-90" max="90" step="1" value="0">
+        </div>
+      </div>
+    </div>
+    
+    <div class="preview-section">
+      <h2>预览</h2>
+      <div class="button-group">
+        <button class="button" id="download-btn">下载图片</button>
+        <button class="button" id="save-btn">保存图片</button>
+      </div>
+      
+      <div class="preview-container">
+        <div id="preview-placeholder">请先上传图片</div>
+        <canvas id="preview-canvas" style="display: none;"></canvas>
+      </div>
+      
+      <div class="thumbnails" id="thumbnails-container"></div>
+    </div>
+  </main>
+  
+  <footer>
+    <p>图片水印工具 © 2024 - 本地处理，无需联网</p>
+  </footer>
+  
   <script>
-    // 模拟加载进度
-    let progress = 0;
-    const progressBar = document.getElementById('progress');
-    const statusText = document.getElementById('status');
+    // 简单的应用程序状态
+    const appState = {
+      currentImage: null,
+      watermarkType: 'text',
+      repeatWatermark: true,
+      thumbnails: [],
+      currentIndex: 0
+    };
     
-    // 获取当前脚本的完整路径
-    const scriptPath = document.currentScript.src || window.location.href;
-    // 提取基础目录路径
-    const basePath = scriptPath.substring(0, scriptPath.lastIndexOf('/') + 1);
+    // DOM元素
+    const elements = {
+      singleUpload: document.getElementById('single-upload'),
+      batchUpload: document.getElementById('batch-upload'),
+      watermarkType: document.getElementById('watermark-type'),
+      repeatWatermark: document.getElementById('repeat-watermark'),
+      watermarkText: document.getElementById('watermark-text'),
+      watermarkColor: document.getElementById('watermark-color'),
+      watermarkOpacity: document.getElementById('watermark-opacity'),
+      watermarkSpacing: document.getElementById('watermark-spacing'),
+      watermarkSize: document.getElementById('watermark-size'),
+      watermarkAngle: document.getElementById('watermark-angle'),
+      watermarkSingleAngle: document.getElementById('watermark-single-angle'),
+      downloadBtn: document.getElementById('download-btn'),
+      saveBtn: document.getElementById('save-btn'),
+      previewCanvas: document.getElementById('preview-canvas'),
+      previewPlaceholder: document.getElementById('preview-placeholder'),
+      thumbnailsContainer: document.getElementById('thumbnails-container')
+    };
     
-    // 从URL获取应用路径的根目录
-    function getAppRoot() {
-      // 示例: file:///D:/workspace/0326/image-watermark-tool/dist_electron/Image Watermark Tool-win32-x64/resources/app/app.html
-      const url = window.location.href;
-      const appPath = url.substring(0, url.lastIndexOf('/') + 1);
-      return appPath;
-    }
-    
-    function updateProgress() {
-      progress += 5;
-      if (progress > 100) progress = 100;
-      progressBar.style.width = progress + '%';
+    // 初始化
+    function init() {
+      // 检查是否在Electron环境中
+      const isElectron = window.navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
       
-      if (progress < 30) {
-        statusText.textContent = '检查资源...';
-      } else if (progress < 60) {
-        statusText.textContent = '加载应用组件...';
-      } else if (progress < 90) {
-        statusText.textContent = '准备界面...';
+      // 根据环境隐藏/显示相关按钮
+      if (isElectron) {
+        elements.saveBtn.style.display = 'inline-block';
+        elements.downloadBtn.style.display = 'none';
       } else {
-        statusText.textContent = '即将完成...';
+        elements.saveBtn.style.display = 'none';
+        elements.downloadBtn.style.display = 'inline-block';
       }
       
-      if (progress < 100) {
-        setTimeout(updateProgress, 100);
-      } else {
-        // 尝试重定向到正确的应用页面
-        setTimeout(() => {
-          const appRoot = getAppRoot();
-          console.log('应用根目录:', appRoot);
-          
-          const possiblePaths = [
-            appRoot + '.output/public/index.html',
-            appRoot + 'app/.output/public/index.html'
-          ];
-          
-          // 直接使用file协议加载
-          const publicPath = appRoot + '.output/public/index.html';
-          console.log('尝试加载:', publicPath);
-          window.location.href = publicPath;
-        }, 500);
+      // 设置事件监听器
+      elements.singleUpload.addEventListener('change', handleSingleUpload);
+      elements.batchUpload.addEventListener('change', handleBatchUpload);
+      elements.watermarkType.addEventListener('change', updateUI);
+      elements.repeatWatermark.addEventListener('change', updateUI);
+      elements.watermarkText.addEventListener('input', applyWatermark);
+      elements.watermarkColor.addEventListener('input', applyWatermark);
+      elements.watermarkOpacity.addEventListener('input', applyWatermark);
+      elements.watermarkSpacing.addEventListener('input', applyWatermark);
+      elements.watermarkSize.addEventListener('input', applyWatermark);
+      elements.watermarkAngle.addEventListener('input', applyWatermark);
+      elements.watermarkSingleAngle.addEventListener('input', applyWatermark);
+      elements.downloadBtn.addEventListener('click', downloadImage);
+      elements.saveBtn.addEventListener('click', saveImage);
+      
+      // 初始UI更新
+      updateUI();
+    }
+    
+    // 更新UI
+    function updateUI() {
+      appState.watermarkType = elements.watermarkType.value;
+      appState.repeatWatermark = elements.repeatWatermark.checked;
+      
+      // 显示/隐藏相关选项
+      const textOptions = document.querySelectorAll('.text-option');
+      const repeatOptions = document.querySelectorAll('.repeat-option');
+      const singleOptions = document.querySelectorAll('.single-option');
+      
+      textOptions.forEach(el => {
+        el.style.display = appState.watermarkType === 'text' ? 'block' : 'none';
+      });
+      
+      repeatOptions.forEach(el => {
+        el.style.display = appState.repeatWatermark ? 'block' : 'none';
+      });
+      
+      singleOptions.forEach(el => {
+        el.style.display = !appState.repeatWatermark ? 'block' : 'none';
+      });
+      
+      // 应用水印
+      if (appState.currentImage) {
+        applyWatermark();
       }
     }
     
-    // 开始更新进度
-    setTimeout(updateProgress, 200);
+    // 处理单张图片上传
+    function handleSingleUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      loadImage(file);
+    }
+    
+    // 处理批量图片上传
+    function handleBatchUpload(event) {
+      const files = Array.from(event.target.files).filter(file => 
+        file.type.startsWith('image/') || 
+        /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name)
+      );
+      
+      if (files.length === 0) {
+        alert('未找到图片文件');
+        return;
+      }
+      
+      // 清空缩略图
+      appState.thumbnails = [];
+      elements.thumbnailsContainer.innerHTML = '';
+      
+      // 加载第一张图片
+      loadImage(files[0]);
+      
+      // 创建缩略图
+      files.forEach(file => {
+        createThumbnail(file);
+      });
+    }
+    
+    // 加载图片
+    function loadImage(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          appState.currentImage = img;
+          
+          // 调整画布大小
+          elements.previewCanvas.width = img.width;
+          elements.previewCanvas.height = img.height;
+          
+          // 显示画布，隐藏占位符
+          elements.previewCanvas.style.display = 'block';
+          elements.previewPlaceholder.style.display = 'none';
+          
+          // 应用水印
+          applyWatermark();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    // 创建缩略图
+    function createThumbnail(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const thumbnail = document.createElement('img');
+        thumbnail.classList.add('thumbnail');
+        thumbnail.src = e.target.result;
+        thumbnail.alt = file.name;
+        thumbnail.dataset.index = appState.thumbnails.length;
+        
+        thumbnail.addEventListener('click', function() {
+          selectThumbnail(parseInt(this.dataset.index));
+        });
+        
+        elements.thumbnailsContainer.appendChild(thumbnail);
+        
+        appState.thumbnails.push({
+          file: file,
+          element: thumbnail,
+          dataUrl: e.target.result
+        });
+        
+        // 如果是第一个缩略图，标记为活动
+        if (appState.thumbnails.length === 1) {
+          thumbnail.classList.add('active');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    // 选择缩略图
+    function selectThumbnail(index) {
+      if (index < 0 || index >= appState.thumbnails.length) return;
+      
+      // 更新当前索引
+      appState.currentIndex = index;
+      
+      // 更新缩略图活动状态
+      document.querySelectorAll('.thumbnail').forEach(el => {
+        el.classList.remove('active');
+      });
+      appState.thumbnails[index].element.classList.add('active');
+      
+      // 加载选中的图片
+      const img = new Image();
+      img.onload = function() {
+        appState.currentImage = img;
+        
+        // 调整画布大小
+        elements.previewCanvas.width = img.width;
+        elements.previewCanvas.height = img.height;
+        
+        // 应用水印
+        applyWatermark();
+      };
+      img.src = appState.thumbnails[index].dataUrl;
+    }
+    
+    // 应用水印
+    function applyWatermark() {
+      if (!appState.currentImage) return;
+      
+      const ctx = elements.previewCanvas.getContext('2d');
+      
+      // 清除画布
+      ctx.clearRect(0, 0, elements.previewCanvas.width, elements.previewCanvas.height);
+      
+      // 绘制图片
+      ctx.drawImage(appState.currentImage, 0, 0);
+      
+      // 应用水印
+      if (appState.watermarkType === 'text') {
+        applyTextWatermark(ctx);
+      } else {
+        // 图片水印功能这里省略
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillText('图片水印功能暂未实现', 20, 30);
+      }
+    }
+    
+    // 应用文字水印
+    function applyTextWatermark(ctx) {
+      const text = elements.watermarkText.value;
+      const color = elements.watermarkColor.value;
+      const opacity = parseFloat(elements.watermarkOpacity.value);
+      const size = parseFloat(elements.watermarkSize.value) * 15;
+      
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = opacity;
+      ctx.font = `bold ${size}px Arial`;
+      
+      if (appState.repeatWatermark) {
+        // 重复水印
+        const spacing = parseFloat(elements.watermarkSpacing.value) * size;
+        const angle = parseFloat(elements.watermarkAngle.value);
+        
+        // 旋转
+        ctx.translate(elements.previewCanvas.width / 2, elements.previewCanvas.height / 2);
+        ctx.rotate(angle * Math.PI / 180);
+        ctx.translate(-elements.previewCanvas.width / 2, -elements.previewCanvas.height / 2);
+        
+        // 计算覆盖整个画布所需的水印数量
+        const textWidth = ctx.measureText(text).width;
+        const cols = Math.ceil(elements.previewCanvas.width / (textWidth + spacing)) + 2;
+        const rows = Math.ceil(elements.previewCanvas.height / spacing) + 2;
+        
+        // 绘制重复水印
+        for (let i = -1; i < cols; i++) {
+          for (let j = -1; j < rows; j++) {
+            ctx.fillText(text, i * (textWidth + spacing), j * spacing);
+          }
+        }
+      } else {
+        // 单个水印
+        const angle = parseFloat(elements.watermarkSingleAngle.value);
+        
+        // 计算居中位置
+        const textWidth = ctx.measureText(text).width;
+        const x = (elements.previewCanvas.width - textWidth) / 2;
+        const y = elements.previewCanvas.height / 2;
+        
+        // 旋转
+        ctx.translate(x + textWidth / 2, y);
+        ctx.rotate(angle * Math.PI / 180);
+        ctx.fillText(text, -textWidth / 2, 0);
+      }
+      
+      ctx.restore();
+    }
+    
+    // 下载图片
+    function downloadImage() {
+      if (!elements.previewCanvas) return;
+      
+      const link = document.createElement('a');
+      link.download = 'watermarked-image.png';
+      link.href = elements.previewCanvas.toDataURL('image/png');
+      link.click();
+    }
+    
+    // 保存图片 (Electron环境)
+    function saveImage() {
+      if (!elements.previewCanvas) return;
+      
+      // 检查是否在Electron环境中
+      if (window.electronAPI) {
+        const dataURL = elements.previewCanvas.toDataURL('image/png');
+        const fileName = 'watermarked-image.png';
+        
+        window.electronAPI.saveImage({ dataURL, fileName })
+          .then(result => {
+            if (result.success) {
+              alert('图片已保存至: ' + result.filePath);
+            } else {
+              alert('保存失败: ' + result.message);
+            }
+          })
+          .catch(error => {
+            alert('保存过程中出错: ' + error);
+          });
+      } else {
+        alert('此功能仅在桌面应用中可用');
+      }
+    }
+    
+    // 初始化应用
+    window.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 </html> 
