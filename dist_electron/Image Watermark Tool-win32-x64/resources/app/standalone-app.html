@@ -544,11 +544,17 @@
     
     // 显示错误信息
     function showError(message) {
-      const errorContainer = document.getElementById('error-container');
+      console.error('错误:', message);
       errorContainer.textContent = message;
       errorContainer.classList.add('show');
       
-      console.error(message);
+      // 同时显示状态消息
+      showStatus(message, 'error');
+      
+      // 5秒后隐藏错误消息
+      setTimeout(() => {
+        errorContainer.classList.remove('show');
+      }, 5000);
     }
     
     // DOM 元素
@@ -632,7 +638,7 @@
       try {
         // 文件上传
         uploadArea.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', handleFileSelect);
+        fileInput.addEventListener('change', handleFileUpload);
         uploadArea.addEventListener('dragover', (e) => {
           e.preventDefault();
           uploadArea.style.borderColor = '#1976d2';
@@ -645,7 +651,7 @@
         // 上传按钮
         uploadFilesBtn.addEventListener('click', () => fileInput.click());
         uploadFolderBtn.addEventListener('click', () => folderInput.click());
-        folderInput.addEventListener('change', handleFolderSelect);
+        folderInput.addEventListener('change', handleFolderUpload);
         
         // 水印图片上传
         watermarkImageArea.addEventListener('click', () => watermarkImageInput.click());
@@ -712,8 +718,8 @@
       }
     }
     
-    // 处理文件选择
-    function handleFileSelect(e) {
+    // 处理文件上传
+    function handleFileUpload(e) {
       try {
         const files = Array.from(e.target.files);
         if (files && files.length > 0) {
@@ -721,7 +727,14 @@
           resetBatchState();
           
           // 过滤出图片文件
-          const imageFiles = files.filter(file => file.type.match('image.*'));
+          const imageFiles = files.filter(file => {
+            const isImage = file.type.match('image.*');
+            if (!isImage) {
+              console.warn(`跳过非图片文件: ${file.name}, 类型: ${file.type}`);
+            }
+            return isImage;
+          });
+          
           if (imageFiles.length === 0) {
             showStatus('未选择任何图片', 'error');
             return;
@@ -738,12 +751,13 @@
           showStatus(`已加载 ${imageFiles.length} 张图片`);
         }
       } catch (error) {
-        showError(`文件选择错误: ${error.message}`);
+        console.error('文件上传错误:', error);
+        showError(`文件上传错误: ${error.message}`);
       }
     }
     
-    // 处理文件夹选择
-    function handleFolderSelect(e) {
+    // 处理文件夹上传
+    function handleFolderUpload(e) {
       try {
         const files = Array.from(e.target.files);
         if (files && files.length > 0) {
@@ -751,9 +765,16 @@
           resetBatchState();
           
           // 过滤出图片文件
-          const imageFiles = files.filter(file => file.type.match('image.*'));
+          const imageFiles = files.filter(file => {
+            const isImage = file.type.match('image.*');
+            if (!isImage) {
+              console.warn(`跳过非图片文件: ${file.name}, 类型: ${file.type}`);
+            }
+            return isImage;
+          });
+          
           if (imageFiles.length === 0) {
-            showStatus('文件夹中未找到任何图片', 'error');
+            showStatus('文件夹中未找到图片', 'error');
             return;
           }
           
@@ -761,17 +782,18 @@
           batchState.files = imageFiles;
           batchState.currentFileIndex = 0;
           
-          // 记录文件夹结构
-          saveFolderStructure(imageFiles);
-          
           // 加载第一张图片并创建缩略图
           loadImage(imageFiles[0], true);
           createThumbnails(imageFiles);
           
-          showStatus(`已从文件夹加载 ${imageFiles.length} 张图片`);
+          // 保存文件夹结构
+          saveFolderStructure(imageFiles);
+          
+          showStatus(`已加载文件夹中的 ${imageFiles.length} 张图片`);
         }
       } catch (error) {
-        showError(`文件夹选择错误: ${error.message}`);
+        console.error('文件夹上传错误:', error);
+        showError(`文件夹上传错误: ${error.message}`);
       }
     }
     
@@ -874,6 +896,11 @@
           reader.onload = (e) => {
             img.src = e.target.result;
           };
+          reader.onerror = (error) => {
+            console.error('缩略图读取错误:', error, '文件名:', file.name);
+            // 设置一个默认图标
+            img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJmZWF0aGVyIGZlYXRoZXItaW1hZ2UiPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIxOCIgaGVpZ2h0PSIxOCIgcng9IjIiIHJ5PSIyIj48L3JlY3Q+PGNpcmNsZSBjeD0iOC41IiBjeT0iOC41IiByPSIxLjUiPjwvY2lyY2xlPjxwb2x5bGluZSBwb2ludHM9IjIxIDE1IDE2IDEwIDUgMjEiPjwvcG9seWxpbmU+PC9zdmc+';
+          };
           reader.readAsDataURL(file);
           
           // 添加点击事件
@@ -965,12 +992,26 @@
             }
             updateWatermark();
           };
+          
+          // 添加错误处理
+          previewImage.onerror = () => {
+            console.error('预览图片加载失败:', '文件名:', file.name);
+            showError(`图片 ${file.name} 加载失败，请尝试其他图片`);
+            previewImage.style.display = 'none';
+            noImageMessage.style.display = 'block';
+            noImageMessage.textContent = '图片加载失败，请尝试其他图片';
+          };
         };
         reader.onerror = (error) => {
-          showError(`图片读取错误: ${error.message || '未知错误'}`);
+          console.error('图片读取错误:', error, '文件名:', file.name);
+          showError(`图片读取错误: ${error.message}`);
+          previewImage.style.display = 'none';
+          noImageMessage.style.display = 'block';
+          noImageMessage.textContent = '图片读取失败，请尝试其他图片';
         };
         reader.readAsDataURL(file);
       } catch (error) {
+        console.error('图片加载错误:', error, '文件名:', file.name);
         showError(`图片加载错误: ${error.message}`);
       }
     }
@@ -1463,26 +1504,64 @@
         processingModal.style.display = 'flex';
         updateProgress(0, '准备处理...');
         
+        // 计算总文件大小，用于进度估算
+        let totalSize = 0;
+        let processedSize = 0;
+        batchState.files.forEach(file => totalSize += file.size);
+        console.log(`开始批量处理 ${batchState.files.length} 张图片，总大小: ${totalSize} 字节`);
+        
         // 处理每张图片
+        let successCount = 0;
+        let failCount = 0;
+        
         for (let i = 0; i < batchState.files.length; i++) {
-          const file = batchState.files[i];
-          const fileName = file.name;
-          const percent = Math.round((i / batchState.files.length) * 100);
-          
-          updateProgress(percent, `正在处理 ${i+1}/${batchState.files.length}: ${fileName}`);
-          
-          // 创建图片并应用水印
-          const processedImage = await processImage(file);
-          
-          // 保存处理后的图片
-          batchState.processedImages.push({
-            data: processedImage,
-            originalFile: file
-          });
+          try {
+            const file = batchState.files[i];
+            const fileName = file.name;
+            processedSize += file.size;
+            const percent = Math.round((processedSize / totalSize) * 100);
+            
+            updateProgress(percent, `正在处理 ${i+1}/${batchState.files.length}: ${fileName}`);
+            console.log(`处理图片 ${i+1}/${batchState.files.length}: ${fileName}`);
+            
+            // 创建图片并应用水印
+            const processedImage = await processImage(file).catch(error => {
+              console.error(`处理图片 ${fileName} 失败:`, error);
+              failCount++;
+              // 返回一个空的数据URL，表示处理失败
+              return null;
+            });
+            
+            if (processedImage) {
+              // 保存处理后的图片
+              batchState.processedImages.push({
+                data: processedImage,
+                originalFile: file
+              });
+              successCount++;
+              console.log(`图片 ${fileName} 处理成功`);
+            } else {
+              console.warn(`跳过处理失败的图片: ${fileName}`);
+            }
+            
+            // 给处理一些时间，避免UI阻塞
+            await new Promise(resolve => setTimeout(resolve, 10));
+          } catch (error) {
+            console.error(`处理图片索引 ${i} 时出错:`, error);
+            failCount++;
+            // 继续处理下一张图片
+            continue;
+          }
+        }
+        
+        // 检查是否有成功处理的图片
+        if (batchState.processedImages.length === 0) {
+          throw new Error('没有图片被成功处理');
         }
         
         // 更新进度为完成
         updateProgress(100, '处理完成');
+        console.log(`批量处理完成: 成功 ${successCount} 张，失败 ${failCount} 张`);
         
         // 延迟关闭模态框
         setTimeout(() => {
@@ -1491,11 +1570,12 @@
           batchState.isProcessing = false;
           
           // 提示用户处理完成
-          showStatus(`处理完成 ${batchState.files.length} 张图片`);
+          showStatus(`处理完成 ${batchState.processedImages.length}/${batchState.files.length} 张图片`);
         }, 1000);
         
         return batchState.processedImages;
       } catch (error) {
+        console.error('批量处理错误:', error);
         showError(`批量处理错误: ${error.message}`);
         processingModal.style.display = 'none';
         progressContainer.style.display = 'none';
@@ -1508,65 +1588,116 @@
     function processImage(file) {
       return new Promise((resolve, reject) => {
         try {
-          const img = new Image();
+          // 创建一个FileReader对象来读取文件
+          const reader = new FileReader();
           
-          img.onload = function() {
+          // 设置读取完成后的回调
+          reader.onload = function(readerEvent) {
             try {
-              // 创建画布
-              const canvas = document.createElement('canvas');
-              const ctx = canvas.getContext('2d');
+              // 创建图像对象
+              const img = new Image();
               
-              // 设置画布尺寸为图片尺寸
-              canvas.width = img.naturalWidth;
-              canvas.height = img.naturalHeight;
+              // 设置图像加载完成后的处理
+              img.onload = function() {
+                try {
+                  // 创建画布
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  
+                  // 设置画布尺寸为图片尺寸
+                  canvas.width = img.naturalWidth;
+                  canvas.height = img.naturalHeight;
+                  
+                  // 绘制主图片
+                  ctx.drawImage(img, 0, 0);
+                  
+                  // 根据水印类型绘制水印
+                  if (watermarkState.type === 'text') {
+                    // 单个文字水印
+                    drawTextWatermarkOnCanvas(ctx, canvas.width, canvas.height);
+                    resolve(canvas.toDataURL('image/png'));
+                  } else if (watermarkState.type === 'tiled') {
+                    // 平铺文字水印
+                    drawTiledWatermarksOnCanvas(ctx, canvas.width, canvas.height);
+                    resolve(canvas.toDataURL('image/png'));
+                  } else if (watermarkState.type === 'image' && watermarkState.watermarkImage) {
+                    // 图片水印需要先加载图片
+                    const watermarkImg = new Image();
+                    
+                    // 防止跨域问题
+                    watermarkImg.crossOrigin = 'Anonymous';
+                    
+                    watermarkImg.onload = () => {
+                      try {
+                        // 图片加载完成后绘制水印
+                        drawImageWatermarkOnCanvasWithImage(ctx, canvas.width, canvas.height, watermarkImg);
+                        resolve(canvas.toDataURL('image/png'));
+                      } catch (error) {
+                        console.error('水印图片绘制错误:', error);
+                        // 即使水印图片绘制失败，也返回原图
+                        resolve(canvas.toDataURL('image/png'));
+                      }
+                    };
+                    
+                    watermarkImg.onerror = (err) => {
+                      console.error('水印图片加载失败:', err);
+                      // 即使水印图片加载失败，也返回原图
+                      resolve(canvas.toDataURL('image/png'));
+                    };
+                    
+                    watermarkImg.src = watermarkState.watermarkImage.src;
+                  } else {
+                    // 没有水印，返回原图
+                    resolve(canvas.toDataURL('image/png'));
+                  }
+                } catch (error) {
+                  console.error('图片处理错误:', error);
+                  // 尝试返回原始图像数据
+                  try {
+                    resolve(readerEvent.target.result);
+                  } catch (e) {
+                    reject(error);
+                  }
+                }
+              };
               
-              // 绘制主图片
-              ctx.drawImage(img, 0, 0);
+              // 设置图像加载失败的处理
+              img.onerror = function(imgError) {
+                console.error('图片加载失败:', imgError, '文件名:', file.name, '文件大小:', file.size);
+                // 尝试返回原始文件数据
+                try {
+                  resolve(readerEvent.target.result);
+                } catch (e) {
+                  reject(new Error('图片加载失败'));
+                }
+              };
               
-              // 根据水印类型绘制水印
-              if (watermarkState.type === 'text') {
-                // 单个文字水印
-                drawTextWatermarkOnCanvas(ctx, canvas.width, canvas.height);
-                resolve(canvas.toDataURL('image/png'));
-              } else if (watermarkState.type === 'tiled') {
-                // 平铺文字水印
-                drawTiledWatermarksOnCanvas(ctx, canvas.width, canvas.height);
-                resolve(canvas.toDataURL('image/png'));
-              } else if (watermarkState.type === 'image' && watermarkState.watermarkImage) {
-                // 图片水印需要先加载图片
-                const watermarkImg = new Image();
-                watermarkImg.onload = () => {
-                  // 图片加载完成后绘制水印
-                  drawImageWatermarkOnCanvasWithImage(ctx, canvas.width, canvas.height, watermarkImg);
-                  resolve(canvas.toDataURL('image/png'));
-                };
-                watermarkImg.onerror = (err) => {
-                  reject(new Error('加载水印图片失败: ' + err.message));
-                };
-                watermarkImg.src = watermarkState.watermarkImage.src;
-              } else {
-                // 没有水印，返回原图
-                resolve(canvas.toDataURL('image/png'));
-              }
+              // 防止跨域问题
+              img.crossOrigin = 'Anonymous';
+              
+              // 设置图像源为FileReader读取的结果
+              img.src = readerEvent.target.result;
             } catch (error) {
-              reject(error);
+              console.error('图像创建错误:', error);
+              // 尝试返回原始文件数据
+              try {
+                resolve(readerEvent.target.result);
+              } catch (e) {
+                reject(error);
+              }
             }
           };
           
-          img.onerror = function(error) {
-            reject(new Error(`图片加载失败: ${error.message || '未知错误'}`));
+          // 设置读取失败的处理
+          reader.onerror = function(fileError) {
+            console.error('文件读取错误:', fileError, '文件名:', file.name, '文件大小:', file.size);
+            reject(new Error('文件读取错误'));
           };
           
-          // 从文件读取图片
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            img.src = e.target.result;
-          };
-          reader.onerror = (error) => {
-            reject(new Error(`文件读取错误: ${error.message || '未知错误'}`));
-          };
+          // 开始读取文件
           reader.readAsDataURL(file);
         } catch (error) {
+          console.error('处理初始化错误:', error, '文件名:', file.name, '文件大小:', file.size);
           reject(error);
         }
       });
@@ -1611,23 +1742,29 @@
     // 在头部添加JSZip库
     document.addEventListener('DOMContentLoaded', function() {
       // 动态加载JSZip库
+      console.log('正在加载JSZip库...');
       const script = document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
       script.integrity = 'sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==';
       script.crossOrigin = 'anonymous';
       script.onload = function() {
         console.log('JSZip 库加载成功');
+        showStatus('JSZip库加载成功，批量下载功能可用');
       };
-      script.onerror = function() {
+      script.onerror = function(error) {
+        console.error('无法加载JSZip库:', error);
         showError('无法加载JSZip库，批量下载功能可能不可用');
         
         // 尝试加载备用JSZip源
+        console.log('尝试加载备用JSZip库...');
         const backupScript = document.createElement('script');
         backupScript.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
         backupScript.onload = function() {
           console.log('JSZip 备用库加载成功');
+          showStatus('JSZip备用库加载成功，批量下载功能可用');
         };
-        backupScript.onerror = function() {
+        backupScript.onerror = function(error) {
+          console.error('无法加载JSZip备用库:', error);
           showError('无法加载JSZip备用库，批量下载功能不可用');
         };
         document.head.appendChild(backupScript);
@@ -1645,106 +1782,196 @@
         
         // 检查JSZip是否可用
         if (typeof JSZip === 'undefined') {
-          showError('JSZip库未加载，无法创建压缩包');
+          console.error('JSZip库未加载');
+          showError('JSZip库未加载，无法创建压缩包。请刷新页面重试。');
           return;
         }
         
+        console.log('开始批量下载处理...');
         showStatus('正在准备批量下载...');
         
-        // 处理所有图片
-        const processedImages = await batchProcessImages();
-        if (!processedImages) {
+        // 显示进度条和模态框
+        progressContainer.style.display = 'block';
+        processingModal.style.display = 'flex';
+        updateProgress(0, '准备处理图片...');
+        
+        // 如果还没有处理图片，先处理
+        if (batchState.processedImages.length === 0 || batchState.processedImages.length !== batchState.files.length) {
+          updateProgress(5, '正在处理图片...');
+          console.log('需要先处理图片...');
+          // 处理所有图片
+          const processedImages = await batchProcessImages();
+          if (!processedImages || processedImages.length === 0) {
+            console.error('没有图片被成功处理');
+            showError('没有图片可以下载');
+            processingModal.style.display = 'none';
+            progressContainer.style.display = 'none';
+            return;
+          }
+        }
+        
+        // 检查是否有成功处理的图片
+        if (batchState.processedImages.length === 0) {
+          console.error('处理后的图片数组为空');
+          showError('没有图片可以下载');
+          processingModal.style.display = 'none';
+          progressContainer.style.display = 'none';
           return;
         }
+        
+        console.log(`开始创建压缩包，共 ${batchState.processedImages.length} 张图片`);
         
         // 创建一个新的JSZip实例
         const zip = new JSZip();
         
-        // 显示进度条
-        progressContainer.style.display = 'block';
-        processingModal.style.display = 'flex';
-        updateProgress(0, '准备创建压缩包...');
+        updateProgress(40, '正在创建压缩包...');
         
-        // 添加文件到压缩包
-        if (Object.keys(batchState.folderStructure).length > 0) {
-          // 保留文件夹结构
-          for (const folderPath in batchState.folderStructure) {
-            const fileIndices = batchState.folderStructure[folderPath];
-            
-            for (let i = 0; i < fileIndices.length; i++) {
-              const index = fileIndices[i];
-              const file = processedImages[index];
+        try {
+          // 添加文件到压缩包
+          if (Object.keys(batchState.folderStructure).length > 0) {
+            // 保留文件夹结构
+            console.log('使用文件夹结构添加文件到压缩包');
+            for (const folderPath in batchState.folderStructure) {
+              const fileIndices = batchState.folderStructure[folderPath];
+              console.log(`处理文件夹 ${folderPath}，包含 ${fileIndices.length} 个文件`);
               
-              if (!file) continue;
+              for (let i = 0; i < fileIndices.length; i++) {
+                const index = fileIndices[i];
+                if (index >= batchState.processedImages.length) {
+                  console.warn(`索引 ${index} 超出范围，跳过`);
+                  continue;
+                }
+                
+                const file = batchState.processedImages[index];
+                if (!file || !file.data) {
+                  console.warn(`索引 ${index} 的文件数据无效，跳过`);
+                  continue;
+                }
+                
+                const originalFileName = file.originalFile.name;
+                const dataUrl = file.data;
+                
+                try {
+                  // 从DataURL中提取base64内容
+                  const base64Data = dataUrl.split(',')[1];
+                  
+                  // 构建完整的文件路径
+                  const filePath = folderPath ? `${folderPath}/${originalFileName}` : originalFileName;
+                  
+                  // 添加到压缩包
+                  console.log(`添加文件到压缩包: ${filePath}`);
+                  zip.file(filePath, base64Data, {base64: true});
+                } catch (error) {
+                  console.error(`添加文件 ${originalFileName} 到压缩包失败:`, error);
+                  // 继续处理下一个文件
+                  continue;
+                }
+              }
+            }
+          } else {
+            // 扁平结构，所有文件直接添加到根目录
+            console.log('使用扁平结构添加文件到压缩包');
+            for (let i = 0; i < batchState.processedImages.length; i++) {
+              const file = batchState.processedImages[i];
+              if (!file || !file.data) {
+                console.warn(`索引 ${i} 的文件数据无效，跳过`);
+                continue;
+              }
               
               const originalFileName = file.originalFile.name;
               const dataUrl = file.data;
               
-              // 从DataURL中提取base64内容
-              const base64Data = dataUrl.split(',')[1];
-              
-              // 构建完整的文件路径
-              const filePath = folderPath ? `${folderPath}/${originalFileName}` : originalFileName;
-              
-              // 添加到压缩包
-              zip.file(filePath, base64Data, {base64: true});
-              
-              // 更新进度
-              updateProgress(Math.round((i / fileIndices.length) * 100), `添加到压缩包: ${filePath}`);
+              try {
+                // 从DataURL中提取base64内容
+                const base64Data = dataUrl.split(',')[1];
+                
+                // 添加到压缩包
+                console.log(`添加文件到压缩包: ${originalFileName}`);
+                zip.file(originalFileName, base64Data, {base64: true});
+              } catch (error) {
+                console.error(`添加文件 ${originalFileName} 到压缩包失败:`, error);
+                // 继续处理下一个文件
+                continue;
+              }
             }
           }
-        } else {
-          // 扁平结构，所有文件直接添加到根目录
-          for (let i = 0; i < processedImages.length; i++) {
-            const file = processedImages[i];
-            const originalFileName = file.originalFile.name;
-            const dataUrl = file.data;
-            
-            // 从DataURL中提取base64内容
-            const base64Data = dataUrl.split(',')[1];
-            
-            // 添加到压缩包
-            zip.file(originalFileName, base64Data, {base64: true});
-            
-            // 更新进度
-            updateProgress(Math.round((i / processedImages.length) * 100), `添加到压缩包: ${originalFileName}`);
-          }
+        } catch (error) {
+          console.error('创建压缩包结构失败:', error);
+          showError(`创建压缩包结构失败: ${error.message}`);
+          processingModal.style.display = 'none';
+          progressContainer.style.display = 'none';
+          return;
         }
         
         // 生成压缩包
-        updateProgress(90, '正在生成压缩包...');
+        updateProgress(80, '正在生成压缩包...');
+        console.log('开始生成压缩包文件...');
         
-        zip.generateAsync({type: 'blob'})
-          .then(function(content) {
-            // 下载压缩包
-            const url = URL.createObjectURL(content);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'watermarked-images.zip';
-            link.click();
-            
-            // 清理
-            setTimeout(() => {
-              URL.revokeObjectURL(url);
-            }, 1000);
-            
-            // 更新UI
-            updateProgress(100, '压缩包已生成');
-            
-            // 延迟关闭模态框
-            setTimeout(() => {
-              processingModal.style.display = 'none';
-              progressContainer.style.display = 'none';
-            }, 1000);
-            
-            showStatus('批量下载完成');
-          })
-          .catch(function(error) {
-            showError(`创建压缩包失败: ${error.message}`);
-            processingModal.style.display = 'none';
-            progressContainer.style.display = 'none';
-          });
+        // 使用Promise包装生成和下载过程
+        await new Promise((resolve, reject) => {
+          try {
+            console.log('调用JSZip生成压缩包...');
+            zip.generateAsync({
+              type: 'blob',
+              compression: 'DEFLATE',
+              compressionOptions: {
+                level: 6 // 适中的压缩级别
+              }
+            })
+            .then(function(content) {
+              try {
+                // 下载压缩包
+                console.log('压缩包生成成功，大小:', content.size);
+                updateProgress(95, '准备下载压缩包...');
+                
+                const url = URL.createObjectURL(content);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'watermarked-images.zip';
+                document.body.appendChild(link); // 添加到DOM以确保在某些浏览器中正确触发
+                console.log('触发下载...');
+                link.click();
+                document.body.removeChild(link); // 清理
+                
+                // 清理URL对象
+                setTimeout(() => {
+                  URL.revokeObjectURL(url);
+                  console.log('URL对象已释放');
+                }, 5000);
+                
+                updateProgress(100, '下载已开始');
+                
+                // 延迟关闭模态框
+                setTimeout(() => {
+                  processingModal.style.display = 'none';
+                  progressContainer.style.display = 'none';
+                  resolve();
+                  console.log('下载流程完成');
+                }, 2000);
+                
+                showStatus('批量下载完成');
+              } catch (error) {
+                console.error('下载错误:', error);
+                reject(new Error(`下载错误: ${error.message}`));
+              }
+            })
+            .catch(function(error) {
+              console.error('创建压缩包失败:', error);
+              reject(new Error(`创建压缩包失败: ${error.message}`));
+            });
+          } catch (error) {
+            console.error('压缩包生成过程错误:', error);
+            reject(error);
+          }
+        }).catch(error => {
+          console.error('下载过程发生错误:', error);
+          showError(`压缩包生成错误: ${error.message}`);
+          processingModal.style.display = 'none';
+          progressContainer.style.display = 'none';
+        });
+        
       } catch (error) {
+        console.error('批量下载主函数错误:', error);
         showError(`批量下载错误: ${error.message}`);
         processingModal.style.display = 'none';
         progressContainer.style.display = 'none';
