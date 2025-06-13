@@ -771,6 +771,9 @@ function initEventListeners() {
       // 阻止可能的事件冒泡
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation(); // 添加这一行，彻底阻止事件传播
+      
+      console.log('触发文件夹选择对话框');
       // 只触发一次文件选择对话框
       newFolderInput.click();
     });
@@ -830,7 +833,18 @@ function initEventListeners() {
       handleFiles(files);
     });
     
-    uploadArea.addEventListener('click', function() {
+    // 修改上传区域点击处理，避免与上传文件夹按钮冲突
+    uploadArea.addEventListener('click', function(e) {
+      // 检查事件源是否为上传文件夹按钮或其内部元素
+      const uploadFolderBtn = document.getElementById('upload-folder-btn');
+      if (e.target === uploadFolderBtn || (uploadFolderBtn && uploadFolderBtn.contains(e.target))) {
+        // 如果点击的是上传文件夹按钮，不触发文件选择
+        console.log('点击了上传文件夹按钮，不触发普通文件选择');
+        return;
+      }
+      
+      // 其他情况下，触发普通文件选择
+      console.log('点击上传区域，触发普通文件选择');
       fileInput.click();
     });
   }
