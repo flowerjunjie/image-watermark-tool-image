@@ -420,22 +420,13 @@
     }
     
     .draggable-watermark {
-      position: absolute !important;
-      cursor: move !important;
-      user-select: none;
+      position: absolute;
       transform-origin: center;
-      white-space: nowrap;
-      padding: 5px;
-      pointer-events: auto !important; /* 确保可以接收鼠标事件 */
-      z-index: 9999 !important; /* 确保在最顶层 */
-      box-sizing: border-box; /* 确保padding不会增加元素尺寸 */
-      max-width: 100%; /* 限制最大宽度 */
-      max-height: 100%; /* 限制最大高度 */
-      border: 2px dashed rgba(0, 0, 255, 0.4); /* 蓝色虚线边框 */
-      border-radius: 4px;
-      transition: border 0.3s;
-      /* 使用translate实现居中定位，与Canvas渲染位置一致 */
       transform: translate(-50%, -50%);
+      white-space: nowrap;
+      user-select: none;
+      pointer-events: auto;
+      z-index: 9999;
     }
     
     .draggable-watermark:hover {
@@ -731,6 +722,35 @@
     
     .number-btn:hover {
       background-color: #e0e0e0;
+    }
+    
+    /* 确保只有一个水印显示 */
+    #watermark-element {
+      pointer-events: auto !important;
+    }
+    
+    /* 水印拖动控制元素样式 */
+    .watermark-drag-handle {
+      position: absolute;
+      transform-origin: center;
+      transform: translate(-50%, -50%);
+      cursor: move;
+      user-select: none;
+      pointer-events: auto !important;
+      z-index: 9999;
+      box-sizing: border-box;
+      /* 确保只有一个元素显示 */
+      background: transparent !important;
+      color: transparent !important;
+    }
+    
+    /* 防止水印重叠 */
+    #watermark-container {
+      pointer-events: auto;
+    }
+    
+    #watermark-container > *:not(#watermark-element) {
+      display: none !important;
     }
   </style>
 </head>
