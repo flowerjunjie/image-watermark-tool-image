@@ -31,6 +31,9 @@ temp_build/
 # 忽略大型二进制文件
 *.exe
 *.7z
+*.dll
+*.pak
+*.dat
 
 # 忽略系统文件
 Thumbs.db
@@ -40,3 +43,12 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# 电子应用相关目录
+electron-simple-test/
+resources/app/
+
+# 其他可能生成的大文件
+*.asar
+*.asar.bak
+*.map
