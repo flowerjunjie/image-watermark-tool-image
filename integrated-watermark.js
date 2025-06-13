@@ -120,22 +120,104 @@ function initWatermarkFunctions() {
         // 绘制原始图片
         ctx.drawImage(originalImage, 0, 0);
         
-        // 应用水印
+        // 在Canvas上渲染水印 - 所见即所得
         window.renderWatermarkOnCanvas(previewCanvas, ctx);
         
         // 显示Canvas，隐藏图片
         previewCanvas.style.display = 'block';
         if (previewImage) previewImage.style.display = 'none';
         
-        // 隐藏水印容器，因为水印已经直接绘制在Canvas上
-        if (watermarkContainer) watermarkContainer.style.display = 'none';
+        // 不隐藏水印容器，以支持拖动水印功能
+        if (watermarkContainer) {
+          watermarkContainer.style.display = 'block';
+          // 确保能接收事件
+          watermarkContainer.style.pointerEvents = 'auto';
+          
+          // 清除现有水印
+          watermarkContainer.innerHTML = '';
+          
+          // 创建一个可拖动的水印层 - 文字水印
+          if (window.watermarkState.type === 'text') {
+            const text = window.watermarkState.text;
+            
+            // 创建单个文字水印DOM元素
+            const watermark = document.createElement('div');
+            watermark.className = 'draggable-watermark';
+            watermark.id = 'watermark-element';
+            watermark.textContent = text;
+            watermark.style.fontSize = `${window.watermarkState.fontSize}px`;
+            watermark.style.color = window.watermarkState.color;
+            watermark.style.opacity = window.watermarkState.opacity / 100;
+            watermark.style.pointerEvents = 'auto';
+            watermark.style.zIndex = '9999';
+            watermark.style.background = 'transparent'; // 确保背景透明
+            watermark.style.border = '2px dashed rgba(0, 0, 255, 0.4)'; // 只在编辑模式显示边框
+            
+            // 设置位置
+            watermark.style.left = `${window.watermarkState.relativePosition.x}%`;
+            watermark.style.top = `${window.watermarkState.relativePosition.y}%`;
+            
+            // 设置旋转和缩放
+            const rotation = window.watermarkState.rotation || 0;
+            const scale = window.watermarkState.scale || 1;
+            watermark.style.transform = `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale})`;
+            watermark.style.transformOrigin = 'center';
+            
+            watermarkContainer.appendChild(watermark);
+            
+            // 使水印可拖动
+            window.makeDraggable(watermark);
+            console.log('Canvas模式下创建了可拖动的文字水印元素');
+          }
+          // 创建可拖动的图片水印层
+          else if (window.watermarkState.type === 'image' && window.watermarkState.watermarkImage) {
+            const src = typeof window.watermarkState.watermarkImage === 'string' ? 
+                      window.watermarkState.watermarkImage : 
+                      window.watermarkState.watermarkImage.src;
+            
+            const watermark = document.createElement('img');
+            watermark.className = 'draggable-watermark';
+            watermark.id = 'watermark-element';
+            watermark.src = src;
+            watermark.style.opacity = window.watermarkState.opacity / 100;
+            watermark.style.pointerEvents = 'auto';
+            watermark.style.zIndex = '9999';
+            watermark.style.background = 'transparent'; // 确保背景透明
+            watermark.style.border = '2px dashed rgba(0, 0, 255, 0.4)'; // 只在编辑模式显示边框
+            
+            // 设置位置
+            watermark.style.left = `${window.watermarkState.relativePosition.x}%`;
+            watermark.style.top = `${window.watermarkState.relativePosition.y}%`;
+            
+            // 设置旋转和缩放
+            const rotation = window.watermarkState.rotation || 0;
+            const scale = window.watermarkState.scale || 1;
+            watermark.style.transform = `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale})`;
+            
+            watermark.style.maxWidth = `${window.watermarkState.watermarkImageSize}%`;
+            watermark.style.maxHeight = `${window.watermarkState.watermarkImageSize}%`;
+            watermark.style.transformOrigin = 'center';
+            
+            watermarkContainer.appendChild(watermark);
+            
+            // 使水印可拖动
+            window.makeDraggable(watermark);
+            console.log('Canvas模式下创建了可拖动的图片水印元素');
+          }
+        }
         
-        console.log('使用Canvas模式显示水印');
+        console.log('使用Canvas模式显示图片和水印，DOM元素仅用于拖动');
         return;
       }
       
       // 传统DOM模式（当Canvas不可用时的后备方案）
       console.log('使用传统DOM模式显示水印');
+      
+      // 确保水印容器可见并可交互
+      if (watermarkContainer) {
+        watermarkContainer.style.display = 'block';
+        watermarkContainer.style.pointerEvents = 'auto';
+      }
       
       // 获取图片尺寸
       const imageWidth = previewImage.offsetWidth;
@@ -157,6 +239,7 @@ function initWatermarkFunctions() {
           watermark.style.fontSize = `${window.watermarkState.fontSize}px`;
           watermark.style.color = window.watermarkState.color;
           watermark.style.opacity = window.watermarkState.opacity / 100;
+          watermark.style.pointerEvents = 'auto'; // 确保可以接收鼠标事件
           
           // 设置位置和变换，确保初始位置正确
           if (typeof window.watermarkState.relativePosition.x === 'undefined' || typeof window.watermarkState.relativePosition.y === 'undefined') {
@@ -183,6 +266,7 @@ function initWatermarkFunctions() {
           
           // 使水印可拖动
           window.makeDraggable(watermark);
+          console.log('已应用makeDraggable到水印元素', watermark);
         } else {
           // 平铺水印
           const tileSpacing = parseInt(window.watermarkState.tileSpacing);
@@ -227,6 +311,7 @@ function initWatermarkFunctions() {
         watermark.id = 'watermark-element'; // 添加ID便于后续引用
         watermark.src = src;
         watermark.style.opacity = window.watermarkState.opacity / 100;
+        watermark.style.pointerEvents = 'auto'; // 确保可以接收鼠标事件
         
         // 设置位置和变换，确保初始位置正确
         if (typeof window.watermarkState.relativePosition.x === 'undefined' || typeof window.watermarkState.relativePosition.y === 'undefined') {
@@ -376,105 +461,49 @@ function initWatermarkFunctions() {
   window.downloadImage = function() {
     console.log('执行downloadImage函数');
     
+    if (!window.watermarkState.originalImage) {
+      alert('请先上传图片');
+      return;
+    }
+    
     try {
-      const previewImage = document.getElementById('preview-image');
-      const previewCanvas = document.getElementById('preview-canvas');
-      
-      if (!previewCanvas && (!previewImage || !previewImage.src || previewImage.style.display === 'none')) {
-        alert('请先上传图片');
-        return;
-      }
-      
-      // 获取当前显示的图片
-      const currentImage = window.watermarkState.processed[window.watermarkState.currentIndex];
-      if (!currentImage) {
-        console.error('没有处理后的图片可供下载');
-        alert('没有可下载的图片');
-        return;
-      }
-      
-      // 显示处理中模态框
-      const processingModal = document.getElementById('processing-modal');
-      const statusText = document.getElementById('processing-status');
-      
-      if (processingModal) {
-        statusText.textContent = '正在应用水印...';
-        processingModal.style.display = 'flex';
-      }
-      
       // 创建一个临时Canvas用于处理最终的下载图片
       const tempCanvas = document.createElement('canvas');
       const tempCtx = tempCanvas.getContext('2d');
-      const img = new Image();
+      const img = window.watermarkState.originalImage;
       
-      img.onload = function() {
-        // 设置Canvas尺寸
-        tempCanvas.width = img.width;
-        tempCanvas.height = img.height;
-        
-        // 绘制原始图像
-        tempCtx.drawImage(img, 0, 0);
-        
-        // 应用水印
-        window.renderWatermarkOnCanvas(tempCanvas, tempCtx)
-          .then(() => {
-            try {
-              // 转换为数据URL
-              const dataURL = tempCanvas.toDataURL('image/jpeg', 0.92);
-              
-              // 创建下载链接
-              const link = document.createElement('a');
-              const filename = currentImage.filename || 'watermarked-image.jpg';
-              link.href = dataURL;
-              link.download = 'watermarked-' + filename;
-              
-              // 模拟点击下载
-              document.body.appendChild(link);
-              link.click();
-              
-              // 清理DOM
-              setTimeout(() => {
-                document.body.removeChild(link);
-                URL.revokeObjectURL(dataURL);
-              }, 100);
-              
-              // 隐藏处理中模态框
-              if (processingModal) {
-                processingModal.style.display = 'none';
-              }
-              
-              // 显示成功消息
-              window.showStatusMessage('图片已下载');
-            } catch (err) {
-              console.error('生成下载链接时出错:', err);
-              if (processingModal) {
-                processingModal.style.display = 'none';
-              }
-              window.showStatusMessage('下载失败: ' + err.message);
-            }
-          })
-          .catch(err => {
-            console.error('应用水印时出错:', err);
-            if (processingModal) {
-              processingModal.style.display = 'none';
-            }
-            window.showStatusMessage('应用水印失败: ' + err.message);
-          });
-      };
+      // 设置Canvas尺寸
+      tempCanvas.width = img.width;
+      tempCanvas.height = img.height;
       
-      img.onerror = function() {
-        console.error('图片加载失败');
-        if (processingModal) {
-          processingModal.style.display = 'none';
-        }
-        window.showStatusMessage('图片加载失败');
-      };
+      // 清除Canvas
+      tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
       
-      // 使用原始图片而不是已处理的图片
-      img.src = currentImage.original;
+      // 绘制原始图片
+      tempCtx.drawImage(img, 0, 0);
+      
+      // 在导出时应用水印到Canvas
+      window.renderWatermarkOnCanvas(tempCanvas, tempCtx)
+        .then(() => {
+          // 转换为DataURL
+          const dataURL = tempCanvas.toDataURL('image/jpeg', 0.92);
+          
+          // 创建下载链接
+          const link = document.createElement('a');
+          const timestamp = new Date().getTime();
+          const filename = `watermarked_${timestamp}.jpg`;
+          
+          link.download = filename;
+          link.href = dataURL;
+          link.click();
+          
+          // 显示状态消息
+          window.showStatusMessage('图片已下载');
+        });
+      
     } catch (error) {
-      console.error('下载图片时出错:', error);
-      alert('下载图片时出错: ' + error.message);
+      console.error('下载图片出错:', error);
+      alert('图片下载失败: ' + error.message);
     }
   };
   
@@ -1701,100 +1730,54 @@ function initWheelZoom() {
 window.makeDraggable = function(el) {
   console.log('设置元素可拖动:', el);
   
-  // 判断是Canvas模式还是DOM模式
-  const isCanvasMode = !!window.watermarkState.previewCanvas && window.watermarkState.previewCanvas.style.display !== 'none';
-  const canvasElement = document.getElementById('preview-canvas');
-  
-  if (isCanvasMode && canvasElement) {
-    // Canvas模式下的拖拽处理
-    console.log('初始化Canvas上的拖拽');
-    
-    let isDragging = false;
-    let startX, startY;
-    
-    canvasElement.addEventListener('mousedown', function(e) {
-      const rect = canvasElement.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      
-      // 计算点击位置是否在水印区域内
-      // 粗略估计水印区域在中心位置的一定范围内
-      const watermarkX = canvasElement.width * (window.watermarkState.relativePosition.x / 100);
-      const watermarkY = canvasElement.height * (window.watermarkState.relativePosition.y / 100);
-      const tolerance = Math.max(50, window.watermarkState.fontSize * 2); // 点击容忍范围
-      
-      if (Math.abs(x - watermarkX) < tolerance && Math.abs(y - watermarkY) < tolerance) {
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        e.preventDefault();
-      }
-    });
-    
-    document.addEventListener('mousemove', function(e) {
-      if (!isDragging) return;
-      
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
-      
-      // 转换为百分比移动
-      const percentX = (deltaX / canvasElement.offsetWidth) * 100;
-      const percentY = (deltaY / canvasElement.offsetHeight) * 100;
-      
-      // 更新水印位置
-      window.watermarkState.relativePosition.x = Math.max(-20, Math.min(120, window.watermarkState.relativePosition.x + percentX));
-      window.watermarkState.relativePosition.y = Math.max(-20, Math.min(120, window.watermarkState.relativePosition.y + percentY));
-      
-      // 同步x和y值
-      window.watermarkState.x = window.watermarkState.relativePosition.x;
-      window.watermarkState.y = window.watermarkState.relativePosition.y;
-      
-      // 重新绘制水印
-      window.updateWatermark();
-      
-      // 更新起始位置
-      startX = e.clientX;
-      startY = e.clientY;
-    });
-    
-    document.addEventListener('mouseup', function() {
-      if (isDragging) {
-        isDragging = false;
-        console.log('水印拖拽结束，位置:', window.watermarkState.relativePosition);
-      }
-    });
-    
-    return;
-  }
-  
-  // 传统DOM元素拖拽模式
-  let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-  
-  // 防止重复添加事件
+  // 如果元素已经设置过拖动功能，则跳过
   if (el._draggable) {
     console.log('元素已经具有拖拽功能，跳过');
     return;
   }
   
+  // 标记元素已设置拖动功能
   el._draggable = true;
+  
+  // 设置鼠标指针样式
   el.style.cursor = 'move';
   
-  el.onmousedown = dragMouseDown;
+  // 必要的变量
+  let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
   
-  function dragMouseDown(e) {
-    e = e || window.event;
+  // 鼠标按下事件
+  el.addEventListener('mousedown', function(e) {
     e.preventDefault();
     
     // 记录初始位置
     pos3 = e.clientX;
     pos4 = e.clientY;
     
-    document.onmouseup = closeDragElement;
-    document.onmousemove = elementDrag;
-  }
+    // 添加移动和松开事件监听器
+    document.addEventListener('mousemove', elementDrag);
+    document.addEventListener('mouseup', closeDragElement);
+    
+    console.log('开始拖动水印元素', el.id);
+  });
   
+  // 触摸开始事件（移动设备支持）
+  el.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    
+    // 记录初始位置
+    pos3 = e.touches[0].clientX;
+    pos4 = e.touches[0].clientY;
+    
+    // 添加触摸移动和结束事件监听器
+    document.addEventListener('touchmove', touchElementDrag);
+    document.addEventListener('touchend', closeTouchElement);
+    document.addEventListener('touchcancel', closeTouchElement);
+    
+    console.log('开始触摸拖动水印元素', el.id);
+  });
+  
+  // 鼠标移动处理函数
   function elementDrag(e) {
-    e = e || window.event;
     e.preventDefault();
     
     // 计算新位置
@@ -1815,8 +1798,8 @@ window.makeDraggable = function(el) {
     const newTop = oldTop - (pos2 / containerHeight * 100);
     
     // 更新位置，允许适当超出边界
-    const boundedLeft = Math.max(-20, Math.min(120, newLeft));
-    const boundedTop = Math.max(-20, Math.min(120, newTop));
+    const boundedLeft = Math.max(0, Math.min(100, newLeft));
+    const boundedTop = Math.max(0, Math.min(100, newTop));
     
     // 设置元素位置
     el.style.left = boundedLeft + '%';
@@ -1826,10 +1809,54 @@ window.makeDraggable = function(el) {
     window.onDrag(boundedLeft, boundedTop);
   }
   
+  // 触摸移动处理函数
+  function touchElementDrag(e) {
+    e.preventDefault();
+    
+    // 计算新位置
+    pos1 = pos3 - e.touches[0].clientX;
+    pos2 = pos4 - e.touches[0].clientY;
+    pos3 = e.touches[0].clientX;
+    pos4 = e.touches[0].clientY;
+    
+    // 获取父容器尺寸
+    const container = document.getElementById('preview-container');
+    const containerWidth = container ? container.offsetWidth : window.innerWidth;
+    const containerHeight = container ? container.offsetHeight : window.innerHeight;
+    
+    // 计算新的位置（以百分比表示）
+    const oldLeft = parseFloat(el.style.left || '50%');
+    const oldTop = parseFloat(el.style.top || '50%');
+    const newLeft = oldLeft - (pos1 / containerWidth * 100);
+    const newTop = oldTop - (pos2 / containerHeight * 100);
+    
+    // 更新位置，允许适当超出边界
+    const boundedLeft = Math.max(0, Math.min(100, newLeft));
+    const boundedTop = Math.max(0, Math.min(100, newTop));
+    
+    // 设置元素位置
+    el.style.left = boundedLeft + '%';
+    el.style.top = boundedTop + '%';
+    
+    // 更新状态
+    window.onDrag(boundedLeft, boundedTop);
+  }
+  
+  // 鼠标松开处理函数
   function closeDragElement() {
-    // 停止移动
-    document.onmouseup = null;
-    document.onmousemove = null;
+    // 移除事件监听器
+    document.removeEventListener('mousemove', elementDrag);
+    document.removeEventListener('mouseup', closeDragElement);
+    console.log('结束拖动水印元素');
+  }
+  
+  // 触摸结束处理函数
+  function closeTouchElement() {
+    // 移除事件监听器
+    document.removeEventListener('touchmove', touchElementDrag);
+    document.removeEventListener('touchend', closeTouchElement);
+    document.removeEventListener('touchcancel', closeTouchElement);
+    console.log('结束触摸拖动水印元素');
   }
 };
 
@@ -1849,6 +1876,26 @@ window.onDrag = function(x, y) {
   // 同步 x 和 y 属性
   window.watermarkState.x = x;
   window.watermarkState.y = y;
+  
+  // 如果是Canvas模式，需要重新渲染Canvas上的水印
+  const previewCanvas = document.getElementById('preview-canvas');
+  if (previewCanvas && previewCanvas.style.display !== 'none' && window.watermarkState.previewCtx) {
+    // 不调用完整的updateWatermark避免循环，只更新Canvas上的水印位置
+    const ctx = window.watermarkState.previewCtx;
+    const originalImage = window.watermarkState.originalImage;
+    
+    if (originalImage) {
+      // 清除Canvas
+      ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+      
+      // 重新绘制原图
+      ctx.drawImage(originalImage, 0, 0);
+      
+      // 应用水印
+      window.renderWatermarkOnCanvas(previewCanvas, ctx);
+      console.log('拖动时重新渲染了Canvas上的水印');
+    }
+  }
 };
 
 // 渲染水印到Canvas
@@ -1896,8 +1943,13 @@ window.renderWatermarkOnCanvas = function(canvas, ctx) {
         const scale = window.watermarkState.scale || 1;
         ctx.scale(scale, scale);
         
-        // 绘制文本
-        ctx.fillText(text, 0, 0);
+        // 测量文本尺寸以居中绘制
+        const metrics = ctx.measureText(text);
+        const textWidth = metrics.width;
+        const textHeight = fontSize; // 近似值
+        
+        // 居中绘制文本
+        ctx.fillText(text, -textWidth / 2, textHeight / 3); // 调整y偏移以匹配视觉中心
         
         // 恢复上下文状态
         ctx.restore();
@@ -1933,6 +1985,11 @@ window.renderWatermarkOnCanvas = function(canvas, ctx) {
         const rotation = window.watermarkState.rotation || 0;
         const scale = window.watermarkState.scale || 1;
         
+        // 测量文本尺寸以居中绘制
+        const metrics = ctx.measureText(text);
+        const textWidth = metrics.width;
+        const textHeight = fontSize; // 近似值
+        
         // 绘制平铺水印
         for (let row = 0; row < rows; row++) {
           for (let col = 0; col < cols; col++) {
@@ -1943,7 +2000,7 @@ window.renderWatermarkOnCanvas = function(canvas, ctx) {
             ctx.translate(x, y);
             ctx.rotate((rotation * Math.PI) / 180);
             ctx.scale(scale, scale);
-            ctx.fillText(text, 0, 0);
+            ctx.fillText(text, -textWidth / 2, textHeight / 3); // 居中绘制
             ctx.restore();
           }
         }
@@ -2034,4 +2091,165 @@ window.renderWatermarkOnCanvas = function(canvas, ctx) {
       reject(error);
     }
   });
+};
+
+// 批量下载
+window.batchDownload = function() {
+  console.log('执行batchDownload函数');
+  
+  try {
+    if (!window.watermarkState.files || window.watermarkState.files.length === 0) {
+      alert('请先上传图片');
+      return;
+    }
+    
+    // 显示处理进度模态框
+    const processingModal = document.getElementById('processing-modal');
+    const progressBar = document.getElementById('modal-progress-bar');
+    const statusText = document.getElementById('processing-status');
+    
+    if (processingModal) {
+      statusText.textContent = '正在准备下载...';
+      progressBar.style.width = '0%';
+      progressBar.textContent = '0%';
+      processingModal.style.display = 'flex';
+    }
+    
+    // 创建JSZip实例
+    const zip = new JSZip();
+    let processedCount = 0;
+    
+    // 处理每张图片并添加到压缩包
+    const processAndAddToZip = function(index) {
+      if (index >= window.watermarkState.files.length) {
+        // 所有图片已处理，生成并下载ZIP
+        console.log('所有图片处理完成，生成ZIP');
+        
+        if (statusText) {
+          statusText.textContent = '正在生成压缩包...';
+        }
+        
+        zip.generateAsync({ type: 'blob' })
+          .then(function(blob) {
+            // 创建下载链接
+            const link = document.createElement('a');
+            const timestamp = new Date().getTime();
+            const url = URL.createObjectURL(blob);
+            
+            link.href = url;
+            link.download = `watermarked_images_${timestamp}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            
+            // 清理
+            setTimeout(function() {
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }, 100);
+            
+            // 隐藏模态框
+            if (processingModal) {
+              processingModal.style.display = 'none';
+            }
+            
+            // 显示状态消息
+            window.showStatusMessage(`${processedCount}张图片已打包下载`);
+          })
+          .catch(function(err) {
+            console.error('生成ZIP失败:', err);
+            if (processingModal) {
+              processingModal.style.display = 'none';
+            }
+            alert('生成压缩包失败: ' + err.message);
+          });
+        
+        return;
+      }
+      
+      // 更新状态
+      if (statusText) {
+        statusText.textContent = `正在处理图片 ${index + 1}/${window.watermarkState.files.length}`;
+      }
+      
+      // 更新进度条
+      if (progressBar) {
+        const progress = Math.round((index / window.watermarkState.files.length) * 100);
+        progressBar.style.width = progress + '%';
+        progressBar.textContent = progress + '%';
+      }
+      
+      // 获取当前图片
+      const file = window.watermarkState.files[index];
+      
+      // 创建FileReader读取文件
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        // 创建图片对象
+        const img = new Image();
+        
+        img.onload = function() {
+          // 创建临时Canvas
+          const tempCanvas = document.createElement('canvas');
+          const tempCtx = tempCanvas.getContext('2d');
+          
+          // 设置Canvas尺寸
+          tempCanvas.width = img.width;
+          tempCanvas.height = img.height;
+          
+          // 绘制原始图片
+          tempCtx.drawImage(img, 0, 0);
+          
+          // 应用水印
+          window.renderWatermarkOnCanvas(tempCanvas, tempCtx)
+            .then(() => {
+              // 转换为Blob
+              tempCanvas.toBlob(function(blob) {
+                // 创建文件名
+                const filename = file.name || `image_${index}.jpg`;
+                
+                // 添加到ZIP
+                zip.file(filename, blob);
+                
+                // 增加处理计数
+                processedCount++;
+                
+                // 处理下一张
+                setTimeout(() => processAndAddToZip(index + 1), 10);
+              }, 'image/jpeg', 0.92);
+            })
+            .catch(error => {
+              console.error('应用水印失败:', error);
+              // 处理下一张
+              processAndAddToZip(index + 1);
+            });
+        };
+        
+        img.onerror = function() {
+          console.error('图片加载失败:', file.name);
+          // 处理下一张
+          processAndAddToZip(index + 1);
+        };
+        
+        // 设置图片源
+        img.src = e.target.result;
+      };
+      
+      reader.onerror = function() {
+        console.error('读取文件失败:', file.name);
+        // 处理下一张
+        processAndAddToZip(index + 1);
+      };
+      
+      // 读取文件
+      reader.readAsDataURL(file);
+    };
+    
+    // 开始处理
+    processAndAddToZip(0);
+    
+  } catch (error) {
+    console.error('批量下载出错:', error);
+    alert('批量下载失败: ' + error.message);
+  }
 };

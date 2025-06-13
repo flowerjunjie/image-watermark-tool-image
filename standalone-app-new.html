@@ -396,16 +396,16 @@
     }
     
     #watermark-container {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: auto;
-      z-index: 10;
-      display: flex;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      pointer-events: auto !important;
+      z-index: 9999 !important;
+      display: block !important;
       justify-content: center;
       align-items: center;
       overflow: visible; /* 允许水印内容溢出容器 */
@@ -420,18 +420,30 @@
     }
     
     .draggable-watermark {
-      position: absolute;
-      cursor: move;
+      position: absolute !important;
+      cursor: move !important;
       user-select: none;
       transform-origin: center;
       white-space: nowrap;
       padding: 5px;
-      pointer-events: auto; /* 确保可以接收鼠标事件 */
-      z-index: 20; /* 确保在图片上层 */
-      /* 初始位置由JavaScript控制，不在CSS中设置 */
+      pointer-events: auto !important; /* 确保可以接收鼠标事件 */
+      z-index: 9999 !important; /* 确保在最顶层 */
       box-sizing: border-box; /* 确保padding不会增加元素尺寸 */
       max-width: 100%; /* 限制最大宽度 */
       max-height: 100%; /* 限制最大高度 */
+      border: 2px dashed rgba(0, 0, 255, 0.4); /* 蓝色虚线边框 */
+      border-radius: 4px;
+      transition: border 0.3s;
+      /* 使用translate实现居中定位，与Canvas渲染位置一致 */
+      transform: translate(-50%, -50%);
+    }
+    
+    .draggable-watermark:hover {
+      border: 2px dashed rgba(0, 0, 255, 0.8); /* 悬停时更明显 */
+    }
+    
+    .draggable-watermark:active {
+      border: 2px solid rgba(0, 0, 255, 0.8); /* 拖动时变成实线 */
     }
     
     .draggable-watermark::after {
