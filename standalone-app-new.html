@@ -4,10 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>图片水印工具 - 独立版</title>
-  <!-- 添加修复脚本 - 移到头部确保先加载 -->
-  <script src="watermark-fix.js"></script>
-  <!-- 添加第二个修复脚本 - 实现缺失的关键函数 -->
-  <script src="watermark-fix-2.js"></script>
+  <!-- 所有功能集成到一个文件 -->
+  <script src="integrated-watermark.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -385,6 +383,8 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      user-select: none; /* 防止文本选择 */
+      touch-action: none; /* 防止触摸设备上的默认行为 */
     }
     
     .preview-image {
@@ -408,6 +408,8 @@
       transform-origin: center;
       white-space: nowrap;
       padding: 5px;
+      pointer-events: auto; /* 确保可以接收鼠标事件 */
+      z-index: 20; /* 确保在图片上层 */
     }
     
     .draggable-watermark::after {
@@ -687,7 +689,7 @@
         <p>点击或拖拽图片到这里</p>
         <p style="font-size: 12px; margin: 5px 0;">支持批量上传多张图片或上传文件夹</p>
         <input type="file" id="file-input" accept="image/*" style="display: none;" multiple>
-        <input type="file" id="folder-input" style="display: none;" webkitdirectory directory multiple>
+        <input type="file" id="folder-input" style="display: none;" webkitdirectory directory mozdirectory msdirectory odirectory multiple>
       </div>
       
       <div class="form-group">
@@ -805,7 +807,7 @@
       <div class="preview-container" id="preview-container">
         <div id="no-image-message" style="text-align: center; padding: 20px;">请上传图片进行预览</div>
         <img id="preview-image" class="preview-image" style="display: none;">
-        <div id="watermark-container"></div>
+        <div id="watermark-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;"></div>
       </div>
       
       <div class="thumbnails-container" id="thumbnails-container" style="display: none;"></div>
@@ -860,47 +862,58 @@
         
         // 初始化各种功能
         try {
-          if (typeof window.initEvents === 'function') {
-            window.initEvents();
+          console.log('开始初始化核心功能');
+          
+          // 初始化核心功能
+          if (typeof window.initWatermarkFunctions === 'function') {
+            window.initWatermarkFunctions();
+            console.log('核心功能初始化完成');
+          } else {
+            console.warn('未找到initWatermarkFunctions函数');
           }
           
-          if (typeof window.initInputs === 'function') {
-            window.initInputs();
+          // 初始化事件监听器
+          if (typeof window.initEventListeners === 'function') {
+            console.log('开始初始化事件监听器');
+            window.initEventListeners();
+            console.log('事件监听器初始化完成');
+          } else {
+            console.warn('未找到initEventListeners函数');
           }
           
-          if (typeof window.initBackgroundColorControls === 'function') {
-            window.initBackgroundColorControls();
+          // 初始化输入处理器
+          if (typeof window.initInputHandlers === 'function') {
+            window.initInputHandlers();
+            console.log('输入处理器初始化完成');
+          } else {
+            console.warn('未找到initInputHandlers函数');
           }
           
-          if (typeof window.initElectronMenuEvents === 'function') {
-            window.initElectronMenuEvents();
+          // 初始化拖放功能
+          if (typeof window.initDragAndDrop === 'function') {
+            window.initDragAndDrop();
+            console.log('拖放功能初始化完成');
+          } else {
+            console.warn('未找到initDragAndDrop函数');
           }
           
-          // 设置下载按钮事件
-          const downloadBtn = document.getElementById('download-btn');
-          if (downloadBtn && typeof window.downloadImage === 'function') {
-            downloadBtn.addEventListener('click', window.downloadImage);
+          // 初始化滚轮缩放
+          if (typeof window.initWheelZoom === 'function') {
+            window.initWheelZoom();
+            console.log('滚轮缩放初始化完成');
+          } else {
+            console.warn('未找到initWheelZoom函数');
           }
           
-          const batchDownloadBtn = document.getElementById('batch-download-btn');
-          if (batchDownloadBtn && typeof window.batchDownloadImages === 'function') {
-            batchDownloadBtn.addEventListener('click', window.batchDownloadImages);
-          }
-          
-          const batchProcessBtn = document.getElementById('batch-process-btn');
-          if (batchProcessBtn && typeof window.batchProcessImages === 'function') {
-            batchProcessBtn.addEventListener('click', function() {
-              console.log('批量处理按钮点击');
-              window.batchProcessImages();
-            });
-          }
-          
+          // 标记为已初始化
           window.__WATERMARK_EVENTS_INITIALIZED__ = true;
           console.log('所有事件初始化完成');
         } catch (error) {
           console.error('初始化发生错误:', error);
           alert('初始化失败: ' + error.message);
         }
+      } else {
+        console.log('事件已初始化，跳过');
       }
     });
   </script>
