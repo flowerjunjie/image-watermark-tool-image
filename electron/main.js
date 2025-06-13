@@ -137,42 +137,49 @@ function createWindow() {
   } else {
     console.log('运行环境: 生产模式');
     
-    // 优先加载standalone-app.html作为独立版本
-    const standaloneAppPath = path.join(appPath, 'standalone-app.html');
-    if (fs.existsSync(standaloneAppPath)) {
-      console.log('发现独立版界面文件:', standaloneAppPath);
-      contentUrl = url.format({
-        pathname: standaloneAppPath,
-        protocol: 'file:',
-        slashes: true
-      });
-    }
-    // 然后尝试加载app.html
-    else if (fs.existsSync(path.join(appPath, 'app.html'))) {
-      // 检查app.html是否存在，如果不存在则创建一个基本的app.html
-      const appHtmlPath = path.join(appPath, 'app.html');
-      console.log('发现app.html文件:', appHtmlPath);
-      contentUrl = url.format({
-        pathname: appHtmlPath,
-        protocol: 'file:',
-        slashes: true
-      });
-    }
-    // 然后尝试加载static-app.html
-    else {
-      const staticAppPath = path.join(appPath, 'static-app.html');
-      if (!fs.existsSync(staticAppPath)) {
-        console.log('未找到static-app.html，正在生成重定向HTML');
-        generateRedirectHtml(staticAppPath, 'app.html');
+    // 首先尝试加载简单的直接HTML文件
+    const directStandalonePath = path.join(appPath, 'direct-standalone-app.html');
+    if (fs.existsSync(directStandalonePath)) {
+      console.log('发现直接独立版界面文件:', directStandalonePath);
+      contentUrl = url.format({ pathname: directStandalonePath, protocol: 'file:', slashes: true });
+    } else {
+      // ==== 新增：多路径查找 standalone-app.html ====
+      const candidateStandalonePaths = [
+        path.join(appPath, 'standalone-app.html'), // 默认
+        path.join(__dirname, '..', 'standalone-app.html'), // 项目根目录
+        path.join(process.resourcesPath, 'standalone-app.html'), // resources 根
+        path.join(process.resourcesPath, 'app', 'standalone-app.html') // resources/app
+      ];
+      let standaloneAppPath = candidateStandalonePaths.find(p => fs.existsSync(p));
+      if (standaloneAppPath) {
+        console.log('发现独立版界面文件:', standaloneAppPath);
+        contentUrl = url.format({ pathname: standaloneAppPath, protocol: 'file:', slashes: true });
+      } else if (fs.existsSync(path.join(appPath, 'app.html'))) {
+        // 然后尝试加载app.html
+        const appHtmlPath = path.join(appPath, 'app.html');
+        console.log('发现app.html文件:', appHtmlPath);
+        contentUrl = url.format({
+          pathname: appHtmlPath,
+          protocol: 'file:',
+          slashes: true
+        });
       }
-      
-      console.log('发现static-app.html文件:', staticAppPath);
-      // 使用正确的file://协议格式，避免路径重复
-      contentUrl = url.format({
-        pathname: staticAppPath,
-        protocol: 'file:',
-        slashes: true
-      });
+      // 然后尝试加载static-app.html
+      else {
+        const staticAppPath = path.join(appPath, 'static-app.html');
+        if (!fs.existsSync(staticAppPath)) {
+          console.log('未找到static-app.html，正在生成重定向HTML');
+          generateRedirectHtml(staticAppPath, 'app.html');
+        }
+        
+        console.log('发现static-app.html文件:', staticAppPath);
+        // 使用正确的file://协议格式，避免路径重复
+        contentUrl = url.format({
+          pathname: staticAppPath,
+          protocol: 'file:',
+          slashes: true
+        });
+      }
     }
     
     // 确保direct-app.html也存在作为备份
@@ -189,6 +196,9 @@ function createWindow() {
 
   // 开发模式下自动打开开发者工具，生产模式下禁用自动打开
   if (isDev) {
+    mainWindow.webContents.openDevTools();
+  } else {
+    // 临时：在生产模式下也打开开发者工具，用于调试
     mainWindow.webContents.openDevTools();
   }
 
