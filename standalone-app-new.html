@@ -409,6 +409,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      overflow: visible; /* 允许水印内容溢出容器 */
     }
     
     .watermark {
@@ -428,10 +429,10 @@
       padding: 5px;
       pointer-events: auto; /* 确保可以接收鼠标事件 */
       z-index: 20; /* 确保在图片上层 */
-      /* 水印居中 */
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
+      /* 初始位置由JavaScript控制，不在CSS中设置 */
+      box-sizing: border-box; /* 确保padding不会增加元素尺寸 */
+      max-width: 100%; /* 限制最大宽度 */
+      max-height: 100%; /* 限制最大高度 */
     }
     
     .draggable-watermark::after {

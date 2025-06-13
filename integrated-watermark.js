@@ -96,14 +96,19 @@ function initWatermarkFunctions() {
           
           // 设置位置和变换，确保初始位置正确
           if (typeof window.watermarkState.x === 'undefined' || typeof window.watermarkState.y === 'undefined') {
-            // 如果没有位置信息，则居中显示
-            window.watermarkState.x = 50;
+            // 如果没有位置信息，则显示在左侧位置
+            window.watermarkState.x = 30;
             window.watermarkState.y = 50;
           }
           
+          // 设置初始位置
           watermark.style.left = `${window.watermarkState.x}%`;
           watermark.style.top = `${window.watermarkState.y}%`;
-          watermark.style.transform = `rotate(${window.watermarkState.rotation}deg) scale(${window.watermarkState.scale})`;
+          
+          // 设置旋转和缩放
+          const rotation = window.watermarkState.rotation || 0;
+          const scale = window.watermarkState.scale || 1;
+          watermark.style.transform = `rotate(${rotation}deg) scale(${scale})`;
           watermark.style.transformOrigin = 'center';
           
           watermarkContainer.appendChild(watermark);
@@ -157,14 +162,20 @@ function initWatermarkFunctions() {
         
         // 设置位置和变换，确保初始位置正确
         if (typeof window.watermarkState.x === 'undefined' || typeof window.watermarkState.y === 'undefined') {
-          // 如果没有位置信息，则居中显示
-          window.watermarkState.x = 50;
+          // 如果没有位置信息，则显示在左侧位置
+          window.watermarkState.x = 30;
           window.watermarkState.y = 50;
         }
         
+        // 设置初始位置
         watermark.style.left = `${window.watermarkState.x}%`;
         watermark.style.top = `${window.watermarkState.y}%`;
-        watermark.style.transform = `rotate(${window.watermarkState.rotation}deg) scale(${window.watermarkState.scale})`;
+        
+        // 设置旋转和缩放
+        const rotation = window.watermarkState.rotation || 0;
+        const scale = window.watermarkState.scale || 1;
+        watermark.style.transform = `rotate(${rotation}deg) scale(${scale})`;
+        
         watermark.style.maxWidth = `${window.watermarkState.watermarkImageSize}%`;
         watermark.style.maxHeight = `${window.watermarkState.watermarkImageSize}%`;
         watermark.style.transformOrigin = 'center';
@@ -1371,13 +1382,12 @@ function makeDraggable(element) {
   element.style.position = 'absolute'; // 确保元素是绝对定位
   element.style.pointerEvents = 'auto'; // 确保元素可以接收鼠标事件
   
-  // 重置transform，确保初始位置正确
-  if (element.style.transform && element.style.transform.includes('translate')) {
-    // 如果已经有transform，只保留旋转和缩放部分
-    const rotation = window.watermarkState.rotation;
-    const scale = window.watermarkState.scale;
-    element.style.transform = `rotate(${rotation}deg) scale(${scale})`;
-  }
+  // 确保初始位置正确
+  const rotation = window.watermarkState.rotation || 0;
+  const scale = window.watermarkState.scale || 1;
+  
+  // 只保留旋转和缩放部分的transform，移除translate
+  element.style.transform = `rotate(${rotation}deg) scale(${scale})`;
   
   // 移除旧的事件监听器（避免重复添加）
   element.removeEventListener('mousedown', startDragging);
@@ -1426,9 +1436,10 @@ function makeDraggable(element) {
     const percentX = (x / containerRect.width) * 100;
     const percentY = (y / containerRect.height) * 100;
     
-    // 限制在容器内
-    const boundedX = Math.max(0, Math.min(100, percentX));
-    const boundedY = Math.max(0, Math.min(100, percentY));
+    // 限制在容器内，允许水印部分超出边界
+    // 扩大边界范围，允许水印中心点在-20%到120%的范围内
+    const boundedX = Math.max(-20, Math.min(120, percentX));
+    const boundedY = Math.max(-20, Math.min(120, percentY));
     
     // 应用新位置
     element.style.left = `${boundedX}%`;
