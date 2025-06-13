@@ -7,7 +7,7 @@ dist
 dist_electron
 
 # Node dependencies
-node_modules
+node_modules/
 
 # Logs
 logs
@@ -22,3 +22,21 @@ logs
 .env
 .env.*
 !.env.example
+
+# 忽略打包后的文件和目录
+dist_electron/
+dist_app/
+temp_build/
+
+# 忽略大型二进制文件
+*.exe
+*.7z
+
+# 忽略系统文件
+Thumbs.db
+
+# 忽略编辑器配置
+.idea/
+.vscode/
+*.swp
+*.swo
