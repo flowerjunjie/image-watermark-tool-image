@@ -857,63 +857,64 @@
     // 确保页面加载完成后初始化所有功能
     document.addEventListener('DOMContentLoaded', function() {
       // 检查是否已初始化
-      if (!window.__WATERMARK_EVENTS_INITIALIZED__) {
-        console.log('正在初始化事件...');
+      if (window.__WATERMARK_EVENTS_INITIALIZED__) {
+        console.log('事件已初始化，跳过重复初始化');
+        return;
+      }
+      
+      console.log('正在初始化事件...');
         
-        // 初始化各种功能
-        try {
-          console.log('开始初始化核心功能');
-          
-          // 初始化核心功能
-          if (typeof window.initWatermarkFunctions === 'function') {
-            window.initWatermarkFunctions();
-            console.log('核心功能初始化完成');
-          } else {
-            console.warn('未找到initWatermarkFunctions函数');
-          }
-          
-          // 初始化事件监听器
-          if (typeof window.initEventListeners === 'function') {
-            console.log('开始初始化事件监听器');
-            window.initEventListeners();
-            console.log('事件监听器初始化完成');
-          } else {
-            console.warn('未找到initEventListeners函数');
-          }
-          
-          // 初始化输入处理器
-          if (typeof window.initInputHandlers === 'function') {
-            window.initInputHandlers();
-            console.log('输入处理器初始化完成');
-          } else {
-            console.warn('未找到initInputHandlers函数');
-          }
-          
-          // 初始化拖放功能
-          if (typeof window.initDragAndDrop === 'function') {
-            window.initDragAndDrop();
-            console.log('拖放功能初始化完成');
-          } else {
-            console.warn('未找到initDragAndDrop函数');
-          }
-          
-          // 初始化滚轮缩放
-          if (typeof window.initWheelZoom === 'function') {
-            window.initWheelZoom();
-            console.log('滚轮缩放初始化完成');
-          } else {
-            console.warn('未找到initWheelZoom函数');
-          }
-          
-          // 标记为已初始化
-          window.__WATERMARK_EVENTS_INITIALIZED__ = true;
-          console.log('所有事件初始化完成');
-        } catch (error) {
-          console.error('初始化发生错误:', error);
-          alert('初始化失败: ' + error.message);
+      // 初始化各种功能
+      try {
+        console.log('开始初始化核心功能');
+        
+        // 初始化核心功能
+        if (typeof window.initWatermarkFunctions === 'function') {
+          window.initWatermarkFunctions();
+          console.log('核心功能初始化完成');
+        } else {
+          console.warn('未找到initWatermarkFunctions函数');
         }
-      } else {
-        console.log('事件已初始化，跳过');
+        
+        // 初始化事件监听器
+        if (typeof window.initEventListeners === 'function') {
+          console.log('开始初始化事件监听器');
+          window.initEventListeners();
+          console.log('事件监听器初始化完成');
+        } else {
+          console.warn('未找到initEventListeners函数');
+        }
+        
+        // 初始化输入处理器
+        if (typeof window.initInputHandlers === 'function') {
+          window.initInputHandlers();
+          console.log('输入处理器初始化完成');
+        } else {
+          console.warn('未找到initInputHandlers函数');
+        }
+        
+        // 初始化拖放功能
+        if (typeof window.initDragAndDrop === 'function') {
+          window.initDragAndDrop();
+          console.log('拖放功能初始化完成');
+        } else {
+          console.warn('未找到initDragAndDrop函数');
+        }
+        
+        // 初始化滚轮缩放
+        if (typeof window.initWheelZoom === 'function') {
+          window.initWheelZoom();
+          console.log('滚轮缩放初始化完成');
+        } else {
+          console.warn('未找到initWheelZoom函数');
+        }
+        
+        // 标记为已初始化
+        window.__WATERMARK_EVENTS_INITIALIZED__ = true;
+        console.log('所有事件初始化完成');
+      } catch (error) {
+        console.error('初始化发生错误:', error);
+        alert('初始化失败: ' + error.message);
       }
     });
   </script>

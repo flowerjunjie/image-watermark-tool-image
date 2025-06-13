@@ -31,12 +31,21 @@ window.watermarkState = {
 document.addEventListener('DOMContentLoaded', function() {
   console.log('水印集成脚本已加载');
   
+  // 检查是否已初始化，避免重复初始化
+  if (window.__WATERMARK_EVENTS_INITIALIZED__) {
+    console.log('事件已初始化，跳过集成脚本初始化');
+    return;
+  }
+  
   // 初始化所有功能
   initWatermarkFunctions();
   initEventListeners();
   initInputHandlers();
   initDragAndDrop();
   initWheelZoom();
+  
+  // 标记为已初始化
+  window.__WATERMARK_EVENTS_INITIALIZED__ = true;
   
   console.log('水印集成脚本初始化完成');
 });
@@ -743,6 +752,12 @@ function initEventListeners() {
   if (uploadFolderBtn && folderInput) {
     console.log('设置上传文件夹按钮事件');
     
+    // 检查按钮是否已经绑定过事件（使用自定义属性标记）
+    if (uploadFolderBtn.getAttribute('data-event-bound') === 'true') {
+      console.log('上传文件夹按钮已绑定事件，跳过');
+      return;
+    }
+    
     // 清除所有旧事件监听器
     const newUploadFolderBtn = uploadFolderBtn.cloneNode(true);
     uploadFolderBtn.parentNode.replaceChild(newUploadFolderBtn, uploadFolderBtn);
@@ -759,6 +774,9 @@ function initEventListeners() {
       // 只触发一次文件选择对话框
       newFolderInput.click();
     });
+    
+    // 标记按钮已绑定事件
+    newUploadFolderBtn.setAttribute('data-event-bound', 'true');
     
     newFolderInput.addEventListener('change', function handleFolderInputChange() {
       console.log('处理文件夹选择，文件数量:', this.files.length);
