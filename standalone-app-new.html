@@ -385,12 +385,30 @@
       align-items: center;
       user-select: none; /* 防止文本选择 */
       touch-action: none; /* 防止触摸设备上的默认行为 */
+      overflow: hidden; /* 防止内容溢出 */
     }
     
     .preview-image {
       max-width: 100%;
       max-height: 80vh; /* 增加高度 */
       display: block;
+      position: relative; /* 添加相对定位 */
+      z-index: 5; /* 确保在水印容器下方 */
+    }
+    
+    #watermark-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
     
     .watermark {
@@ -410,6 +428,10 @@
       padding: 5px;
       pointer-events: auto; /* 确保可以接收鼠标事件 */
       z-index: 20; /* 确保在图片上层 */
+      /* 水印居中 */
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
     }
     
     .draggable-watermark::after {
@@ -482,8 +504,8 @@
       display: flex;
       flex-wrap: wrap;
       margin-top: 15px;
-      height: 120px; /* 固定高度 */
-      min-height: 120px; /* 确保最小高度 */
+      height: 180px; /* 增加高度以显示两行缩略图 */
+      min-height: 180px; /* 确保最小高度 */
       overflow-y: auto;
       width: 100%;
       padding: 8px;
@@ -787,7 +809,7 @@
           <input type="color" id="color" value="#ff0000">
         </div>
         
-        <p class="help-text">提示：可以直接拖动水印调整位置</p>
+        <p class="help-text">提示：可以直接拖动水印调整位置，鼠标滚轮调整大小</p>
         
         <div class="batch-buttons">
           <button class="button" id="download-btn">下载单张图片</button>
@@ -809,7 +831,7 @@
       <div class="preview-container" id="preview-container">
         <div id="no-image-message" style="text-align: center; padding: 20px;">请上传图片进行预览</div>
         <img id="preview-image" class="preview-image" style="display: none;">
-        <div id="watermark-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;"></div>
+        <div id="watermark-container" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;"></div>
       </div>
       
       <div class="thumbnails-container" id="thumbnails-container" style="display: none;"></div>

@@ -93,9 +93,17 @@ function initWatermarkFunctions() {
           watermark.style.fontSize = `${window.watermarkState.fontSize}px`;
           watermark.style.color = window.watermarkState.color;
           watermark.style.opacity = window.watermarkState.opacity / 100;
-          watermark.style.transform = `rotate(${window.watermarkState.rotation}deg) scale(${window.watermarkState.scale})`;
+          
+          // 设置位置和变换，确保初始位置正确
+          if (typeof window.watermarkState.x === 'undefined' || typeof window.watermarkState.y === 'undefined') {
+            // 如果没有位置信息，则居中显示
+            window.watermarkState.x = 50;
+            window.watermarkState.y = 50;
+          }
+          
           watermark.style.left = `${window.watermarkState.x}%`;
           watermark.style.top = `${window.watermarkState.y}%`;
+          watermark.style.transform = `rotate(${window.watermarkState.rotation}deg) scale(${window.watermarkState.scale})`;
           watermark.style.transformOrigin = 'center';
           
           watermarkContainer.appendChild(watermark);
@@ -146,9 +154,17 @@ function initWatermarkFunctions() {
         watermark.id = 'watermark-element'; // 添加ID便于后续引用
         watermark.src = src;
         watermark.style.opacity = window.watermarkState.opacity / 100;
-        watermark.style.transform = `rotate(${window.watermarkState.rotation}deg) scale(${window.watermarkState.scale})`;
+        
+        // 设置位置和变换，确保初始位置正确
+        if (typeof window.watermarkState.x === 'undefined' || typeof window.watermarkState.y === 'undefined') {
+          // 如果没有位置信息，则居中显示
+          window.watermarkState.x = 50;
+          window.watermarkState.y = 50;
+        }
+        
         watermark.style.left = `${window.watermarkState.x}%`;
         watermark.style.top = `${window.watermarkState.y}%`;
+        watermark.style.transform = `rotate(${window.watermarkState.rotation}deg) scale(${window.watermarkState.scale})`;
         watermark.style.maxWidth = `${window.watermarkState.watermarkImageSize}%`;
         watermark.style.maxHeight = `${window.watermarkState.watermarkImageSize}%`;
         watermark.style.transformOrigin = 'center';
@@ -1355,6 +1371,14 @@ function makeDraggable(element) {
   element.style.position = 'absolute'; // 确保元素是绝对定位
   element.style.pointerEvents = 'auto'; // 确保元素可以接收鼠标事件
   
+  // 重置transform，确保初始位置正确
+  if (element.style.transform && element.style.transform.includes('translate')) {
+    // 如果已经有transform，只保留旋转和缩放部分
+    const rotation = window.watermarkState.rotation;
+    const scale = window.watermarkState.scale;
+    element.style.transform = `rotate(${rotation}deg) scale(${scale})`;
+  }
+  
   // 移除旧的事件监听器（避免重复添加）
   element.removeEventListener('mousedown', startDragging);
   
@@ -1391,7 +1415,7 @@ function makeDraggable(element) {
     e.preventDefault();
     
     // 获取容器位置
-    const container = element.parentElement;
+    const container = document.getElementById('watermark-container');
     const containerRect = container.getBoundingClientRect();
     
     // 计算新位置（相对于容器）
