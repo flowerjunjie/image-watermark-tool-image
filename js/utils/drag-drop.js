@@ -4,7 +4,7 @@
  */
 
 import { processImage } from './image-processor.js';
-import { watermarkState, updateState } from '../core/state.js';
+import { watermarkState, updateState, applyFirstImageSettings, saveFirstImageSettings, saveCurrentImageSettings, applyImageSettings } from '../core/state.js';
 import { updateWatermark } from '../core/watermark.js';
 
 /**
@@ -169,11 +169,21 @@ export function handleImageFiles(files) {
     }
   }
   
+  // 检查是否是首次加载图片
+  const isFirstLoad = watermarkState.files.length === 0;
+  
   // 更新状态
   updateState({
     files: imageFiles,
-    currentIndex: 0
+    currentIndex: 0,
+    initialSettingsApplied: isFirstLoad ? false : watermarkState.initialSettingsApplied
   });
+  
+  // 如果是首次加载图片，重置处理过的设置
+  if (isFirstLoad) {
+    watermarkState.processedSettings = {};
+    watermarkState.firstImageSettings = null;
+  }
   
   // 显示缩略图容器
   const thumbnailsContainer = document.getElementById('thumbnails-container');
@@ -229,14 +239,13 @@ export function handleImageFiles(files) {
  * @param {number} index - 图片索引
  */
 function createThumbnail(file, index) {
+  // 创建缩略图容器
   const thumbnailsContainer = document.getElementById('thumbnails-container');
-  if (!thumbnailsContainer) return;
-  
-  // 创建缩略图元素
   const thumbnail = document.createElement('div');
   thumbnail.className = 'thumbnail';
   thumbnail.dataset.index = index;
   
+  // 设置初始激活状态
   if (index === 0) {
     thumbnail.classList.add('active');
   }
@@ -259,6 +268,17 @@ function createThumbnail(file, index) {
   
   // 添加点击事件
   thumbnail.addEventListener('click', () => {
+    // 在切换图片前保存当前图片的设置
+    try {
+      const currentFile = watermarkState.files[watermarkState.currentIndex];
+      if (currentFile && typeof saveCurrentImageSettings === 'function') {
+        console.log('切换图片前保存当前设置:', currentFile.name);
+        saveCurrentImageSettings();
+      }
+    } catch (error) {
+      console.error('保存当前图片设置时出错:', error);
+    }
+    
     // 更新选中状态
     document.querySelectorAll('.thumbnail').forEach(thumb => {
       thumb.classList.remove('active');
@@ -335,12 +355,42 @@ function processCurrentImage() {
   if (previewImage) previewImage.style.display = 'none';
   if (previewCanvas) previewCanvas.style.display = 'none';
   
-  // 重置水印大小调整标志，确保每次加载新图片时都应用正确的水印大小
-  updateState({
-    sizeAdjusted: false,
-    relativePosition: { x: 50, y: 50 }, // 重置水印位置到中心
-    scale: 1.0 // 重置缩放比例
-  });
+  const isFirstImage = watermarkState.currentIndex === 0;
+  const currentFileName = currentFile.name;
+  
+  // 应用水印设置的逻辑
+  if (isFirstImage) {
+    // 如果是第一张图片
+    if (watermarkState.processedSettings[currentFileName]) {
+      // 如果第一张图片已有保存的设置，应用它
+      applyImageSettings(currentFileName);
+    } else if (!watermarkState.initialSettingsApplied) {
+      // 如果是首次加载第一张图片，应用初始设置
+      updateState({
+        sizeAdjusted: false,
+        relativePosition: { x: 50, y: 50 }, // 重置水印位置到中心
+        scale: 1.0 // 重置缩放比例
+      });
+      watermarkState.initialSettingsApplied = true;
+    }
+    // 否则保持当前设置不变
+  } else {
+    // 如果是其他图片
+    if (watermarkState.processedSettings[currentFileName]) {
+      // 如果当前图片已有保存的设置，应用它
+      applyImageSettings(currentFileName);
+    } else if (watermarkState.firstImageSettings) {
+      // 如果没有当前图片的设置，但有第一张图片的设置，应用第一张图片的设置
+      applyFirstImageSettings();
+    } else {
+      // 如果没有任何设置，应用默认设置
+      updateState({
+        sizeAdjusted: false,
+        relativePosition: { x: 50, y: 50 }, // 重置水印位置到中心
+        scale: 1.0 // 重置缩放比例
+      });
+    }
+  }
   
   // 处理并显示图片
   processImage(currentFile, false)
@@ -369,9 +419,26 @@ function processCurrentImage() {
       
       // 等待图片完全加载后更新水印
       setTimeout(() => {
-        // 更新水印
-        updateWatermark();
-        console.log('processCurrentImage: 已调用updateWatermark');
+        try {
+          // 更新水印
+          updateWatermark();
+          console.log('processCurrentImage: 已调用updateWatermark');
+          
+          // 保存当前图片的水印设置
+          if (typeof saveCurrentImageSettings === 'function') {
+            saveCurrentImageSettings();
+          } else {
+            console.warn('saveCurrentImageSettings 函数未定义');
+          }
+          
+          // 如果是第一张图片，同时保存为第一张图片的设置
+          if (isFirstImage && typeof saveFirstImageSettings === 'function') {
+            saveFirstImageSettings();
+          }
+        } catch (error) {
+          console.error('应用水印设置时出错:', error);
+          showError('应用水印设置时出错: ' + error.message);
+        }
       }, 100);
       
       // 添加控制台日志，帮助调试

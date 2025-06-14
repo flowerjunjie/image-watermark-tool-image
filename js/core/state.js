@@ -44,7 +44,16 @@ export const watermarkState = {
   // 历史记录，用于撤销/重做
   history: [],
   historyIndex: -1,
-  maxHistoryLength: 10
+  maxHistoryLength: 10,
+  
+  // 第一张图片的水印设置，用于多图联动
+  firstImageSettings: null,
+  
+  // 标记是否已经应用了初始设置
+  initialSettingsApplied: false,
+  
+  // 标记每张图片是否已经应用了水印设置
+  processedSettings: {}
 };
 
 // 获取当前状态
@@ -154,6 +163,9 @@ export function resetState() {
   watermarkState.processingTimes = [];
   watermarkState.history = [];
   watermarkState.historyIndex = -1;
+  watermarkState.firstImageSettings = null;
+  watermarkState.initialSettingsApplied = false;
+  watermarkState.processedSettings = {};
   return watermarkState;
 }
 
@@ -175,4 +187,166 @@ export function recordProcessingTime(time) {
     min: Math.min(...watermarkState.processingTimes),
     max: Math.max(...watermarkState.processingTimes)
   };
+}
+
+// 保存第一张图片的水印设置
+export function saveFirstImageSettings() {
+  // 创建设置的深拷贝
+  const settings = {
+    type: watermarkState.type,
+    text: watermarkState.text,
+    fontSize: watermarkState.fontSize,
+    opacity: watermarkState.opacity,
+    rotation: watermarkState.rotation,
+    color: watermarkState.color,
+    tileSpacing: watermarkState.tileSpacing,
+    watermarkImageSize: watermarkState.watermarkImageSize,
+    scale: watermarkState.scale,
+    relativePosition: { ...watermarkState.relativePosition },
+    relativeSize: watermarkState.relativeSize,
+    quality: watermarkState.quality,
+    format: watermarkState.format,
+    sizeAdjusted: true // 确保应用设置时不会再次调整大小
+  };
+  
+  // 保存水印图片引用（如果有）
+  if (watermarkState.watermarkImage) {
+    settings.watermarkImage = watermarkState.watermarkImage;
+  }
+  
+  watermarkState.firstImageSettings = settings;
+  
+  // 同时保存到当前图片的设置记录中
+  if (watermarkState.files && watermarkState.files.length > 0) {
+    // 使用文件名作为键，确保唯一性
+    const currentFileName = watermarkState.files[watermarkState.currentIndex].name;
+    watermarkState.processedSettings[currentFileName] = {...settings};
+  }
+  
+  console.log('已保存第一张图片的水印设置:', settings);
+  return settings;
+}
+
+// 应用第一张图片的水印设置
+export function applyFirstImageSettings() {
+  // 确保有保存的设置
+  if (!watermarkState.firstImageSettings) {
+    console.warn('没有保存第一张图片的水印设置，无法应用');
+    return false;
+  }
+  
+  // 应用设置，但保留当前图片的原始图像对象和尺寸
+  const originalImage = watermarkState.originalImage;
+  const originalImageWidth = watermarkState.originalImageWidth;
+  const originalImageHeight = watermarkState.originalImageHeight;
+  const previewCtx = watermarkState.previewCtx;
+  const files = watermarkState.files;
+  const currentIndex = watermarkState.currentIndex;
+  const processed = watermarkState.processed;
+  const processedSettings = watermarkState.processedSettings;
+  const initialSettingsApplied = watermarkState.initialSettingsApplied;
+  
+  // 应用设置
+  Object.assign(watermarkState, watermarkState.firstImageSettings);
+  
+  // 恢复当前图片的原始图像对象和尺寸
+  watermarkState.originalImage = originalImage;
+  watermarkState.originalImageWidth = originalImageWidth;
+  watermarkState.originalImageHeight = originalImageHeight;
+  watermarkState.previewCtx = previewCtx;
+  watermarkState.files = files;
+  watermarkState.currentIndex = currentIndex;
+  watermarkState.processed = processed;
+  watermarkState.processedSettings = processedSettings;
+  watermarkState.initialSettingsApplied = initialSettingsApplied;
+  
+  // 记录当前图片已应用设置
+  if (watermarkState.files && watermarkState.files.length > 0) {
+    const currentFileName = watermarkState.files[watermarkState.currentIndex].name;
+    watermarkState.processedSettings[currentFileName] = {...watermarkState.firstImageSettings};
+  }
+  
+  console.log('已应用第一张图片的水印设置');
+  return true;
+}
+
+// 保存当前图片的水印设置
+export function saveCurrentImageSettings() {
+  if (watermarkState.files && watermarkState.files.length > 0) {
+    const currentFileName = watermarkState.files[watermarkState.currentIndex].name;
+    
+    // 创建设置的深拷贝
+    const settings = {
+      type: watermarkState.type,
+      text: watermarkState.text,
+      fontSize: watermarkState.fontSize,
+      opacity: watermarkState.opacity,
+      rotation: watermarkState.rotation,
+      color: watermarkState.color,
+      tileSpacing: watermarkState.tileSpacing,
+      watermarkImageSize: watermarkState.watermarkImageSize,
+      scale: watermarkState.scale,
+      relativePosition: { ...watermarkState.relativePosition },
+      relativeSize: watermarkState.relativeSize,
+      quality: watermarkState.quality,
+      format: watermarkState.format,
+      sizeAdjusted: true
+    };
+    
+    // 保存水印图片引用（如果有）
+    if (watermarkState.watermarkImage) {
+      settings.watermarkImage = watermarkState.watermarkImage;
+    }
+    
+    // 保存到当前图片的设置记录中
+    watermarkState.processedSettings[currentFileName] = settings;
+    
+    // 如果是第一张图片，同时更新firstImageSettings
+    if (watermarkState.currentIndex === 0) {
+      watermarkState.firstImageSettings = {...settings};
+    }
+    
+    console.log(`已保存图片 ${currentFileName} 的水印设置`);
+    return settings;
+  }
+  
+  return null;
+}
+
+// 应用特定图片的水印设置
+export function applyImageSettings(fileName) {
+  if (!watermarkState.processedSettings[fileName]) {
+    console.warn(`没有找到图片 ${fileName} 的水印设置`);
+    return false;
+  }
+  
+  // 应用设置，但保留当前图片的原始图像对象和尺寸
+  const originalImage = watermarkState.originalImage;
+  const originalImageWidth = watermarkState.originalImageWidth;
+  const originalImageHeight = watermarkState.originalImageHeight;
+  const previewCtx = watermarkState.previewCtx;
+  const files = watermarkState.files;
+  const currentIndex = watermarkState.currentIndex;
+  const processed = watermarkState.processed;
+  const processedSettings = watermarkState.processedSettings;
+  const initialSettingsApplied = watermarkState.initialSettingsApplied;
+  const firstImageSettings = watermarkState.firstImageSettings;
+  
+  // 应用设置
+  Object.assign(watermarkState, watermarkState.processedSettings[fileName]);
+  
+  // 恢复当前图片的原始图像对象和尺寸
+  watermarkState.originalImage = originalImage;
+  watermarkState.originalImageWidth = originalImageWidth;
+  watermarkState.originalImageHeight = originalImageHeight;
+  watermarkState.previewCtx = previewCtx;
+  watermarkState.files = files;
+  watermarkState.currentIndex = currentIndex;
+  watermarkState.processed = processed;
+  watermarkState.processedSettings = processedSettings;
+  watermarkState.initialSettingsApplied = initialSettingsApplied;
+  watermarkState.firstImageSettings = firstImageSettings;
+  
+  console.log(`已应用图片 ${fileName} 的水印设置`);
+  return true;
 } 

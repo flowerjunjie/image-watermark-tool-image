@@ -3,8 +3,26 @@
  * 处理表单输入控件的事件和数据更新
  */
 
-import { watermarkState, updateState, undo, redo } from '../core/state.js';
+import { watermarkState, updateState, undo, redo, saveFirstImageSettings, saveCurrentImageSettings } from '../core/state.js';
 import { updateWatermark } from '../core/watermark.js';
+
+/**
+ * 检查并更新当前图片的设置
+ * 同时如果当前显示的是第一张图片，则更新保存的第一张图片设置
+ */
+function updateFirstImageSettingsIfNeeded() {
+  // 先保存当前图片的设置
+  saveCurrentImageSettings();
+  
+  // 检查是否有多张图片且当前显示的是第一张
+  if (watermarkState.files && 
+      watermarkState.files.length > 1 && 
+      watermarkState.currentIndex === 0) {
+    // 更新第一张图片的设置
+    saveFirstImageSettings();
+    console.log('已更新第一张图片的水印设置');
+  }
+}
 
 /**
  * 初始化输入处理器
@@ -23,6 +41,9 @@ export function initInputHandlers() {
       
       // 更新水印
       updateWatermark();
+      
+      // 如果是第一张图片，更新保存的设置
+      updateFirstImageSettingsIfNeeded();
     });
   }
   
@@ -44,6 +65,9 @@ export function initInputHandlers() {
       
       // 更新水印
       updateWatermark();
+      
+      // 如果是第一张图片，更新保存的设置
+      updateFirstImageSettingsIfNeeded();
     });
   }
   
@@ -88,6 +112,9 @@ export function initInputHandlers() {
         
         // 更新水印
         updateWatermark();
+        
+        // 如果是第一张图片，更新保存的设置
+        updateFirstImageSettingsIfNeeded();
       });
     }
     
@@ -112,6 +139,9 @@ export function initInputHandlers() {
         
         // 更新水印
         updateWatermark();
+        
+        // 如果是第一张图片，更新保存的设置
+        updateFirstImageSettingsIfNeeded();
       });
     }
     
@@ -136,6 +166,9 @@ export function initInputHandlers() {
         
         // 更新水印
         updateWatermark();
+        
+        // 如果是第一张图片，更新保存的设置
+        updateFirstImageSettingsIfNeeded();
       });
     }
   }
@@ -161,6 +194,9 @@ export function initInputHandlers() {
     
     // 更新水印
     updateWatermark();
+    
+    // 如果是第一张图片，更新保存的设置
+    updateFirstImageSettingsIfNeeded();
   }
   
   // 透明度处理
@@ -204,6 +240,9 @@ export function initInputHandlers() {
         
         // 更新水印
         updateWatermark();
+        
+        // 如果是第一张图片，更新保存的设置
+        updateFirstImageSettingsIfNeeded();
       });
     }
     
@@ -212,7 +251,7 @@ export function initInputHandlers() {
       opacityDecrease.addEventListener('click', function() {
         const currentValue = parseInt(opacityInput.value);
         const min = parseInt(opacityInput.min);
-        const newValue = Math.max(min, currentValue - 5);
+        const newValue = Math.max(min, currentValue - 1);
         
         // 更新滑动条和输入框
         opacityInput.value = newValue;
@@ -228,6 +267,9 @@ export function initInputHandlers() {
         
         // 更新水印
         updateWatermark();
+        
+        // 如果是第一张图片，更新保存的设置
+        updateFirstImageSettingsIfNeeded();
       });
     }
     
@@ -236,7 +278,7 @@ export function initInputHandlers() {
       opacityIncrease.addEventListener('click', function() {
         const currentValue = parseInt(opacityInput.value);
         const max = parseInt(opacityInput.max);
-        const newValue = Math.min(max, currentValue + 5);
+        const newValue = Math.min(max, currentValue + 1);
         
         // 更新滑动条和输入框
         opacityInput.value = newValue;
@@ -252,6 +294,9 @@ export function initInputHandlers() {
         
         // 更新水印
         updateWatermark();
+        
+        // 如果是第一张图片，更新保存的设置
+        updateFirstImageSettingsIfNeeded();
       });
     }
   }
@@ -277,6 +322,9 @@ export function initInputHandlers() {
     
     // 更新水印
     updateWatermark();
+    
+    // 如果是第一张图片，更新保存的设置
+    updateFirstImageSettingsIfNeeded();
   }
   
   // 旋转角度处理
@@ -320,6 +368,9 @@ export function initInputHandlers() {
         
         // 更新水印
         updateWatermark();
+        
+        // 如果是第一张图片，更新保存的设置
+        updateFirstImageSettingsIfNeeded();
       });
     }
     
@@ -328,7 +379,7 @@ export function initInputHandlers() {
       rotationDecrease.addEventListener('click', function() {
         const currentValue = parseInt(rotationInput.value);
         const min = parseInt(rotationInput.min);
-        const newValue = Math.max(min, currentValue - 5);
+        const newValue = Math.max(min, currentValue - 1);
         
         // 更新滑动条和输入框
         rotationInput.value = newValue;
@@ -344,6 +395,9 @@ export function initInputHandlers() {
         
         // 更新水印
         updateWatermark();
+        
+        // 如果是第一张图片，更新保存的设置
+        updateFirstImageSettingsIfNeeded();
       });
     }
     
@@ -352,7 +406,7 @@ export function initInputHandlers() {
       rotationIncrease.addEventListener('click', function() {
         const currentValue = parseInt(rotationInput.value);
         const max = parseInt(rotationInput.max);
-        const newValue = Math.min(max, currentValue + 5);
+        const newValue = Math.min(max, currentValue + 1);
         
         // 更新滑动条和输入框
         rotationInput.value = newValue;
@@ -368,6 +422,9 @@ export function initInputHandlers() {
         
         // 更新水印
         updateWatermark();
+        
+        // 如果是第一张图片，更新保存的设置
+        updateFirstImageSettingsIfNeeded();
       });
     }
   }
@@ -393,16 +450,36 @@ export function initInputHandlers() {
     
     // 更新水印
     updateWatermark();
+    
+    // 如果是第一张图片，更新保存的设置
+    updateFirstImageSettingsIfNeeded();
   }
   
-  // 水印颜色处理
-  const colorInput = document.getElementById('color');
+  // 水印类型选择
+  const watermarkTypeSelect = document.getElementById('watermark-type');
+  
+  if (watermarkTypeSelect) {
+    watermarkTypeSelect.addEventListener('change', function() {
+      // 更新状态
+      updateState({
+        type: this.value
+      });
+      
+      // 更新UI显示/隐藏相关控制项
+      updateUIFromState();
+      
+      // 更新水印
+      updateWatermark();
+      
+      // 如果是第一张图片，更新保存的设置
+      updateFirstImageSettingsIfNeeded();
+    });
+  }
+  
+  // 水印颜色选择
+  const colorInput = document.getElementById('watermark-color');
   
   if (colorInput) {
-    // 使用状态中的颜色值初始化
-    colorInput.value = watermarkState.color || '#ff0000';
-    
-    // 颜色选择事件
     colorInput.addEventListener('input', function() {
       // 更新状态
       updateState({
@@ -411,6 +488,9 @@ export function initInputHandlers() {
       
       // 更新水印
       updateWatermark();
+      
+      // 如果是第一张图片，更新保存的设置
+      updateFirstImageSettingsIfNeeded();
     });
   }
   
@@ -419,11 +499,6 @@ export function initInputHandlers() {
   const watermarkImageSizeValue = document.getElementById('watermark-image-size-value');
   
   if (watermarkImageSizeInput && watermarkImageSizeValue) {
-    // 使用状态中的值初始化界面元素
-    const stateValue = watermarkState.watermarkImageSize || 40;
-    watermarkImageSizeInput.value = stateValue;
-    watermarkImageSizeValue.textContent = `${stateValue}%`;
-    
     watermarkImageSizeInput.addEventListener('input', function() {
       const value = parseInt(this.value);
       
@@ -437,6 +512,9 @@ export function initInputHandlers() {
       
       // 更新水印
       updateWatermark();
+      
+      // 如果是第一张图片，更新保存的设置
+      updateFirstImageSettingsIfNeeded();
     });
   }
   
@@ -593,7 +671,7 @@ function updateUIFromState() {
   }
   
   // 更新颜色
-  const colorInput = document.getElementById('color');
+  const colorInput = document.getElementById('watermark-color');
   if (colorInput) {
     colorInput.value = watermarkState.color;
   }

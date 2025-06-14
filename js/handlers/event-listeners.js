@@ -3,7 +3,7 @@
  * 处理按钮、菜单等DOM元素的事件监听
  */
 
-import { watermarkState, updateState } from '../core/state.js';
+import { watermarkState, updateState, saveFirstImageSettings, applyFirstImageSettings, saveCurrentImageSettings, applyImageSettings } from '../core/state.js';
 import { updateWatermark } from '../core/watermark.js';
 import { handleImageFiles } from '../utils/drag-drop.js';
 import { processImage, batchProcessImages, generateAndDownloadZip } from '../utils/image-processor.js';
@@ -166,6 +166,12 @@ export function initEventListeners() {
       
       console.log(`开始批量处理 ${watermarkState.files.length} 张图片`);
       
+      // 确保已保存第一张图片的水印设置
+      if (!watermarkState.firstImageSettings) {
+        // 如果没有保存第一张图片的设置，则保存当前设置
+        saveFirstImageSettings();
+      }
+      
       // 创建处理队列
       const processQueue = [];
       const totalFiles = watermarkState.files.length;
@@ -177,13 +183,29 @@ export function initEventListeners() {
         processQueue.push(() => {
           return new Promise((resolve) => {
             // 更新进度
-            const progress = (processedCount / totalFiles) * 100;
             if (modalProgressBar) {
+              const progress = (processedCount / totalFiles) * 100;
               modalProgressBar.style.width = `${progress}%`;
               modalProgressBar.textContent = `${Math.round(progress)}%`;
             }
             if (processingStatus) {
-              processingStatus.textContent = `正在处理: ${file.name} (${Math.round(progress)}%)`;
+              processingStatus.textContent = `正在处理: ${file.name} (${Math.round((processedCount / totalFiles) * 100)}%)`;
+            }
+            
+            // 应用水印设置
+            const fileName = file.name;
+            
+            // 优先使用该图片自己的设置
+            if (watermarkState.processedSettings[fileName]) {
+              applyImageSettings(fileName);
+            } 
+            // 否则使用第一张图片的设置
+            else if (watermarkState.firstImageSettings) {
+              applyFirstImageSettings();
+            }
+            // 如果都没有，使用默认设置
+            else {
+              // 保持当前设置不变
             }
             
             // 处理图片（添加水印）
@@ -196,17 +218,44 @@ export function initEventListeners() {
                     dataUrl: dataUrl
                   });
                   console.log(`成功处理图片 ${index + 1}/${totalFiles}: ${file.name}`);
+                  
+                  // 保存当前图片的设置
+                  saveCurrentImageSettings();
                 } else {
                   console.warn(`图片处理失败，跳过: ${file.name}`);
                 }
                 
-                // 更新进度
+                // 更新已处理数量和进度
                 processedCount++;
+                
+                // 更新进度
+                if (modalProgressBar) {
+                  const progress = (processedCount / totalFiles) * 100;
+                  modalProgressBar.style.width = `${progress}%`;
+                  modalProgressBar.textContent = `${Math.round(progress)}%`;
+                }
+                if (processingStatus) {
+                  processingStatus.textContent = `已处理: ${processedCount}/${totalFiles} (${Math.round((processedCount / totalFiles) * 100)}%)`;
+                }
+                
                 resolve();
               })
               .catch(error => {
                 console.error(`处理图片时出错: ${file.name}`, error);
+                
+                // 即使出错也要继续处理其他图片
                 processedCount++;
+                
+                // 更新进度
+                if (modalProgressBar) {
+                  const progress = (processedCount / totalFiles) * 100;
+                  modalProgressBar.style.width = `${progress}%`;
+                  modalProgressBar.textContent = `${Math.round(progress)}%`;
+                }
+                if (processingStatus) {
+                  processingStatus.textContent = `已处理: ${processedCount}/${totalFiles} (${Math.round((processedCount / totalFiles) * 100)}%)`;
+                }
+                
                 resolve(); // 即使出错也继续处理下一张
               });
           });
