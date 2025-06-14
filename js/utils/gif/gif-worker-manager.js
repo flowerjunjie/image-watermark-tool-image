@@ -34,8 +34,25 @@ export const GifWorkerProcessor = {
           return;
         }
         
+        // 获取正确的worker脚本路径
+        let workerPath;
+        
+        // 检测环境并设置合适的路径
+        if (window.location.href.includes('file://')) {
+          // 本地文件系统模式
+          workerPath = 'js/utils/gif/gif-worker.js';
+        } else if (window.location.href.includes('localhost') || window.location.href.includes('127.0.0.1')) {
+          // 本地服务器模式
+          workerPath = '/js/utils/gif/gif-worker.js';
+        } else {
+          // 生产服务器模式 - 尝试相对路径
+          workerPath = './js/utils/gif/gif-worker.js';
+        }
+
+        console.log('使用GIF Worker路径:', workerPath);
+        
         // 创建Worker
-        gifWorker = new Worker('/js/utils/gif/gif-worker.js');
+        gifWorker = new Worker(workerPath);
         
         // 设置超时
         const initTimeout = setTimeout(() => {
@@ -88,7 +105,25 @@ export const GifWorkerProcessor = {
                 
               case 'result':
                 // 处理成功
-                if (task.onComplete) task.onComplete(data.blob);
+                if (data.error) {
+                  // 如果有错误，调用错误处理
+                  if (task.onError) task.onError(data.error);
+                } else if (data.buffer) {
+                  // 如果收到ArrayBuffer，创建Blob
+                  try {
+                    const blob = new Blob([data.buffer], { type: data.mimeType || 'image/gif' });
+                    if (task.onComplete) task.onComplete(blob);
+                  } catch (error) {
+                    console.error('创建Blob时出错:', error);
+                    if (task.onError) task.onError('创建Blob时出错: ' + error.message);
+                  }
+                } else if (data.blob) {
+                  // 兼容旧版本，直接使用blob
+                  if (task.onComplete) task.onComplete(data.blob);
+                } else {
+                  // 没有有效数据
+                  if (task.onError) task.onError('Worker未返回有效数据');
+                }
                 pendingTasks.delete(data.taskId);
                 break;
                 
@@ -231,7 +266,17 @@ export const GifWorkerProcessor = {
           type: 'process',
           taskId,
           frames: transferableFrames,
-          options
+          options: {
+            ...options,
+            // 确保正确传递位置信息
+            position: typeof options.position === 'object' ? 
+              { 
+                x: parseFloat(options.position.x), 
+                y: parseFloat(options.position.y) 
+              } : options.position,
+            positionX: parseFloat(options.positionX || 50),
+            positionY: parseFloat(options.positionY || 50)
+          }
         });
       } catch (error) {
         console.error('准备Worker数据时出错:', error);

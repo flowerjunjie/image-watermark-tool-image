@@ -315,22 +315,28 @@ export function processGif(gifSource, watermarkOptions = {}) {
                   
                   // 如果position是对象，提取x和y值
                   if (typeof position === 'object' && position !== null) {
-                    positionX = position.x || positionX;
-                    positionY = position.y || positionY;
-                    position = 'custom'; // 强制使用custom模式
+                    positionX = parseFloat(position.x) || positionX;
+                    positionY = parseFloat(position.y) || positionY;
+                    console.log(`检测到position对象: x=${position.x}, y=${position.y}, 解析后: x=${positionX}, y=${positionY}`);
+                    // 保留原始对象，不转换为custom模式
                   }
+                  
+                  // 确保位置值为数值
+                  positionX = parseFloat(positionX);
+                  positionY = parseFloat(positionY);
                   
                   console.log('传递给Worker的水印选项:', JSON.stringify({
                     position: position,
                     positionX: positionX,
-                    positionY: positionY
+                    positionY: positionY,
+                    relativePosition: typeof position === 'object' ? position : null
                   }));
                   
                   GifWorkerProcessor.processGifFrames(frames, {
                     ...watermarkOptions,
                     applyWatermark: true,
                     // 确保正确传递位置信息
-                    position: position || 'custom',
+                    position: position,
                     positionX: positionX || 50,
                     positionY: positionY || 50
                   }, {
@@ -471,21 +477,23 @@ export function processGif(gifSource, watermarkOptions = {}) {
               
               // 如果position是对象，提取x和y值
               if (typeof position === 'object' && position !== null) {
-                positionX = position.x || positionX;
-                positionY = position.y || positionY;
-                position = 'custom'; // 强制使用custom模式
+                positionX = parseFloat(position.x) || positionX;
+                positionY = parseFloat(position.y) || positionY;
+                console.log(`主线程检测到position对象: x=${position.x}, y=${position.y}, 解析后: x=${positionX}, y=${positionY}`);
+                // 保留原始对象，不转换为custom模式
               }
               
               console.log('传递给主线程处理的水印选项:', JSON.stringify({
                 position: position,
                 positionX: positionX,
-                positionY: positionY
+                positionY: positionY,
+                relativePosition: typeof position === 'object' ? position : null
               }));
               
               processGifFrames(frames, {
                 ...watermarkOptions,
                 // 确保正确传递位置信息
-                position: position || 'custom',
+                position: position,
                 positionX: positionX || 50,
                 positionY: positionY || 50
               }, progressBar, progressContainer)
@@ -778,10 +786,27 @@ function processGifFrames(frames, options, progressBar, progressContainer) {
         return;
       }
       
+      // 获取正确的worker脚本路径
+      let workerScriptPath;
+      
+      // 检测环境并设置合适的路径
+      if (window.location.href.includes('file://')) {
+        // 本地文件系统模式
+        workerScriptPath = 'public/libs/gif.worker.js';
+      } else if (window.location.href.includes('localhost') || window.location.href.includes('127.0.0.1')) {
+        // 本地服务器模式
+        workerScriptPath = '/public/libs/gif.worker.js';
+      } else {
+        // 生产服务器模式 - 尝试相对路径和绝对路径
+        workerScriptPath = './public/libs/gif.worker.js';
+      }
+
+      console.log('使用GIF worker脚本路径:', workerScriptPath);
+        
       const gif = new window.GIF({
         workers: Math.min(navigator.hardwareConcurrency || 2, 2), // 根据CPU核心数优化，但不超过2个worker
         quality: options.quality || 10, // 使用较高的质量值，确保GIF清晰
-        workerScript: '/public/libs/gif.worker.js',
+        workerScript: workerScriptPath,
         width: Math.floor(width),
         height: Math.floor(height),
         workerOptions: {
@@ -934,52 +959,58 @@ function processGifFrames(frames, options, progressBar, progressContainer) {
           
           // 如果position是对象，提取x和y值
           if (typeof position === 'object' && position !== null) {
-            positionX = position.x || positionX;
-            positionY = position.y || positionY;
-            position = 'custom'; // 强制使用custom模式
+            positionX = parseFloat(position.x) || positionX;
+            positionY = parseFloat(position.y) || positionY;
+            console.log(`帧 ${i}: 检测到position对象: x=${position.x}, y=${position.y}, 解析后: x=${positionX}, y=${positionY}`);
+            // 保留原始对象，不转换为custom模式
           }
           
+          // 确保位置值为数值
+          positionX = parseFloat(positionX);
+          positionY = parseFloat(positionY);
+          
           // 记录水印位置信息
-          console.log(`应用水印到帧 ${i}, 位置: ${position}, X: ${positionX}, Y: ${positionY}`);
+          console.log(`应用水印到帧 ${i}, 位置类型: ${typeof position}, 位置: ${JSON.stringify(position)}, X: ${positionX}, Y: ${positionY}`);
           
           // 使用applyWatermarkToCanvas函数，它接受options参数
           applyWatermarkToCanvas(ctx, tempCanvas.width, tempCanvas.height, {
             ...options,
             // 确保位置信息正确
-            position: position || 'custom',
+            position: position,
             positionX: positionX || 50,
-            positionY: positionY || 50
+            positionY: positionY || 50,
+            isGif: true // 明确标识这是GIF处理
           });
         }
         
-              // 添加帧到GIF
-      try {
-        // 检查帧是否有足够的数据
-        if (tempCanvas.width === 0 || tempCanvas.height === 0) {
-          console.warn('跳过无效的帧 - 尺寸为0');
-          return;
-        }
-        
-        // 确保画布中有内容
-        const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-        const hasData = Array.from(imageData.data).some(val => val > 0);
-        
-        if (!hasData) {
-          console.warn('跳过空白帧');
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-          ctx.fillStyle = '#ff0000';
-          ctx.font = '16px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText('仅供验证使用', tempCanvas.width/2, tempCanvas.height/2);
-        }
-        
-        // 直接添加canvas到GIF
-        gif.addFrame(tempCanvas, {
-          delay: frame.delay || 100,
-          copy: true,
-          dispose: 2 // 使用"恢复到背景色"的处置方法
-        });
+        // 添加帧到GIF
+        try {
+          // 检查帧是否有足够的数据
+          if (tempCanvas.width === 0 || tempCanvas.height === 0) {
+            console.warn('跳过无效的帧 - 尺寸为0');
+            return;
+          }
+          
+          // 确保画布中有内容
+          const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+          const hasData = Array.from(imageData.data).some(val => val > 0);
+          
+          if (!hasData) {
+            console.warn('跳过空白帧');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            ctx.fillStyle = '#ff0000';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('仅供验证使用', tempCanvas.width/2, tempCanvas.height/2);
+          }
+          
+          // 直接添加canvas到GIF
+          gif.addFrame(tempCanvas, {
+            delay: frame.delay || 100,
+            copy: true,
+            dispose: 2 // 使用"恢复到背景色"的处置方法
+          });
         } catch (error) {
           console.warn(`添加帧 ${i} 到GIF时出错:`, error);
           // 尝试创建一个新的临时画布并复制内容
@@ -1049,7 +1080,63 @@ function processGifFrames(frames, options, progressBar, progressContainer) {
         gif.render();
       } catch (renderError) {
         console.error('GIF渲染失败:', renderError);
-        reject(new Error('GIF渲染失败'));
+        
+        // 提供更详细的错误信息并尝试修复
+        console.log('尝试诊断GIF渲染失败原因...');
+        console.log('已处理帧数:', watermarkedFrames.length);
+        console.log('GIF配置:', {
+          width: width,
+          height: height,
+          frameCount: frames.length,
+          processedFrames: processedFrames,
+          quality: options.quality || 10,
+          workerScript: gif.options.workerScript,
+          workers: gif.options.workers
+        });
+        
+        // 重新尝试渲染，使用默认的worker路径
+        try {
+          console.log('重试GIF渲染，使用备用配置...');
+          const backupGif = new window.GIF({
+            workers: 1, // 减少worker数量
+            quality: options.quality || 10,
+            workerScript: 'public/libs/gif.worker.js', // 尝试不同的路径
+            width: Math.floor(width),
+            height: Math.floor(height),
+            dither: false,
+            transparent: null,
+            background: '#ffffff'
+          });
+          
+          // 配置完成事件
+          backupGif.on('finished', function(blob) {
+            console.log('备用GIF渲染成功!');
+            if (progressBar) progressBar.style.width = '100%';
+            if (progressContainer) progressContainer.style.display = 'none';
+            resolve(new Blob([blob], { type: 'image/gif' }));
+          });
+          
+          // 配置错误事件
+          backupGif.on('error', function(error) {
+            console.error('备用GIF渲染也失败:', error);
+            reject(new Error('GIF渲染失败'));
+          });
+          
+          // 尝试添加至少第一帧
+          if (watermarkedFrames.length > 0) {
+            // 添加第一帧
+            backupGif.addFrame(tempCanvas, {
+              delay: watermarkedFrames[0].delay || 100,
+              copy: true
+            });
+            backupGif.render();
+          } else {
+            reject(new Error('无可用帧进行渲染'));
+          }
+        } catch (backupError) {
+          console.error('备用GIF渲染失败:', backupError);
+          reject(new Error('GIF渲染失败'));
+        }
       }
     } catch (error) {
       console.error('处理GIF帧时出错:', error);
@@ -1127,11 +1214,28 @@ function processGifFramesDirect(frames, options) {
         
       console.log(`使用 ${workerCount} 个worker处理GIF`);
       
+      // 获取正确的worker脚本路径
+      let workerScriptPath;
+      
+      // 检测环境并设置合适的路径
+      if (window.location.href.includes('file://')) {
+        // 本地文件系统模式
+        workerScriptPath = 'public/libs/gif.worker.js';
+      } else if (window.location.href.includes('localhost') || window.location.href.includes('127.0.0.1')) {
+        // 本地服务器模式
+        workerScriptPath = '/public/libs/gif.worker.js';
+      } else {
+        // 生产服务器模式 - 尝试相对路径和绝对路径
+        workerScriptPath = './public/libs/gif.worker.js';
+      }
+
+      console.log('直接处理使用GIF worker脚本路径:', workerScriptPath);
+        
       // 创建GIF编码器
       const gif = new window.GIF({
         workers: workerCount,
         quality: options.quality || 10, // 使用较高的质量值，确保GIF清晰
-        workerScript: '/public/libs/gif.worker.js',
+        workerScript: workerScriptPath,
         width: width,
         height: height,
         transparent: null, // 不使用透明色

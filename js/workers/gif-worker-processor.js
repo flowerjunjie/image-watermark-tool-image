@@ -290,42 +290,51 @@ function applyWatermark(canvas, ctx, options) {
       
       // 计算位置
       let x, y;
-      const position = options.position || 'center';
+      const position = options.position;
       const marginX = options.marginX || 10;
       const marginY = options.marginY || 10;
       
       // 根据位置计算坐标
-      switch (position) {
-        case 'top-left':
-          x = textWidth / 2 + marginX;
-          y = textHeight / 2 + marginY;
-          break;
-        case 'top-right':
-          x = canvas.width - textWidth / 2 - marginX;
-          y = textHeight / 2 + marginY;
-          break;
-        case 'bottom-left':
-          x = textWidth / 2 + marginX;
-          y = canvas.height - textHeight / 2 - marginY;
-          break;
-        case 'bottom-right':
-          x = canvas.width - textWidth / 2 - marginX;
-          y = canvas.height - textHeight / 2 - marginY;
-          break;
-        case 'center':
-          x = canvas.width / 2;
-          y = canvas.height / 2;
-          break;
-        case 'custom':
-          // 使用自定义位置
-          x = canvas.width * (options.positionX || 50) / 100;
-          y = canvas.height * (options.positionY || 50) / 100;
-          console.log(`Worker: 使用自定义位置 x=${x}, y=${y}, 原始值: positionX=${options.positionX}, positionY=${options.positionY}`);
-          break;
-        default:
-          // 默认居中
-          x = canvas.width / 2;
-          y = canvas.height / 2;
+      if (typeof position === 'object' && position !== null) {
+        // 如果是对象，直接使用x和y属性（百分比值）
+        const percentX = parseFloat(position.x) || 50;
+        const percentY = parseFloat(position.y) || 50;
+        x = (percentX / 100) * canvas.width;
+        y = (percentY / 100) * canvas.height;
+        console.log(`Worker: 使用对象position: x=${x}, y=${y}, 原始百分比: x=${percentX}%, y=${percentY}%`);
+      } else {
+        switch (position) {
+          case 'top-left':
+            x = textWidth / 2 + marginX;
+            y = textHeight / 2 + marginY;
+            break;
+          case 'top-right':
+            x = canvas.width - textWidth / 2 - marginX;
+            y = textHeight / 2 + marginY;
+            break;
+          case 'bottom-left':
+            x = textWidth / 2 + marginX;
+            y = canvas.height - textHeight / 2 - marginY;
+            break;
+          case 'bottom-right':
+            x = canvas.width - textWidth / 2 - marginX;
+            y = canvas.height - textHeight / 2 - marginY;
+            break;
+          case 'center':
+            x = canvas.width / 2;
+            y = canvas.height / 2;
+            break;
+          case 'custom':
+            // 使用自定义位置
+            x = canvas.width * (options.positionX || 50) / 100;
+            y = canvas.height * (options.positionY || 50) / 100;
+            console.log(`Worker: 使用自定义位置 x=${x}, y=${y}, 原始值: positionX=${options.positionX}, positionY=${options.positionY}`);
+            break;
+          default:
+            // 默认居中
+            x = canvas.width / 2;
+            y = canvas.height / 2;
+        }
       }
       
       // 应用旋转
@@ -354,41 +363,50 @@ function applyWatermark(canvas, ctx, options) {
       
       // 计算位置
       let x, y;
-      const position = options.position || 'center';
+      const position = options.position;
       const marginX = options.marginX || 10;
       const marginY = options.marginY || 10;
       
       // 根据位置计算坐标
-      switch (position) {
-        case 'top-left':
-          x = watermarkWidth / 2 + marginX;
-          y = watermarkHeight / 2 + marginY;
-          break;
-        case 'top-right':
-          x = canvas.width - watermarkWidth / 2 - marginX;
-          y = watermarkHeight / 2 + marginY;
-          break;
-        case 'bottom-left':
-          x = watermarkWidth / 2 + marginX;
-          y = canvas.height - watermarkHeight / 2 - marginY;
-          break;
-        case 'bottom-right':
-          x = canvas.width - watermarkWidth / 2 - marginX;
-          y = canvas.height - watermarkHeight / 2 - marginY;
-          break;
-        case 'center':
-          x = canvas.width / 2;
-          y = canvas.height / 2;
-          break;
-        case 'custom':
-          // 使用自定义位置
-          x = canvas.width * (options.positionX || 50) / 100;
-          y = canvas.height * (options.positionY || 50) / 100;
-          break;
-        default:
-          // 默认居中
-          x = canvas.width / 2;
-          y = canvas.height / 2;
+      if (typeof position === 'object' && position !== null) {
+        // 如果是对象，直接使用x和y属性（百分比值）
+        const percentX = parseFloat(position.x) || 50;
+        const percentY = parseFloat(position.y) || 50;
+        x = (percentX / 100) * canvas.width;
+        y = (percentY / 100) * canvas.height;
+        console.log(`Worker: 图像水印使用对象position: x=${x}, y=${y}, 原始百分比: x=${percentX}%, y=${percentY}%`);
+      } else {
+        switch (position) {
+          case 'top-left':
+            x = watermarkWidth / 2 + marginX;
+            y = watermarkHeight / 2 + marginY;
+            break;
+          case 'top-right':
+            x = canvas.width - watermarkWidth / 2 - marginX;
+            y = watermarkHeight / 2 + marginY;
+            break;
+          case 'bottom-left':
+            x = watermarkWidth / 2 + marginX;
+            y = canvas.height - watermarkHeight / 2 - marginY;
+            break;
+          case 'bottom-right':
+            x = canvas.width - watermarkWidth / 2 - marginX;
+            y = canvas.height - watermarkHeight / 2 - marginY;
+            break;
+          case 'center':
+            x = canvas.width / 2;
+            y = canvas.height / 2;
+            break;
+          case 'custom':
+            // 使用自定义位置
+            x = canvas.width * (options.positionX || 50) / 100;
+            y = canvas.height * (options.positionY || 50) / 100;
+            break;
+          default:
+            // 默认居中
+            x = canvas.width / 2;
+            y = canvas.height / 2;
+        }
       }
       
       // 尝试绘制图像数据

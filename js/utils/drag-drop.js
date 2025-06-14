@@ -1244,6 +1244,9 @@ function displayPreviewImage(blobUrl, isGif = false, options = {}) {
   // 设置加载事件
   newImage.onload = function() {
     console.log('图片加载完成，显示预览');
+    // 检查图片是否成功加载并有内容
+    if (newImage.naturalWidth > 0 && newImage.naturalHeight > 0) {
+      console.log(`预览图片尺寸: ${newImage.naturalWidth}x${newImage.naturalHeight}`);
     newImage.style.display = 'block';
     
     if (noImageMessage) {
@@ -1264,6 +1267,22 @@ function displayPreviewImage(blobUrl, isGif = false, options = {}) {
       updateWatermark();
       console.log('图片加载完成，更新水印位置');
     }, 100);
+    } else {
+      console.error('预览图片加载完成但尺寸为0，可能是白屏问题');
+      // 显示错误信息
+      if (noImageMessage) {
+        noImageMessage.textContent = 'GIF处理可能出错，尝试重新加载...';
+        noImageMessage.style.display = 'block';
+      }
+      // 如果是GIF白屏，尝试使用原始GIF
+      if (isGif && options.originalSource) {
+        console.log('尝试使用原始GIF作为备用');
+        setTimeout(() => {
+          const originalUrl = URL.createObjectURL(options.originalSource);
+          newImage.src = originalUrl;
+        }, 500);
+      }
+    }
     
     // 如果有回调函数，调用它
     if (options.onSuccess) {

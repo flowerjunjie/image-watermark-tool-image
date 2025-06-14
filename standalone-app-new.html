@@ -618,5 +618,86 @@
       }
     }, 3000); // 增加超时时间到3秒
   </script>
+  
+  <!-- 调试修复GIF白屏问题 -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('初始化GIF白屏问题修复脚本');
+      
+      // 监听显示GIF时的错误
+      document.addEventListener('previewUpdate', function(event) {
+        if (event.detail && event.detail.processResult && event.detail.processResult.isGif) {
+          console.log('监测到GIF预览更新事件', event.detail);
+          
+          // 获取预览图像
+          const previewImage = document.getElementById('preview-image');
+          
+          if (previewImage) {
+            // 添加额外的错误处理
+            previewImage.onerror = function(error) {
+              console.error('GIF预览加载错误:', error);
+              
+              // 显示错误消息
+              const noImageMessage = document.getElementById('no-image-message');
+              if (noImageMessage) {
+                noImageMessage.textContent = 'GIF加载出错，尝试使用原始文件...';
+                noImageMessage.style.display = 'block';
+              }
+              
+              // 尝试使用原始文件
+              if (event.detail.file) {
+                setTimeout(function() {
+                  const fileUrl = URL.createObjectURL(event.detail.file);
+                  previewImage.src = fileUrl;
+                  
+                  // 测试图像是否能正确加载
+                  previewImage.onload = function() {
+                    console.log('成功使用原始GIF作为备用');
+                    
+                    // 隐藏错误消息
+                    if (noImageMessage) noImageMessage.style.display = 'none';
+                    
+                    // 显示图像
+                    previewImage.style.display = 'block';
+                    
+                    // 标记为GIF
+                    const gifBadge = document.getElementById('gif-badge');
+                    if (gifBadge) gifBadge.style.display = 'block';
+                  };
+                }, 500);
+              }
+            };
+            
+            // 监听加载事件以检测白屏
+            previewImage.onload = function() {
+              // 如果图像没有尺寸，可能是白屏
+              if (previewImage.naturalWidth === 0 || previewImage.naturalHeight === 0) {
+                console.warn('检测到可能的GIF白屏问题 - 尺寸为零');
+                
+                // 显示错误消息
+                const noImageMessage = document.getElementById('no-image-message');
+                if (noImageMessage) {
+                  noImageMessage.textContent = 'GIF可能加载有误，尝试使用原始文件...';
+                  noImageMessage.style.display = 'block';
+                }
+                
+                // 尝试使用原始文件
+                if (event.detail.file) {
+                  setTimeout(function() {
+                    const fileUrl = URL.createObjectURL(event.detail.file);
+                    previewImage.src = fileUrl;
+                    
+                    console.log('尝试使用原始GIF作为备用');
+                  }, 500);
+                }
+              } else {
+                console.log('GIF预览加载成功，尺寸:', previewImage.naturalWidth, 'x', previewImage.naturalHeight);
+              }
+            };
+          }
+        }
+      });
+    });
+  </script>
 </body>
 </html>  

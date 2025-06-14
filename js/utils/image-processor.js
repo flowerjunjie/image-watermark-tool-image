@@ -291,18 +291,14 @@ async function processGifImage(file, shouldApplyWatermark = false, options = {})
       
       // 需要应用水印，创建水印选项
       const watermarkOptions = {
-        type: watermarkState.type || 'text',
+        type: 'text', // 强制使用文本水印，不使用平铺
         text: watermarkState.text || '仅供验证使用',
         color: watermarkState.color || '#ff0000',
         fontSize: watermarkState.fontSize || 24,
         opacity: watermarkState.opacity || 50,
         rotation: watermarkState.rotation || 0,
-        // 正确传递位置信息 - 确保使用正确的枚举值
-        position: watermarkState.position || 'custom',
-        positionX: watermarkState.relativePosition ? watermarkState.relativePosition.x : 50,
-        positionY: watermarkState.relativePosition ? watermarkState.relativePosition.y : 50,
-        marginX: watermarkState.marginX || 20,
-        marginY: watermarkState.marginY || 20,
+        // 直接使用relativePosition对象作为position
+        position: watermarkState.relativePosition || { x: 50, y: 50 },
         tileSpacing: watermarkState.tileSpacing || 150,
         watermarkImage: watermarkState.watermarkImage,
         fileName: file.name,
@@ -310,14 +306,13 @@ async function processGifImage(file, shouldApplyWatermark = false, options = {})
         applyWatermark: shouldApplyWatermark,
         quality: options.quality || 10,
         onProgress: options.onProgress,
+        isGif: true, // 明确标识这是GIF处理
         ...options
       };
       
       // 调试输出水印选项
       console.log('创建的GIF水印选项:', JSON.stringify({
         position: watermarkOptions.position,
-        positionX: watermarkOptions.positionX,
-        positionY: watermarkOptions.positionY,
         relativePosition: watermarkState.relativePosition
       }));
       
@@ -1158,14 +1153,26 @@ function applyWatermarkToCanvas(ctx, canvasWidth, canvasHeight, watermarkOptions
     rotation, 
     position = { x: 50, y: 50 }, // 默认值，居中
     tileSpacing,
-    watermarkImage
+    watermarkImage,
+    isGif = false // 添加参数标识是否为GIF
   } = watermarkOptions;
   
-  console.log('应用水印到Canvas，类型:', type, '位置:', position);
+  // 确保position是有效对象
+  let posX = 50, posY = 50;
+  
+  if (typeof position === 'object' && position !== null) {
+    posX = parseFloat(position.x) || 50;
+    posY = parseFloat(position.y) || 50;
+  } else if (watermarkOptions.positionX !== undefined && watermarkOptions.positionY !== undefined) {
+    posX = parseFloat(watermarkOptions.positionX);
+    posY = parseFloat(watermarkOptions.positionY);
+  }
+  
+  console.log('应用水印到Canvas，类型:', type, '位置类型:', typeof position, '处理后位置:', {x: posX, y: posY});
   
   // 计算实际位置（基于百分比）
-  const actualX = (position.x / 100) * canvasWidth;
-  const actualY = (position.y / 100) * canvasHeight;
+  const actualX = (posX / 100) * canvasWidth;
+  const actualY = (posY / 100) * canvasHeight;
   
   // 设置透明度
   ctx.globalAlpha = opacity / 100;
@@ -1173,8 +1180,11 @@ function applyWatermarkToCanvas(ctx, canvasWidth, canvasHeight, watermarkOptions
   // 保存当前的变换状态
   ctx.save();
   
+  // 判断水印类型，GIF强制使用text类型而不是tiled
+  const effectiveType = isGif ? 'text' : (type || 'text');
+  
   // 根据水印类型渲染
-  switch (type) {
+  switch (effectiveType) {
     case 'text':
       renderTextWatermark(ctx, actualX, actualY, text, fontSize, color, rotation);
       break;
@@ -1334,9 +1344,20 @@ export function applyWatermarkToImageData(imageData, watermarkOptions) {
     watermarkImage
   } = watermarkOptions;
   
+  // 确保position是有效对象
+  let posX = 50, posY = 50;
+  
+  if (typeof position === 'object' && position !== null) {
+    posX = parseFloat(position.x) || 50;
+    posY = parseFloat(position.y) || 50;
+  } else if (watermarkOptions.positionX !== undefined && watermarkOptions.positionY !== undefined) {
+    posX = parseFloat(watermarkOptions.positionX);
+    posY = parseFloat(watermarkOptions.positionY);
+  }
+  
   // 计算实际位置（基于百分比）
-  const actualX = (position.x / 100) * canvas.width;
-  const actualY = (position.y / 100) * canvas.height;
+  const actualX = (posX / 100) * canvas.width;
+  const actualY = (posY / 100) * canvas.height;
   
   // 设置透明度
   ctx.globalAlpha = opacity / 100;

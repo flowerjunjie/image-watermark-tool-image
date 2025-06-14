@@ -5,8 +5,19 @@
 
 // 导入GIF.js依赖（Worker环境中通过importScripts）
 try {
-  importScripts('/public/libs/gif.js');
-  console.log('[GIF Worker] 成功加载GIF.js库');
+  // 尝试多个可能的路径
+  try {
+    importScripts('/public/libs/gif.js');
+    console.log('[GIF Worker] 成功从绝对路径加载GIF.js库');
+  } catch (e) {
+    try {
+      importScripts('./public/libs/gif.js');
+      console.log('[GIF Worker] 成功从相对路径加载GIF.js库');
+    } catch (e2) {
+      importScripts('../../../public/libs/gif.js');
+      console.log('[GIF Worker] 成功从相对上级路径加载GIF.js库');
+    }
+  }
 } catch (error) {
   console.error('[GIF Worker] 加载GIF.js库失败:', error);
   
@@ -109,17 +120,58 @@ function processGifFrames(frames, options, taskId) {
     // 处理完成回调
     gif.on('finished', blob => {
       try {
-        // 创建一个可转移的Blob副本
-        const blobCopy = new Blob([blob], { type: 'image/gif' });
+        // 将Blob转换为ArrayBuffer，这是可转移的对象类型
+        const reader = new FileReader();
+        reader.onload = function() {
+          try {
+            const arrayBuffer = reader.result;
+            
+            self.postMessage({
+              type: 'result',
+              taskId: taskId,
+              buffer: arrayBuffer,
+              mimeType: 'image/gif',
+              frameCount: frames.length,
+              width: width,
+              height: height
+            }, [arrayBuffer]);
+            
+            // 清理任务
+            tasks.delete(taskId);
+          } catch (readerError) {
+            console.error('[GIF Worker] 发送ArrayBuffer时出错:', readerError);
+            // 尝试不使用转移对象
+            self.postMessage({
+              type: 'result',
+              taskId: taskId,
+              error: readerError.message,
+              frameCount: frames.length,
+              width: width,
+              height: height
+            });
+            
+            // 清理任务
+            tasks.delete(taskId);
+          }
+        };
         
-        self.postMessage({
-          type: 'result',
-          taskId: taskId,
-          blob: blobCopy,
-          frameCount: frames.length,
-          width: width,
-          height: height
-        }, [blobCopy]);
+        reader.onerror = function() {
+          console.error('[GIF Worker] 读取Blob失败');
+          self.postMessage({
+            type: 'result',
+            taskId: taskId,
+            error: 'Failed to read Blob',
+            frameCount: frames.length,
+            width: width,
+            height: height
+          });
+          
+          // 清理任务
+          tasks.delete(taskId);
+        };
+        
+        // 开始读取Blob为ArrayBuffer
+        reader.readAsArrayBuffer(blob);
       } catch (error) {
         console.error('[GIF Worker] 发送结果时出错:', error);
         // 尝试不使用转移对象
@@ -131,10 +183,10 @@ function processGifFrames(frames, options, taskId) {
           width: width,
           height: height
         });
+        
+        // 清理任务
+        tasks.delete(taskId);
       }
-      
-      // 清理任务
-      tasks.delete(taskId);
     });
     
     // 添加帧到GIF
@@ -242,38 +294,38 @@ function renderWatermark(canvas, ctx, options) {
     // 计算水印位置
     let x, y;
     
-    // 检查position类型
+    // 解析position为具体的x,y值
     if (typeof options.position === 'object' && options.position !== null) {
-      // 如果是对象，直接使用x和y属性
-      x = (options.position.x / 100) * canvas.width;
-      y = (options.position.y / 100) * canvas.height;
-    } else if (options.position === 'custom' && options.positionX !== undefined && options.positionY !== undefined) {
-      // 如果是custom模式，使用positionX和positionY
-      x = (options.positionX / 100) * canvas.width;
-      y = (options.positionY / 100) * canvas.height;
+      // 如果是对象，直接使用x和y属性（百分比值）
+      const percentX = parseFloat(options.position.x) || 50;
+      const percentY = parseFloat(options.position.y) || 50;
+      x = (percentX / 100) * canvas.width;
+      y = (percentY / 100) * canvas.height;
+      console.log(`[GIF Worker] 使用对象position: x=${x}, y=${y}, 原始百分比: x=${percentX}%, y=${percentY}%`);
+    } else if (options.positionX !== undefined && options.positionY !== undefined) {
+      // 如果提供了positionX和positionY（百分比值）
+      const percentX = parseFloat(options.positionX) || 50;
+      const percentY = parseFloat(options.positionY) || 50;
+      x = (percentX / 100) * canvas.width;
+      y = (percentY / 100) * canvas.height;
+      console.log(`[GIF Worker] 使用数值position: x=${x}, y=${y}, 原始百分比: x=${percentX}%, y=${percentY}%`);
     } else {
       // 默认中心位置
       x = canvas.width / 2;
       y = canvas.height / 2;
+      console.log(`[GIF Worker] 使用默认中心位置: x=${x}, y=${y}`);
     }
     
-    // 设置透明度
-    const opacity = (options.opacity || 50) / 100;
-    ctx.globalAlpha = opacity;
-    
-    // 保存上下文状态
-    ctx.save();
-    
-    // 设置旋转中心点
-    ctx.translate(x, y);
-    ctx.rotate((options.rotation || 0) * Math.PI / 180);
-    
-    // 根据水印类型进行处理
-    if (options.type === 'text') {
-      // 文本水印
+    // 如果是文本水印
+    if (options.type === 'text' || !options.type) {
+      // 获取水印文本和样式
       const text = options.text || '仅供验证使用';
       const fontSize = options.fontSize || 24;
       const color = options.color || '#ff0000';
+      const opacity = (options.opacity || 50) / 100;
+      
+      // 设置透明度
+      ctx.globalAlpha = opacity;
       
       // 设置字体和颜色
       ctx.font = `${fontSize}px Arial`;
@@ -281,35 +333,21 @@ function renderWatermark(canvas, ctx, options) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
+      // 保存上下文状态，应用旋转
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((options.rotation || 0) * Math.PI / 180);
+      
       // 绘制文本
       ctx.fillText(text, 0, 0);
       
-      // 如果启用了平铺
-      if (options.tileSpacing && options.tileSpacing > 0) {
-        const spacing = options.tileSpacing;
-        const columns = Math.ceil(canvas.width / spacing);
-        const rows = Math.ceil(canvas.height / spacing);
-        
-        for (let i = -columns; i <= columns; i++) {
-          for (let j = -rows; j <= rows; j++) {
-            if (i === 0 && j === 0) continue; // 跳过中心点，已经绘制了
-            
-            const offsetX = i * spacing;
-            const offsetY = j * spacing;
-            
-            ctx.fillText(text, offsetX, offsetY);
-          }
-        }
-      }
+      // 恢复上下文状态
+      ctx.restore();
     } else {
-      // 未支持的水印类型
-      console.warn('[GIF Worker] 未支持的水印类型:', options.type);
+      console.warn('[GIF Worker] 仅支持文本水印，其他类型将被忽略');
     }
     
-    // 恢复上下文状态
-    ctx.restore();
-    
-    // 恢复透明度
+    // 重置透明度
     ctx.globalAlpha = 1.0;
   } catch (error) {
     console.error('[GIF Worker] 渲染水印时出错:', error);

@@ -1,1 +1,31 @@
-{ "name": "image-watermark-tool", "version": "1.0.0", "description": "图片水印工具", "main": "main.js", "author": "Image Watermark Tool Team", "license": "MIT" }
+{
+  "name": "image-watermark-tool",
+  "version": "1.0.0",
+  "description": "图片水印工具",
+  "main": "main.js",
+  "author": "Image Watermark Tool Team",
+  "license": "MIT",
+  "devDependencies": {
+    "gifwrap": "^0.10.1"
+  },
+  "dependencies": {
+    "canvas": "^3.1.0",
+    "file-saver": "^2.0.5",
+    "image-q": "^4.0.0",
+    "jszip": "^3.10.1",
+    "omggif": "^1.0.10",
+    "pixelmatch": "^7.1.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flowerjunjie/image-watermark-tool-image.git"
+  },
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/flowerjunjie/image-watermark-tool-image/issues"
+  },
+  "homepage": "https://github.com/flowerjunjie/image-watermark-tool-image#readme"
+}
