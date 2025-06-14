@@ -335,6 +335,13 @@ function processCurrentImage() {
   if (previewImage) previewImage.style.display = 'none';
   if (previewCanvas) previewCanvas.style.display = 'none';
   
+  // 重置水印大小调整标志，确保每次加载新图片时都应用正确的水印大小
+  updateState({
+    sizeAdjusted: false,
+    relativePosition: { x: 50, y: 50 }, // 重置水印位置到中心
+    scale: 1.0 // 重置缩放比例
+  });
+  
   // 处理并显示图片
   processImage(currentFile, false)
     .then((blobUrl) => {

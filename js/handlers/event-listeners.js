@@ -390,6 +390,21 @@ export function initEventListeners() {
         helpModalContent.innerHTML = generateHelpContent();
       }
     });
+    
+    // 添加关闭按钮的事件监听
+    const closeButton = helpModal.querySelector('.close-button');
+    if (closeButton) {
+      closeButton.addEventListener('click', function() {
+        helpModal.style.display = 'none';
+      });
+    }
+    
+    // 点击模态框外部区域关闭
+    window.addEventListener('click', function(event) {
+      if (event.target === helpModal) {
+        helpModal.style.display = 'none';
+      }
+    });
   }
   
   // 背景色按钮点击事件
@@ -475,6 +490,7 @@ function generateHelpContent() {
         <li><strong>文字水印</strong>：输入水印文字，调整大小、颜色、透明度和旋转角度。</li>
         <li><strong>平铺水印</strong>：设置文字内容，调整大小、颜色、透明度、旋转角度和平铺间距。</li>
         <li><strong>图片水印</strong>：上传一张图片作为水印，调整大小、透明度和旋转角度。</li>
+        <li>默认水印大小已优化为36px，提供更好的可见性。</li>
       </ul>
     </div>
     
@@ -495,7 +511,25 @@ function generateHelpContent() {
         <li>设置好水印的类型、内容和样式。</li>
         <li>点击"开始批量处理"按钮，等待处理完成。</li>
         <li>处理完成后，点击"批量下载"按钮，将会下载包含所有处理后图片的ZIP文件。</li>
+        <li>批量处理时会显示"处理中..."进度提示，请耐心等待完成。</li>
       </ol>
+    </div>
+    
+    <div class="help-section">
+      <h3>图片背景设置</h3>
+      <p>为减轻眼睛疲劳，可以选择不同的预览背景色：</p>
+      <ul>
+        <li><strong>白色背景</strong>：默认背景色，适合大多数图片。</li>
+        <li><strong>浅灰背景</strong>：中性背景色，减少眼部疲劳。</li>
+        <li><strong>浅蓝背景</strong>：冷色调背景，适合长时间查看。</li>
+        <li><strong>浅绿背景</strong>：护眼色，减少屏幕蓝光。</li>
+        <li><strong>浅黄背景</strong>：暖色调背景，适合夜间使用。</li>
+      </ul>
+    </div>
+    
+    <div class="help-section">
+      <h3>图片质量设置</h3>
+      <p>可以调整输出图片的质量，默认为92%的高质量设置。质量越高，图片越清晰但文件体积越大。</p>
     </div>
     
     <div class="help-section">
@@ -504,6 +538,7 @@ function generateHelpContent() {
         <li>对于小图片（宽度或高度小于300像素），水印大小会自动调整。</li>
         <li>批量处理大量图片可能需要一些时间，请耐心等待。</li>
         <li>本工具在本地处理图片，不会上传到服务器，保证您的图片隐私安全。</li>
+        <li>批量下载功能会保留原始图片格式，不进行格式转换。</li>
       </ul>
     </div>
   `;

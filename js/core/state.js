@@ -7,7 +7,7 @@
 export const watermarkState = {
   type: "text", // 水印类型：text, tiled, image
   text: "仅供验证使用", // 水印文本
-  fontSize: 36, // 字体大小，从24改为36
+  fontSize: 24, // 字体大小
   opacity: 50, // 透明度 (0-100)
   rotation: 0, // 旋转角度
   color: "#ff0000", // 水印颜色
@@ -133,7 +133,7 @@ export function redo() {
 export function resetState() {
   watermarkState.type = "text";
   watermarkState.text = "仅供验证使用";
-  watermarkState.fontSize = 36; // 从24改为36
+  watermarkState.fontSize = 24;
   watermarkState.opacity = 50;
   watermarkState.rotation = 0;
   watermarkState.color = "#ff0000";

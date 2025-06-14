@@ -11,8 +11,10 @@ English | [简体中文](https://github.com/unilei/image-watermark-tool/blob/mas
 - **Top Menu Bar**: Added File, Edit, View, and Help menus for quick access to common functions
 - **Detailed Help Documentation**: Access complete user guide through the Help menu or the question mark button
 - **Image Background Color Switching**: Support for multiple eye-friendly background colors to reduce eye strain
-- **Batch Processing Optimization**: Improved performance and stability for batch processing
+- **Batch Processing Optimization**: Improved performance and stability for batch processing with "Processing..." progress indicator
 - **Interface Optimization**: More compact layout and better visual experience
+- **Default Watermark Size Optimization**: Adjusted default watermark text size to 36px for better visibility
+- **Original Format Preservation**: Batch download preserves original image formats without conversion
 
 ### Quick Start
 

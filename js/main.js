@@ -8,6 +8,7 @@ import { initEventListeners } from './handlers/event-listeners.js';
 import { initInputHandlers } from './handlers/input-handlers.js';
 import { initDragAndDrop } from './utils/drag-drop.js';
 import { initWheelZoom } from './utils/wheel-zoom.js';
+import { watermarkState, updateState } from './core/state.js';
 
 // 初始化标志
 let initialized = false;
@@ -23,6 +24,14 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   try {
+    // 设置水印的初始位置和缩放
+    updateState({
+      relativePosition: { x: 50, y: 50 },
+      scale: 1.0,
+      sizeAdjusted: false
+    });
+    console.log('已设置初始水印位置和缩放');
+    
     // 初始化各个模块
     console.log('初始化事件监听器');
     initEventListeners();
@@ -94,4 +103,4 @@ loadJSZip()
       errorContainer.textContent = error.message;
       errorContainer.classList.add('show');
     }
-  }); 
+  });

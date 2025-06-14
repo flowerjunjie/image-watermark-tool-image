@@ -588,6 +588,7 @@ footer {
   z-index: 1000;
   justify-content: center;
   align-items: center;
+  overflow: hidden; /* 防止滚动条出现 */
 }
 
 .modal-content {
@@ -656,6 +657,8 @@ footer {
   font-size: 24px;
   cursor: pointer;
   color: #666;
+  z-index: 1001; /* 确保按钮在最上层 */
+  padding: 5px 10px;
 }
 
 .close-button:hover {
@@ -824,4 +827,18 @@ footer {
 .icon {
   font-size: 18px;
   color: #333;
+}
+
+/* 帮助模态框特定样式 */
+#help-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
 } 

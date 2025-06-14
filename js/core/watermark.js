@@ -76,13 +76,20 @@ export function updateWatermark() {
     
     // 根据图片大小调整水印大小
     if (isSmallImage && !watermarkState.sizeAdjusted) {
-      // 调整水印大小
+      // 调整水印缩放比例，但不再限制字体大小
+      const adjustedScale = Math.max(0.5, Math.min(watermarkState.scale || 1.0, 0.8));
+      
       updateState({
-        fontSize: Math.min(watermarkState.fontSize, 16),
-        scale: Math.min(watermarkState.scale || 1.0, 0.5),
+        scale: adjustedScale,
         sizeAdjusted: true
       });
-      console.log('小图片自动调整: 字体大小=', watermarkState.fontSize, '缩放比例=', watermarkState.scale);
+      console.log('小图片自动调整: 缩放比例=', adjustedScale);
+    } else if (!isSmallImage && !watermarkState.sizeAdjusted) {
+      // 对于正常大小的图片，不再限制最小字体大小
+      updateState({
+        sizeAdjusted: true
+      });
+      console.log('正常图片设置: 字体大小=', watermarkState.fontSize);
     }
     
     // 显示Canvas，隐藏图片
@@ -229,6 +236,7 @@ function renderTextWatermark(ctx, x, y, canvasWidth, canvasHeight) {
   ctx.rotate((watermarkState.rotation * Math.PI) / 180);
   
   // 设置字体和颜色
+  // 不再限制最小字体大小，直接使用用户设置的字体大小
   const fontSize = watermarkState.fontSize * watermarkState.scale;
   ctx.font = `${fontSize}px Arial`;
   ctx.fillStyle = watermarkState.color;

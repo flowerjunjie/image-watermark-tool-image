@@ -168,7 +168,7 @@ export function processImage(file, shouldApplyWatermark = false, options = {}) {
                   type: watermarkState.type || 'text',
                   text: watermarkState.text || '仅供验证使用',
                   color: watermarkState.color || '#ff0000',
-                  fontSize: watermarkState.fontSize || 36,
+                  fontSize: watermarkState.fontSize,
                   opacity: watermarkState.opacity || 50,
                   rotation: watermarkState.rotation || 0,
                   position: watermarkState.relativePosition || { x: 50, y: 50 },
@@ -275,7 +275,7 @@ function processImageInMainThread(dataUrl, shouldApplyWatermark, options) {
               type: watermarkState.type || 'text',
               text: watermarkState.text || '仅供验证使用',
               color: watermarkState.color || '#ff0000',
-              fontSize: watermarkState.fontSize || 24,
+              fontSize: watermarkState.fontSize,
               opacity: watermarkState.opacity || 50,
               rotation: watermarkState.rotation || 0,
               position: watermarkState.relativePosition || { x: 50, y: 50 }, // 使用relativePosition
