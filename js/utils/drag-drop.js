@@ -363,27 +363,34 @@ function processCurrentImage() {
     // 如果是第一张图片
     if (watermarkState.processedSettings[currentFileName]) {
       // 如果第一张图片已有保存的设置，应用它
+      console.log('应用第一张图片的已保存设置');
       applyImageSettings(currentFileName);
     } else if (!watermarkState.initialSettingsApplied) {
       // 如果是首次加载第一张图片，应用初始设置
+      console.log('首次加载第一张图片，应用初始设置');
       updateState({
         sizeAdjusted: false,
         relativePosition: { x: 50, y: 50 }, // 重置水印位置到中心
         scale: 1.0 // 重置缩放比例
       });
       watermarkState.initialSettingsApplied = true;
+    } else {
+      console.log('第一张图片使用当前设置');
     }
     // 否则保持当前设置不变
   } else {
     // 如果是其他图片
     if (watermarkState.processedSettings[currentFileName]) {
       // 如果当前图片已有保存的设置，应用它
+      console.log('应用非第一张图片的已保存设置');
       applyImageSettings(currentFileName);
     } else if (watermarkState.firstImageSettings) {
       // 如果没有当前图片的设置，但有第一张图片的设置，应用第一张图片的设置
+      console.log('应用第一张图片的设置到当前图片');
       applyFirstImageSettings();
     } else {
       // 如果没有任何设置，应用默认设置
+      console.log('应用默认设置到当前图片');
       updateState({
         sizeAdjusted: false,
         relativePosition: { x: 50, y: 50 }, // 重置水印位置到中心
@@ -426,6 +433,7 @@ function processCurrentImage() {
           
           // 保存当前图片的水印设置
           if (typeof saveCurrentImageSettings === 'function') {
+            console.log('processCurrentImage: 保存当前图片设置');
             saveCurrentImageSettings();
           } else {
             console.warn('saveCurrentImageSettings 函数未定义');
@@ -433,6 +441,7 @@ function processCurrentImage() {
           
           // 如果是第一张图片，同时保存为第一张图片的设置
           if (isFirstImage && typeof saveFirstImageSettings === 'function') {
+            console.log('processCurrentImage: 保存第一张图片设置');
             saveFirstImageSettings();
           }
         } catch (error) {

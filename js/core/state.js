@@ -306,10 +306,17 @@ export function saveCurrentImageSettings() {
       watermarkState.firstImageSettings = {...settings};
     }
     
-    console.log(`已保存图片 ${currentFileName} 的水印设置`);
+    console.log(`已保存图片 ${currentFileName} 的水印设置:`, 
+      JSON.stringify({
+        position: settings.relativePosition,
+        scale: settings.scale,
+        fontSize: settings.fontSize
+      })
+    );
     return settings;
   }
   
+  console.warn('无法保存当前图片设置：没有加载图片或图片索引无效');
   return null;
 }
 
@@ -331,6 +338,15 @@ export function applyImageSettings(fileName) {
   const processedSettings = watermarkState.processedSettings;
   const initialSettingsApplied = watermarkState.initialSettingsApplied;
   const firstImageSettings = watermarkState.firstImageSettings;
+  
+  const savedSettings = watermarkState.processedSettings[fileName];
+  console.log(`正在应用图片 ${fileName} 的水印设置:`, 
+    JSON.stringify({
+      position: savedSettings.relativePosition,
+      scale: savedSettings.scale,
+      fontSize: savedSettings.fontSize
+    })
+  );
   
   // 应用设置
   Object.assign(watermarkState, watermarkState.processedSettings[fileName]);
