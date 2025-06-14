@@ -841,4 +841,42 @@ footer {
   z-index: 1000;
   justify-content: center;
   align-items: center;
+}
+
+/* GIF动图相关样式 */
+.gif-image {
+  border: 2px solid #1976d2;
+  border-radius: 6px;
+  box-shadow: 0 0 10px rgba(25, 118, 210, 0.5);
+}
+
+/* GIF标识 */
+.gif-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(25, 118, 210, 0.8);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 100;
+}
+
+/* GIF处理进度条 */
+.gif-progress-container {
+  width: 100%;
+  height: 4px;
+  background-color: #f0f0f0;
+  border-radius: 2px;
+  margin-top: 5px;
+  overflow: hidden;
+}
+
+.gif-progress-bar {
+  height: 100%;
+  background-color: #1976d2;
+  width: 0%;
+  transition: width 0.3s ease;
 } 

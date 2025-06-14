@@ -271,7 +271,7 @@ function createThumbnail(file, index) {
     // 在切换图片前保存当前图片的设置
     try {
       const currentFile = watermarkState.files[watermarkState.currentIndex];
-      if (currentFile && typeof saveCurrentImageSettings === 'function') {
+      if (currentFile) {
         console.log('切换图片前保存当前设置:', currentFile.name);
         saveCurrentImageSettings();
       }
@@ -340,6 +340,7 @@ function processCurrentImage() {
   const previewImage = document.getElementById('preview-image');
   const previewCanvas = document.getElementById('preview-canvas');
   const noImageMessage = document.getElementById('no-image-message');
+  const gifBadge = document.getElementById('gif-badge');
   
   // 显示加载状态
   if (noImageMessage) {
@@ -354,58 +355,49 @@ function processCurrentImage() {
   // 重置预览图像和Canvas的显示状态
   if (previewImage) previewImage.style.display = 'none';
   if (previewCanvas) previewCanvas.style.display = 'none';
+  if (gifBadge) gifBadge.style.display = 'none';
   
-  const isFirstImage = watermarkState.currentIndex === 0;
-  const currentFileName = currentFile.name;
+  // 检查是否已经处理过这个图片
+  const fileName = currentFile.name;
+  let shouldApplyWatermark = true; // 默认应用水印
   
-  // 应用水印设置的逻辑
-  if (isFirstImage) {
-    // 如果是第一张图片
-    if (watermarkState.processedSettings[currentFileName]) {
-      // 如果第一张图片已有保存的设置，应用它
-      console.log('应用第一张图片的已保存设置');
-      applyImageSettings(currentFileName);
-    } else if (!watermarkState.initialSettingsApplied) {
-      // 如果是首次加载第一张图片，应用初始设置
-      console.log('首次加载第一张图片，应用初始设置');
-      updateState({
-        sizeAdjusted: false,
-        relativePosition: { x: 50, y: 50 }, // 重置水印位置到中心
-        scale: 1.0 // 重置缩放比例
-      });
-      watermarkState.initialSettingsApplied = true;
-    } else {
-      console.log('第一张图片使用当前设置');
-    }
-    // 否则保持当前设置不变
-  } else {
-    // 如果是其他图片
-    if (watermarkState.processedSettings[currentFileName]) {
-      // 如果当前图片已有保存的设置，应用它
-      console.log('应用非第一张图片的已保存设置');
-      applyImageSettings(currentFileName);
-    } else if (watermarkState.firstImageSettings) {
-      // 如果没有当前图片的设置，但有第一张图片的设置，应用第一张图片的设置
-      console.log('应用第一张图片的设置到当前图片');
-      applyFirstImageSettings();
-    } else {
-      // 如果没有任何设置，应用默认设置
-      console.log('应用默认设置到当前图片');
-      updateState({
-        sizeAdjusted: false,
-        relativePosition: { x: 50, y: 50 }, // 重置水印位置到中心
-        scale: 1.0 // 重置缩放比例
-      });
-    }
+  // 检查是否应用设置
+  let settingsApplied = false;
+  
+  // 如果有这个图片的保存设置，应用它
+  if (watermarkState.processedSettings[fileName]) {
+    console.log(`应用图片 ${fileName} 的保存设置`);
+    settingsApplied = applyImageSettings(fileName);
+    console.log('设置应用状态:', settingsApplied);
   }
   
-  // 处理并显示图片
-  processImage(currentFile, false)
-    .then((blobUrl) => {
-      // 确保获取到了blobUrl
-      if (!blobUrl) {
-        showError('处理图片失败，未获取到图片数据');
-        return;
+  // 如果没有应用这个图片的设置，但有第一张图片的设置，应用第一张图片的设置
+  if (!settingsApplied && watermarkState.currentIndex > 0 && watermarkState.firstImageSettings) {
+    console.log('应用第一张图片的设置');
+    applyFirstImageSettings();
+    settingsApplied = true;
+  }
+  
+  // 处理图片
+  processImage(currentFile, shouldApplyWatermark)
+    .then(result => {
+      // 检查是否为GIF结果
+      const { blobUrl, width, height, isGif } = result;
+      
+      // 更新预览图像
+      if (previewImage) {
+        previewImage.src = blobUrl;
+        previewImage.style.display = 'block';
+        
+        // 如果是GIF，添加gif类并显示GIF标识
+        if (isGif) {
+          previewImage.classList.add('gif-image');
+          if (gifBadge) gifBadge.style.display = 'block';
+          console.log('显示GIF动图');
+        } else {
+          previewImage.classList.remove('gif-image');
+          if (gifBadge) gifBadge.style.display = 'none';
+        }
       }
       
       // 隐藏加载消息
@@ -413,48 +405,42 @@ function processCurrentImage() {
         noImageMessage.style.display = 'none';
       }
       
-      // 显示处理后的图片
-      if (previewImage) {
-        // 先清除旧的src以避免内存泄漏
-        if (previewImage.src && previewImage.src.startsWith('blob:')) {
-          URL.revokeObjectURL(previewImage.src);
+      // 更新图片处理状态
+      updateState({
+        processed: {
+          ...watermarkState.processed,
+          [fileName]: blobUrl
         }
-        
-        previewImage.src = blobUrl;
-        previewImage.style.display = 'block';
+      });
+      
+      console.log('图片处理完成，已更新预览');
+      
+      // 更新水印
+      updateWatermark();
+      console.log('processCurrentImage: 已调用updateWatermark');
+      
+      // 保存当前图片的设置
+      try {
+        saveCurrentImageSettings();
+        console.log('已保存当前图片设置:', fileName);
+      } catch (error) {
+        console.error('保存当前图片设置时出错:', error);
       }
       
-      // 等待图片完全加载后更新水印
-      setTimeout(() => {
-        try {
-          // 更新水印
-          updateWatermark();
-          console.log('processCurrentImage: 已调用updateWatermark');
-          
-          // 保存当前图片的水印设置
-          if (typeof saveCurrentImageSettings === 'function') {
-            console.log('processCurrentImage: 保存当前图片设置');
-            saveCurrentImageSettings();
-          } else {
-            console.warn('saveCurrentImageSettings 函数未定义');
-          }
-          
-          // 如果是第一张图片，同时保存为第一张图片的设置
-          if (isFirstImage && typeof saveFirstImageSettings === 'function') {
-            console.log('processCurrentImage: 保存第一张图片设置');
-            saveFirstImageSettings();
-          }
-        } catch (error) {
-          console.error('应用水印设置时出错:', error);
-          showError('应用水印设置时出错: ' + error.message);
-        }
-      }, 100);
-      
-      // 添加控制台日志，帮助调试
-      console.log('图片处理完成，已更新预览');
+      // 如果是第一张图片，保存设置作为默认
+      if (watermarkState.currentIndex === 0 && !watermarkState.firstImageSettings) {
+        saveFirstImageSettings();
+        console.log('已保存第一张图片设置作为默认');
+      }
     })
     .catch(error => {
-      showError('处理图片时出错: ' + error.message);
+      console.error('处理图片失败:', error);
+      showError('处理图片失败: ' + error.message);
+      
+      // 隐藏加载消息
+      if (noImageMessage) {
+        noImageMessage.style.display = 'none';
+      }
     });
 }
 

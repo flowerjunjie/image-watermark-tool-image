@@ -9,6 +9,7 @@ import { initInputHandlers } from './handlers/input-handlers.js';
 import { initDragAndDrop } from './utils/drag-drop.js';
 import { initWheelZoom } from './utils/wheel-zoom.js';
 import { watermarkState, updateState } from './core/state.js';
+import { initGifProcessor } from './utils/gif/gif-processor.js';
 
 // 初始化标志
 let initialized = false;
@@ -48,6 +49,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化水印
     console.log('初始化水印');
     updateWatermark();
+    
+    // 初始化GIF处理器
+    initGifProcessor();
+    console.log('初始化GIF处理器');
     
     // 标记为已初始化
     initialized = true;
