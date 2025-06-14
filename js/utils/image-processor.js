@@ -265,18 +265,63 @@ async function processGifImage(file, shouldApplyWatermark = false, options = {})
   console.log('开始处理GIF图片:', file.name);
   
   try {
-    // 使用专门的GIF处理器
-    const result = await processGif(file, {
-      applyWatermark: shouldApplyWatermark,
-      quality: options.quality || 10,
-      onProgress: options.onProgress
-    });
+    // 判断是否为下载模式
+    const isDownloadMode = options.isDownload === true;
     
-    // 添加GIF标记
-    result.isGif = true;
-    
-    console.log('GIF处理完成:', file.name);
-    return result;
+    // 如果是预览模式（非下载模式），我们只加载原始GIF用于预览，不烧录水印
+    if (!isDownloadMode) {
+      console.log('GIF预览模式，加载原始GIF，不烧录水印');
+      
+      // 创建文件URL
+      const fileUrl = URL.createObjectURL(file);
+      
+      // 创建图片对象
+      const img = new Image();
+      
+      // 等待图片加载
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = fileUrl;
+      });
+      
+      // 保存原始图像对象到状态中，供水印拖动使用
+      updateState({
+        originalImage: img,
+        originalImageWidth: img.width,
+        originalImageHeight: img.height
+      });
+      
+      // 显示GIF标识
+      const gifBadge = document.getElementById('gif-badge');
+      if (gifBadge) {
+        gifBadge.style.display = 'block';
+      }
+      
+      // 返回仅用于预览的结果
+      return {
+        blobUrl: fileUrl,
+        width: img.width,
+        height: img.height,
+        isGif: true,
+        isPreviewOnly: true
+      };
+    } 
+    // 下载模式 - 使用GIF处理器，将水印烧录到每一帧
+    else {
+      // 使用专门的GIF处理器
+      const result = await processGif(file, {
+        applyWatermark: shouldApplyWatermark,
+        quality: options.quality || 10,
+        onProgress: options.onProgress
+      });
+      
+      // 添加GIF标记
+      result.isGif = true;
+      
+      console.log('GIF处理完成:', file.name);
+      return result;
+    }
   } catch (error) {
     console.error('处理GIF时出错:', error);
     
@@ -570,92 +615,120 @@ export function displayImage(blobUrl) {
  */
 export function batchProcessImages(files, progressCallback, options = {}) {
   return new Promise((resolve, reject) => {
-    const processedImages = [];
-    const total = files.length;
-    let completed = 0;
-    
-    // 默认并发数
-    const concurrency = options.concurrency || 3;
-    let running = 0;
-    let index = 0;
-    
-    // 更新进度
-    const updateProgress = () => {
-      completed++;
-      if (progressCallback) {
-        progressCallback(completed / total);
-      }
+    try {
+      const processedImages = [];
+      const totalFiles = files.length;
+      let processedCount = 0;
       
-      // 检查是否全部完成
-      if (completed === total) {
-        resolve(processedImages);
-      } else {
-        // 继续处理
-        startNextProcesses();
-      }
-    };
-    
-    // 处理单个图片
-    const processOneImage = (index) => {
-      if (index >= files.length) return;
+      // 设置进度更新函数
+      const updateProgress = () => {
+        if (progressCallback) {
+          progressCallback(processedCount / totalFiles);
+        }
+      };
       
-      const file = files[index];
-      running++;
+      // 创建队列
+      const tasks = [];
+      const maxConcurrent = 2; // 最大并发数
+      let running = 0;
       
-      // 检查是否有保存的设置
-      let shouldApplyWatermark = true;
-      let watermarkOptions = null;
-      
-      // 如果有第一张图片的设置，使用它
-      if (watermarkState.firstImageSettings) {
-        watermarkOptions = { ...watermarkState.firstImageSettings };
-      }
-      
-      // 如果有这个图片的设置，优先使用它
-      if (watermarkState.processedSettings[file.name]) {
-        watermarkOptions = { ...watermarkState.processedSettings[file.name] };
-      }
-      
-      // 处理图片
-      processImage(file, shouldApplyWatermark, {
-        ...options,
-        ...watermarkOptions
-      })
-        .then(result => {
-          // 添加到处理后的图片列表
-          processedImages.push({
-            file,
-            result,
-            fileName: file.name
-          });
-          
-          running--;
-          updateProgress();
+      // 处理单张图片的函数
+      const processOneImage = (index) => {
+        if (index >= files.length) {
+          // 所有图片都已开始处理
+          return;
+        }
+        
+        // 当前文件
+        const file = files[index];
+        const shouldApplyWatermark = options.shouldApplyWatermark !== false;
+        
+        // 水印选项
+        let watermarkOptions = null;
+        
+        // 如果有第一张图片的设置，使用它
+        if (watermarkState.firstImageSettings) {
+          watermarkOptions = { ...watermarkState.firstImageSettings };
+        }
+        
+        // 如果有这个图片的设置，优先使用它
+        if (watermarkState.processedSettings[file.name]) {
+          watermarkOptions = { ...watermarkState.processedSettings[file.name] };
+        }
+        
+        // 开始处理
+        running++;
+        
+        // 处理图片
+        processImage(file, shouldApplyWatermark, {
+          ...options,
+          ...watermarkOptions,
+          isDownload: true // 确保GIF水印被烧录
         })
-        .catch(error => {
-          console.error(`处理图片 ${file.name} 失败:`, error);
-          
-          // 添加错误信息
-          processedImages.push({
-            file,
-            error: error.message,
-            fileName: file.name
+          .then(result => {
+            // 添加到处理后的图片列表
+            processedImages.push({
+              file,
+              result,
+              fileName: file.name
+            });
+            
+            running--;
+            processedCount++;
+            updateProgress();
+            
+            // 检查是否还有更多图片需要处理
+            if (index + maxConcurrent < files.length) {
+              processOneImage(index + maxConcurrent);
+            }
+            
+            // 检查是否所有图片都已处理完成
+            if (processedCount === totalFiles) {
+              console.log('所有图片处理完成');
+              resolve(processedImages);
+            }
+          })
+          .catch(error => {
+            console.error(`处理图片 ${file.name} 失败:`, error);
+            
+            // 添加错误信息
+            processedImages.push({
+              file,
+              error: error.message,
+              fileName: file.name
+            });
+            
+            running--;
+            processedCount++;
+            updateProgress();
+            
+            // 检查是否还有更多图片需要处理
+            if (index + maxConcurrent < files.length) {
+              processOneImage(index + maxConcurrent);
+            }
+            
+            // 检查是否所有图片都已处理完成
+            if (processedCount === totalFiles) {
+              console.log('所有图片处理完成');
+              resolve(processedImages);
+            }
           });
-          
-          running--;
-          updateProgress();
-        });
-    };
-    
-    // 启动下一批处理
-    const startNextProcesses = () => {
-      while (running < concurrency && index < files.length) {
-        processOneImage(index++);
-      }
-    };
-    
-    // 开始处理
-    startNextProcesses();
+      };
+      
+      // 启动下一批处理
+      const startNextProcesses = () => {
+        // 开始处理前maxConcurrent个文件
+        for (let i = 0; i < Math.min(maxConcurrent, files.length); i++) {
+          processOneImage(i);
+        }
+      };
+      
+      // 开始处理
+      startNextProcesses();
+    } catch (error) {
+      console.error('批量处理图片时出错:', error);
+      reject(error);
+    }
   });
 }
 

@@ -181,6 +181,16 @@ export async function processGif(file, options = {}) {
       gifBadge.style.display = 'block';
     }
     
+    // 显示GIF水印提示信息
+    const statusMessage = document.getElementById('status-message');
+    if (statusMessage) {
+      statusMessage.textContent = "GIF水印已烧录到每一帧，已完成下载处理";
+      statusMessage.className = 'status-message show';
+      setTimeout(() => {
+        statusMessage.classList.remove('show');
+      }, 5000);
+    }
+    
     // 返回处理结果
     return {
       blobUrl,

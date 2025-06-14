@@ -18,6 +18,20 @@
 
 ### 快速开始
 
+### 使用HTTP Server运行
+
+如果你想通过HTTP服务器来运行独立版本的水印工具，可以使用以下命令：
+
+```bash
+# 安装http-server（如果尚未安装）
+npm install -g http-server
+
+# 或使用npx直接运行（无需安装）
+npx http-server . -p 8080 -o standalone-app-new.html
+```
+
+这将启动一个本地HTTP服务器，端口为8080，并自动在浏览器中打开standalone-app-new.html文件。
+
 ### 在Vercel上部署
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/unilei/image-watermark-tool.git&project-name=image-watermark-tool&repository-name=image-watermark-tool)
 

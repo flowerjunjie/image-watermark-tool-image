@@ -19,9 +19,17 @@ Access to script at 'file:///path/to/js/main.js' from origin 'null' has been blo
 3. 进入项目目录：`cd 项目路径`
 4. 运行以下命令启动本地服务器：
    ```
+   # 基本命令
    npx http-server
+   
+   # 指定端口并自动打开独立版本（推荐）
+   npx http-server . -p 8080 -o standalone-app-new.html
+   
+   # 选项说明：
+   # -p 8080: 指定端口为8080
+   # -o standalone-app-new.html: 自动在浏览器中打开指定文件
    ```
-5. 在浏览器中访问：http://localhost:8080/standalone-app-new.html
+5. 在浏览器中访问：http://localhost:8080/standalone-app-new.html（如果没有使用 `-o` 选项）
 
 ### 方法 2：使用 Visual Studio Code Live Server 插件
 
