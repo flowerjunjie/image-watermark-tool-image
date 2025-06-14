@@ -3,7 +3,7 @@
  * 处理水印的渲染和更新
  */
 
-import { watermarkState, updateState } from './state.js';
+import { watermarkState, updateState, WatermarkPosition, WatermarkScaleMode } from './state.js';
 
 /**
  * 更新水印显示
@@ -137,6 +137,8 @@ export function updateWatermark() {
     if (watermarkContainer) {
       watermarkContainer.style.display = 'block';
       watermarkContainer.style.pointerEvents = 'auto';
+      // 提高水印容器的z-index优先级，确保水印显示在最上层
+      watermarkContainer.style.zIndex = '9999';
       
       // 创建一个拖动控制元素
       const dragHandle = document.createElement('div');
@@ -151,7 +153,8 @@ export function updateWatermark() {
       dragHandle.style.cursor = 'move';
       dragHandle.style.background = 'transparent';
       dragHandle.style.border = '2px dashed rgba(0, 0, 255, 0.4)';
-      dragHandle.style.zIndex = '9999';
+      // 提高水印元素的z-index，确保它显示在最上层
+      dragHandle.style.zIndex = '10000';
       
       watermarkContainer.appendChild(dragHandle);
       
@@ -427,4 +430,234 @@ export function makeDraggable(element) {
     // 记录最终位置
     recordElementPosition();
   }
-} 
+}
+
+/**
+ * 应用水印到画布
+ * @param {CanvasRenderingContext2D} ctx - 画布上下文
+ * @param {Number} width - 画布宽度
+ * @param {Number} height - 画布高度
+ * @param {Object} options - 水印选项
+ */
+export function applyWatermarkToCanvas(ctx, width, height, options = {}) {
+  // 默认选项
+  const defaultOptions = {
+    type: 'text',                 // 水印类型：text 或 image
+    text: '仅供验证使用',          // 水印文本
+    color: '#000000',             // 水印颜色
+    fontSize: 24,                 // 字体大小
+    opacity: 0.5,                 // 透明度
+    rotation: 0,                  // 旋转角度
+    position: WatermarkPosition.CUSTOM, // 定位方式
+    positionX: width / 2,         // X坐标
+    positionY: height / 2,        // Y坐标
+    marginX: 20,                  // 水平边距
+    marginY: 20,                  // 垂直边距
+    scaleMode: WatermarkScaleMode.FIXED, // 缩放模式
+    scaleRatio: 0.2,              // 缩放比例（相对于图片大小）
+    watermarkImage: null,         // 水印图片对象
+    tileSpacing: 150              // 平铺间距
+  };
+
+  // 合并选项
+  const mergedOptions = { ...defaultOptions, ...options };
+
+  // 保存当前上下文状态
+  ctx.save();
+
+  // 设置透明度
+  ctx.globalAlpha = mergedOptions.opacity;
+
+  // 根据水印类型应用不同的水印
+  if (mergedOptions.type === 'text') {
+    applyTextWatermark(ctx, width, height, mergedOptions);
+  } else if (mergedOptions.type === 'image' && mergedOptions.watermarkImage) {
+    applyImageWatermark(ctx, width, height, mergedOptions);
+  }
+
+  // 恢复上下文状态
+  ctx.restore();
+}
+
+/**
+ * 应用文本水印
+ * @param {CanvasRenderingContext2D} ctx - 画布上下文
+ * @param {Number} width - 画布宽度
+ * @param {Number} height - 画布高度
+ * @param {Object} options - 水印选项
+ */
+function applyTextWatermark(ctx, width, height, options) {
+  // 设置文本样式
+  ctx.font = `${options.fontSize}px Arial`;
+  ctx.fillStyle = options.color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // 计算文本宽度
+  const textWidth = ctx.measureText(options.text).width;
+  const textHeight = options.fontSize;
+
+  // 如果是平铺模式
+  if (options.position === WatermarkPosition.TILE) {
+    applyTiledWatermark(ctx, width, height, options, (x, y) => {
+      drawRotatedText(ctx, options.text, x, y, options.rotation);
+    });
+    return;
+  }
+
+  // 计算水印位置
+  const position = calculatePosition(width, height, textWidth, textHeight, options);
+  
+  // 绘制旋转文本
+  drawRotatedText(ctx, options.text, position.x, position.y, options.rotation);
+}
+
+/**
+ * 应用图片水印
+ * @param {CanvasRenderingContext2D} ctx - 画布上下文
+ * @param {Number} width - 画布宽度
+ * @param {Number} height - 画布高度
+ * @param {Object} options - 水印选项
+ */
+function applyImageWatermark(ctx, width, height, options) {
+  const watermarkImg = options.watermarkImage;
+  
+  if (!watermarkImg || !watermarkImg.complete) {
+    console.warn('水印图片未加载完成');
+    return;
+  }
+
+  // 计算水印图片尺寸
+  let imgWidth = watermarkImg.width;
+  let imgHeight = watermarkImg.height;
+  
+  // 根据缩放模式调整大小
+  if (options.scaleMode === WatermarkScaleMode.RELATIVE) {
+    // 相对于图片大小的百分比缩放
+    imgWidth = width * options.scaleRatio;
+    // 保持图片原始宽高比
+    const aspectRatio = watermarkImg.width / watermarkImg.height;
+    imgHeight = imgWidth / aspectRatio;
+  }
+
+  // 如果是平铺模式
+  if (options.position === WatermarkPosition.TILE) {
+    applyTiledWatermark(ctx, width, height, options, (x, y) => {
+      drawRotatedImage(ctx, watermarkImg, x, y, imgWidth, imgHeight, options.rotation);
+    });
+    return;
+  }
+
+  // 计算水印位置
+  const position = calculatePosition(width, height, imgWidth, imgHeight, options);
+  
+  // 绘制旋转图片
+  drawRotatedImage(ctx, watermarkImg, position.x, position.y, imgWidth, imgHeight, options.rotation);
+}
+
+/**
+ * 计算水印位置
+ * @param {Number} canvasWidth - 画布宽度
+ * @param {Number} canvasHeight - 画布高度
+ * @param {Number} watermarkWidth - 水印宽度
+ * @param {Number} watermarkHeight - 水印高度
+ * @param {Object} options - 水印选项
+ * @returns {Object} - 水印位置坐标
+ */
+function calculatePosition(canvasWidth, canvasHeight, watermarkWidth, watermarkHeight, options) {
+  // 默认使用自定义位置
+  let x = options.positionX;
+  let y = options.positionY;
+
+  // 根据定位方式计算位置
+  switch (options.position) {
+    case WatermarkPosition.TOP_LEFT:
+      x = watermarkWidth / 2 + options.marginX;
+      y = watermarkHeight / 2 + options.marginY;
+      break;
+    case WatermarkPosition.TOP_RIGHT:
+      x = canvasWidth - watermarkWidth / 2 - options.marginX;
+      y = watermarkHeight / 2 + options.marginY;
+      break;
+    case WatermarkPosition.BOTTOM_LEFT:
+      x = watermarkWidth / 2 + options.marginX;
+      y = canvasHeight - watermarkHeight / 2 - options.marginY;
+      break;
+    case WatermarkPosition.BOTTOM_RIGHT:
+      x = canvasWidth - watermarkWidth / 2 - options.marginX;
+      y = canvasHeight - watermarkHeight / 2 - options.marginY;
+      break;
+    case WatermarkPosition.CENTER:
+      x = canvasWidth / 2;
+      y = canvasHeight / 2;
+      break;
+    case WatermarkPosition.CUSTOM:
+    default:
+      // 使用传入的自定义位置
+      break;
+  }
+
+  return { x, y };
+}
+
+/**
+ * 应用平铺水印
+ * @param {CanvasRenderingContext2D} ctx - 画布上下文
+ * @param {Number} width - 画布宽度
+ * @param {Number} height - 画布高度
+ * @param {Object} options - 水印选项
+ * @param {Function} drawFunc - 绘制函数
+ */
+function applyTiledWatermark(ctx, width, height, options, drawFunc) {
+  const spacing = options.tileSpacing;
+  
+  // 计算行列数
+  const cols = Math.ceil(width / spacing) + 1;
+  const rows = Math.ceil(height / spacing) + 1;
+  
+  // 平铺绘制水印
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const x = col * spacing;
+      const y = row * spacing;
+      drawFunc(x, y);
+    }
+  }
+}
+
+/**
+ * 绘制旋转文本
+ * @param {CanvasRenderingContext2D} ctx - 画布上下文
+ * @param {String} text - 文本内容
+ * @param {Number} x - X坐标
+ * @param {Number} y - Y坐标
+ * @param {Number} angle - 旋转角度
+ */
+function drawRotatedText(ctx, text, x, y, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle * Math.PI / 180);
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+/**
+ * 绘制旋转图片
+ * @param {CanvasRenderingContext2D} ctx - 画布上下文
+ * @param {HTMLImageElement} image - 图片对象
+ * @param {Number} x - X坐标
+ * @param {Number} y - Y坐标
+ * @param {Number} width - 图片宽度
+ * @param {Number} height - 图片高度
+ * @param {Number} angle - 旋转角度
+ */
+function drawRotatedImage(ctx, image, x, y, width, height, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle * Math.PI / 180);
+  ctx.drawImage(image, -width / 2, -height / 2, width, height);
+  ctx.restore();
+}
+
+// 导出水印位置和缩放模式枚举
+export { WatermarkPosition, WatermarkScaleMode }; 

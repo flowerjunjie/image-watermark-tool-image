@@ -11,6 +11,14 @@
 export function extractGifFrames(gifUrl) {
   return new Promise((resolve, reject) => {
     try {
+      // 检查是否有SuperGif对象
+      if (typeof SuperGif === 'undefined') {
+        console.warn('SuperGif未定义，使用替代方法提取帧');
+        return extractGifFramesNative(gifUrl)
+          .then(resolve)
+          .catch(reject);
+      }
+      
       // 创建一个临时容器来放置GIF
       const container = document.createElement('div');
       container.style.position = 'absolute';
@@ -33,89 +41,111 @@ export function extractGifFrames(gifUrl) {
           canvas.width = gifImage.width;
           canvas.height = gifImage.height;
           
-          // 创建一个libgif-js的SuperGif实例
-          const superGif = new SuperGif({
-            gif: gifImage,
-            auto_play: false,
-            max_width: gifImage.width,
-            rubbable: false,
-            c_w: gifImage.width,
-            c_h: gifImage.height
-          });
-          
-          superGif.load(() => {
-            try {
-              // 获取总帧数
-              const frameCount = superGif.get_length();
-              console.log(`GIF总帧数: ${frameCount}`);
-              
-              if (frameCount <= 0) {
-                document.body.removeChild(container);
-                reject(new Error('GIF没有帧'));
-                return;
-              }
-              
-              // 提取所有帧
-              const frames = [];
-              
-              for (let i = 0; i < frameCount; i++) {
-                // 移动到指定帧
-                superGif.move_to(i);
+          try {
+            // 创建一个libgif-js的SuperGif实例
+            const superGif = new SuperGif({
+              gif: gifImage,
+              auto_play: false,
+              max_width: gifImage.width,
+              rubbable: false,
+              c_w: gifImage.width,
+              c_h: gifImage.height
+            });
+            
+            superGif.load(() => {
+              try {
+                // 获取总帧数
+                const frameCount = superGif.get_length();
+                console.log(`GIF总帧数: ${frameCount}`);
                 
-                // 获取当前帧的canvas
-                const frameCanvas = superGif.get_canvas();
-                
-                // 绘制到我们的canvas上
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(frameCanvas, 0, 0, canvas.width, canvas.height);
-                
-                // 获取帧的ImageData
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                
-                // 获取帧延迟（默认100ms）
-                let delay = 100;
-                try {
-                  // 尝试获取实际延迟
-                  // SuperGif没有get_info方法，我们使用固定延迟
-                  delay = superGif.get_length() > 0 ? 100 : 100; // 默认100ms
-                } catch (e) {
-                  console.warn('无法获取帧延迟，使用默认值:', e);
+                if (frameCount <= 0) {
+                  document.body.removeChild(container);
+                  reject(new Error('GIF没有帧'));
+                  return;
                 }
                 
-                // 添加到帧列表
-                frames.push({
-                  imageData,
-                  delay,
-                  width: canvas.width,
-                  height: canvas.height
-                });
+                // 提取所有帧
+                const frames = [];
+                
+                for (let i = 0; i < frameCount; i++) {
+                  // 移动到指定帧
+                  superGif.move_to(i);
+                  
+                  // 获取当前帧的canvas
+                  const frameCanvas = superGif.get_canvas();
+                  
+                  // 绘制到我们的canvas上
+                  ctx.clearRect(0, 0, canvas.width, canvas.height);
+                  ctx.drawImage(frameCanvas, 0, 0, canvas.width, canvas.height);
+                  
+                  // 获取帧的ImageData
+                  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                  
+                  // 获取帧延迟（默认100ms）
+                  let delay = 100;
+                  try {
+                    // 尝试获取实际延迟
+                    // SuperGif没有get_info方法，我们使用固定延迟
+                    delay = superGif.get_length() > 0 ? 100 : 100; // 默认100ms
+                  } catch (e) {
+                    console.warn('无法获取帧延迟，使用默认值:', e);
+                  }
+                  
+                  // 添加到帧列表
+                  frames.push({
+                    imageData,
+                    delay,
+                    width: canvas.width,
+                    height: canvas.height
+                  });
+                }
+                
+                // 清理DOM
+                document.body.removeChild(container);
+                
+                console.log(`成功提取 ${frames.length} 帧`);
+                resolve(frames);
+              } catch (error) {
+                document.body.removeChild(container);
+                console.error('提取GIF帧时出错:', error);
+                // 失败时尝试使用替代方法
+                extractGifFramesNative(gifUrl)
+                  .then(resolve)
+                  .catch(reject);
               }
-              
-              // 清理DOM
-              document.body.removeChild(container);
-              
-              console.log(`成功提取 ${frames.length} 帧`);
-              resolve(frames);
-            } catch (error) {
-              document.body.removeChild(container);
-              console.error('提取GIF帧时出错:', error);
-              reject(error);
-            }
-          });
+            });
+          } catch (error) {
+            document.body.removeChild(container);
+            console.error('创建SuperGif实例时出错:', error);
+            // 失败时尝试使用替代方法
+            extractGifFramesNative(gifUrl)
+              .then(resolve)
+              .catch(reject);
+          }
         } catch (error) {
           document.body.removeChild(container);
-          console.error('创建SuperGif实例时出错:', error);
-          reject(error);
+          console.error('提取GIF帧时出错:', error);
+          // 失败时尝试使用替代方法
+          extractGifFramesNative(gifUrl)
+            .then(resolve)
+            .catch(reject);
         }
       };
       
       gifImage.onerror = function() {
         document.body.removeChild(container);
-        reject(new Error('加载GIF图片失败'));
+        console.error('加载GIF图片失败');
+        // 失败时尝试使用替代方法
+        extractGifFramesNative(gifUrl)
+          .then(resolve)
+          .catch(reject);
       };
     } catch (error) {
       console.error('提取GIF帧初始化失败:', error);
-      reject(error);
+      // 失败时尝试使用替代方法
+      extractGifFramesNative(gifUrl)
+        .then(resolve)
+        .catch(reject);
     }
   });
 }
@@ -129,7 +159,7 @@ export function extractGifFrames(gifUrl) {
 export function extractGifFramesWithWorker(gifUrl) {
   return new Promise((resolve, reject) => {
     // 创建worker
-    const worker = new Worker('/js/workers/gif-decoder-worker.js');
+    const worker = new Worker('js/workers/gif-decoder-worker.js');
     
     // 设置消息处理
     worker.onmessage = function(e) {
@@ -227,6 +257,7 @@ export function extractGifFramesNative(gifUrl) {
     };
     
     gifImg.onerror = function() {
+      console.error('加载GIF图片失败');
       reject(new Error('加载GIF图片失败'));
     };
   });

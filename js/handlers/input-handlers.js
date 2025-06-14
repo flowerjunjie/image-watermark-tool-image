@@ -4,7 +4,7 @@
  */
 
 import { watermarkState, updateState, undo, redo, saveFirstImageSettings, saveCurrentImageSettings } from '../core/state.js';
-import { updateWatermark } from '../core/watermark.js';
+import { updateWatermark, WatermarkPosition, WatermarkScaleMode } from '../core/watermark.js';
 
 /**
  * 检查并更新当前图片的设置
@@ -725,4 +725,222 @@ function updateUndoRedoButtons() {
   if (redoBtn) {
     redoBtn.disabled = watermarkState.historyIndex >= watermarkState.history.length - 1;
   }
+}
+
+/**
+ * 水印位置和缩放控制事件处理
+ */
+
+// 初始化水印位置控制
+export function initPositionControls() {
+  // 位置选择单选按钮
+  const positionRadios = document.querySelectorAll('input[name="position"]');
+  positionRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+      const position = this.value;
+      updateState({ position });
+      
+      // 根据选择的位置类型显示/隐藏相应控制项
+      const marginControls = document.getElementById('margin-controls');
+      const tileControls = document.getElementById('tile-controls');
+      
+      if (position === WatermarkPosition.TILE) {
+        marginControls.style.display = 'none';
+        tileControls.style.display = 'block';
+      } else if (position === WatermarkPosition.CUSTOM) {
+        marginControls.style.display = 'none';
+        tileControls.style.display = 'none';
+      } else {
+        marginControls.style.display = 'block';
+        tileControls.style.display = 'none';
+      }
+      
+      // 更新预览
+      updatePreview();
+    });
+  });
+  
+  // 水平边距滑块
+  const marginXSlider = document.getElementById('margin-x-slider');
+  const marginXValue = document.getElementById('margin-x-value');
+  
+  if (marginXSlider && marginXValue) {
+    // 同步滑块和数值输入框
+    marginXSlider.addEventListener('input', function() {
+      marginXValue.value = this.value;
+      updateState({ marginX: parseInt(this.value) });
+      updatePreview();
+    });
+    
+    marginXValue.addEventListener('change', function() {
+      marginXSlider.value = this.value;
+      updateState({ marginX: parseInt(this.value) });
+      updatePreview();
+    });
+  }
+  
+  // 垂直边距滑块
+  const marginYSlider = document.getElementById('margin-y-slider');
+  const marginYValue = document.getElementById('margin-y-value');
+  
+  if (marginYSlider && marginYValue) {
+    // 同步滑块和数值输入框
+    marginYSlider.addEventListener('input', function() {
+      marginYValue.value = this.value;
+      updateState({ marginY: parseInt(this.value) });
+      updatePreview();
+    });
+    
+    marginYValue.addEventListener('change', function() {
+      marginYSlider.value = this.value;
+      updateState({ marginY: parseInt(this.value) });
+      updatePreview();
+    });
+  }
+  
+  // 平铺间距滑块
+  const tileSpacingSlider = document.getElementById('tile-spacing-slider');
+  const tileSpacingValue = document.getElementById('tile-spacing-value');
+  
+  if (tileSpacingSlider && tileSpacingValue) {
+    // 同步滑块和数值输入框
+    tileSpacingSlider.addEventListener('input', function() {
+      tileSpacingValue.value = this.value;
+      updateState({ tileSpacing: parseInt(this.value) });
+      updatePreview();
+    });
+    
+    tileSpacingValue.addEventListener('change', function() {
+      tileSpacingSlider.value = this.value;
+      updateState({ tileSpacing: parseInt(this.value) });
+      updatePreview();
+    });
+  }
+}
+
+// 初始化水印缩放控制
+export function initScaleControls() {
+  // 缩放模式单选按钮
+  const scaleModeRadios = document.querySelectorAll('input[name="scale-mode"]');
+  scaleModeRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+      const scaleMode = this.value;
+      updateState({ scaleMode });
+      
+      // 根据选择的缩放模式显示/隐藏相应控制项
+      const relativeScaleControls = document.getElementById('relative-scale-controls');
+      
+      if (scaleMode === WatermarkScaleMode.RELATIVE) {
+        relativeScaleControls.style.display = 'block';
+      } else {
+        relativeScaleControls.style.display = 'none';
+      }
+      
+      // 更新预览
+      updatePreview();
+    });
+  });
+  
+  // 缩放比例滑块
+  const scaleRatioSlider = document.getElementById('scale-ratio-slider');
+  const scaleRatioValue = document.getElementById('scale-ratio-value');
+  
+  if (scaleRatioSlider && scaleRatioValue) {
+    // 同步滑块和数值输入框
+    scaleRatioSlider.addEventListener('input', function() {
+      scaleRatioValue.value = this.value;
+      updateState({ scaleRatio: parseInt(this.value) / 100 });
+      updatePreview();
+    });
+    
+    scaleRatioValue.addEventListener('change', function() {
+      scaleRatioSlider.value = this.value;
+      updateState({ scaleRatio: parseInt(this.value) / 100 });
+      updatePreview();
+    });
+  }
+}
+
+// 更新预览
+function updatePreview() {
+  // 触发预览更新事件
+  const event = new CustomEvent('update-preview');
+  window.dispatchEvent(event);
+}
+
+// 初始化工具提示
+export function initTooltips() {
+  const tooltips = document.querySelectorAll('.tooltip-icon');
+  tooltips.forEach(tooltip => {
+    tooltip.addEventListener('mouseenter', function() {
+      const title = this.getAttribute('title');
+      if (!title) return;
+      
+      // 创建工具提示元素
+      const tooltipEl = document.createElement('div');
+      tooltipEl.className = 'tooltip';
+      tooltipEl.textContent = title;
+      
+      // 清除title属性，避免浏览器默认提示
+      this.setAttribute('data-title', title);
+      this.removeAttribute('title');
+      
+      // 添加到页面
+      document.body.appendChild(tooltipEl);
+      
+      // 定位工具提示
+      const rect = this.getBoundingClientRect();
+      tooltipEl.style.left = `${rect.left + rect.width / 2 - tooltipEl.offsetWidth / 2}px`;
+      tooltipEl.style.top = `${rect.top - tooltipEl.offsetHeight - 5}px`;
+      
+      // 保存引用
+      this._tooltip = tooltipEl;
+    });
+    
+    tooltip.addEventListener('mouseleave', function() {
+      if (this._tooltip) {
+        document.body.removeChild(this._tooltip);
+        this._tooltip = null;
+        
+        // 恢复title属性
+        const title = this.getAttribute('data-title');
+        if (title) {
+          this.setAttribute('title', title);
+          this.removeAttribute('data-title');
+        }
+      }
+    });
+  });
+}
+
+// 导出初始化函数
+export function initWatermarkControls() {
+  // 设置初始状态
+  const customRadio = document.querySelector('input[name="position"][value="custom"]');
+  if (customRadio) {
+    customRadio.checked = true;
+    
+    // 确保正确显示/隐藏控件
+    const marginControls = document.getElementById('margin-controls');
+    const tileControls = document.getElementById('tile-controls');
+    
+    if (marginControls) marginControls.style.display = 'none';
+    if (tileControls) tileControls.style.display = 'none';
+  }
+  
+  const fixedRadio = document.querySelector('input[name="scale-mode"][value="fixed"]');
+  if (fixedRadio) {
+    fixedRadio.checked = true;
+    
+    // 确保相对缩放控件最初是隐藏的
+    const relativeScaleControls = document.getElementById('relative-scale-controls');
+    if (relativeScaleControls) relativeScaleControls.style.display = 'none';
+  }
+  
+  // 初始化所有控件
+  initPositionControls();
+  initScaleControls();
+  initTooltips();
+  
+  console.log('水印位置和缩放控件初始化完成');
 } 

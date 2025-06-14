@@ -3,6 +3,23 @@
  * 集中管理应用的状态数据
  */
 
+// 定义水印定位方式枚举
+export const WatermarkPosition = {
+  CUSTOM: 'custom',      // 自定义位置（拖拽）
+  TOP_LEFT: 'top-left',  // 左上角
+  TOP_RIGHT: 'top-right', // 右上角
+  BOTTOM_LEFT: 'bottom-left', // 左下角
+  BOTTOM_RIGHT: 'bottom-right', // 右下角
+  CENTER: 'center',      // 居中
+  TILE: 'tile'           // 平铺
+};
+
+// 定义水印缩放模式枚举
+export const WatermarkScaleMode = {
+  FIXED: 'fixed',        // 固定大小
+  RELATIVE: 'relative'   // 相对图片大小的百分比
+};
+
 // 水印应用状态
 export const watermarkState = {
   type: "text", // 水印类型：text, tiled, image
@@ -53,7 +70,24 @@ export const watermarkState = {
   initialSettingsApplied: false,
   
   // 标记每张图片是否已经应用了水印设置
-  processedSettings: {}
+  processedSettings: {},
+  
+  // 水印位置
+  position: WatermarkPosition.CUSTOM, // 定位方式
+  marginX: 20,                   // 水平边距
+  marginY: 20,                   // 垂直边距
+  
+  // 水印缩放
+  scaleMode: WatermarkScaleMode.FIXED, // 缩放模式
+  scaleRatio: 0.2,               // 缩放比例（相对于图片大小的百分比）
+  
+  // 预览相关
+  previewMode: 'original',       // 预览模式：original, watermark
+  
+  // 其他设置
+  isDragging: false,             // 是否正在拖拽水印
+  isProcessing: false,           // 是否正在处理图片
+  isGif: false,                  // 当前图片是否是GIF
 };
 
 // 获取当前状态
@@ -74,6 +108,11 @@ export function updateState(updates) {
   
   // 更新状态
   Object.assign(watermarkState, updates);
+  
+  // 触发状态更新事件
+  const event = new CustomEvent('watermark-state-updated', { detail: watermarkState });
+  window.dispatchEvent(event);
+  
   return watermarkState;
 }
 
@@ -166,6 +205,15 @@ export function resetState() {
   watermarkState.firstImageSettings = null;
   watermarkState.initialSettingsApplied = false;
   watermarkState.processedSettings = {};
+  watermarkState.position = WatermarkPosition.CUSTOM;
+  watermarkState.marginX = 20;
+  watermarkState.marginY = 20;
+  watermarkState.scaleMode = WatermarkScaleMode.FIXED;
+  watermarkState.scaleRatio = 0.2;
+  watermarkState.previewMode = 'original';
+  watermarkState.isDragging = false;
+  watermarkState.isProcessing = false;
+  watermarkState.isGif = false;
   return watermarkState;
 }
 
@@ -191,40 +239,32 @@ export function recordProcessingTime(time) {
 
 // 保存第一张图片的水印设置
 export function saveFirstImageSettings() {
-  // 创建设置的深拷贝
-  const settings = {
+  watermarkState.firstImageSettings = {
     type: watermarkState.type,
     text: watermarkState.text,
     fontSize: watermarkState.fontSize,
     opacity: watermarkState.opacity,
     rotation: watermarkState.rotation,
     color: watermarkState.color,
-    tileSpacing: watermarkState.tileSpacing,
-    watermarkImageSize: watermarkState.watermarkImageSize,
-    scale: watermarkState.scale,
+    watermarkImage: watermarkState.watermarkImage,
+    position: watermarkState.position,
     relativePosition: { ...watermarkState.relativePosition },
-    relativeSize: watermarkState.relativeSize,
-    quality: watermarkState.quality,
-    format: watermarkState.format,
-    sizeAdjusted: true // 确保应用设置时不会再次调整大小
+    marginX: watermarkState.marginX,
+    marginY: watermarkState.marginY,
+    scaleMode: watermarkState.scaleMode,
+    scaleRatio: watermarkState.scaleRatio,
+    tileSpacing: watermarkState.tileSpacing
   };
-  
-  // 保存水印图片引用（如果有）
-  if (watermarkState.watermarkImage) {
-    settings.watermarkImage = watermarkState.watermarkImage;
-  }
-  
-  watermarkState.firstImageSettings = settings;
   
   // 同时保存到当前图片的设置记录中
   if (watermarkState.files && watermarkState.files.length > 0) {
     // 使用文件名作为键，确保唯一性
     const currentFileName = watermarkState.files[watermarkState.currentIndex].name;
-    watermarkState.processedSettings[currentFileName] = {...settings};
+    watermarkState.processedSettings[currentFileName] = {...watermarkState.firstImageSettings};
   }
   
-  console.log('已保存第一张图片的水印设置:', settings);
-  return settings;
+  console.log('已保存第一张图片的水印设置:', watermarkState.firstImageSettings);
+  return watermarkState.firstImageSettings;
 }
 
 // 应用第一张图片的水印设置
@@ -283,20 +323,15 @@ export function saveCurrentImageSettings() {
       opacity: watermarkState.opacity,
       rotation: watermarkState.rotation,
       color: watermarkState.color,
-      tileSpacing: watermarkState.tileSpacing,
-      watermarkImageSize: watermarkState.watermarkImageSize,
-      scale: watermarkState.scale,
+      watermarkImage: watermarkState.watermarkImage,
+      position: watermarkState.position,
       relativePosition: { ...watermarkState.relativePosition },
-      relativeSize: watermarkState.relativeSize,
-      quality: watermarkState.quality,
-      format: watermarkState.format,
-      sizeAdjusted: true
+      marginX: watermarkState.marginX,
+      marginY: watermarkState.marginY,
+      scaleMode: watermarkState.scaleMode,
+      scaleRatio: watermarkState.scaleRatio,
+      tileSpacing: watermarkState.tileSpacing
     };
-    
-    // 保存水印图片引用（如果有）
-    if (watermarkState.watermarkImage) {
-      settings.watermarkImage = watermarkState.watermarkImage;
-    }
     
     // 保存到当前图片的设置记录中
     watermarkState.processedSettings[currentFileName] = settings;
@@ -349,7 +384,7 @@ export function applyImageSettings(fileName) {
   );
   
   // 应用设置
-  Object.assign(watermarkState, watermarkState.processedSettings[fileName]);
+  Object.assign(watermarkState, savedSettings);
   
   // 恢复当前图片的原始图像对象和尺寸
   watermarkState.originalImage = originalImage;
@@ -365,4 +400,66 @@ export function applyImageSettings(fileName) {
   
   console.log(`已应用图片 ${fileName} 的水印设置`);
   return true;
+}
+
+// 保存图片设置
+export function saveImageSettings(fileName) {
+  if (!fileName) return;
+  
+  if (!watermarkState.processedSettings[fileName]) {
+    console.warn(`没有找到图片 ${fileName} 的水印设置`);
+    return;
+  }
+  
+  const settings = watermarkState.processedSettings[fileName];
+  
+  // 保存到当前图片的设置记录中
+  watermarkState.processedSettings[fileName] = {
+    type: settings.type,
+    text: settings.text,
+    fontSize: settings.fontSize,
+    opacity: settings.opacity,
+    rotation: settings.rotation,
+    color: settings.color,
+    watermarkImage: settings.watermarkImage,
+    position: settings.position,
+    relativePosition: { ...settings.relativePosition },
+    marginX: settings.marginX,
+    marginY: settings.marginY,
+    scaleMode: settings.scaleMode,
+    scaleRatio: settings.scaleRatio,
+    tileSpacing: settings.tileSpacing
+  };
+  
+  console.log(`已保存图片 ${fileName} 的水印设置:`, 
+    JSON.stringify({
+      position: settings.relativePosition,
+      scale: settings.scale,
+      fontSize: settings.fontSize
+    })
+  );
+}
+
+// 加载图片设置
+export function loadImageSettings(fileName) {
+  if (!fileName || !watermarkState.processedSettings[fileName]) return;
+  
+  const settings = watermarkState.processedSettings[fileName];
+  
+  updateState({
+    type: settings.type,
+    text: settings.text,
+    fontSize: settings.fontSize,
+    opacity: settings.opacity,
+    rotation: settings.rotation,
+    color: settings.color,
+    watermarkImage: settings.watermarkImage,
+    position: settings.position,
+    relativePosition: { ...settings.relativePosition },
+    marginX: settings.marginX,
+    marginY: settings.marginY,
+    scaleMode: settings.scaleMode,
+    scaleRatio: settings.scaleRatio,
+    tileSpacing: settings.tileSpacing
+  });
 } 

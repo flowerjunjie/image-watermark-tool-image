@@ -34,6 +34,24 @@ export function initEventListeners() {
     }
   }
   
+  // 处理弹窗最小化按钮
+  const processingMinimizeBtn = document.getElementById('processing-minimize-btn');
+  const processingPopup = document.getElementById('processing-popup');
+  
+  if (processingMinimizeBtn && processingPopup) {
+    processingMinimizeBtn.addEventListener('click', function() {
+      if (processingPopup.classList.contains('minimized')) {
+        // 已经是最小化状态，恢复
+        processingPopup.classList.remove('minimized');
+        this.textContent = '最小化';
+      } else {
+        // 最小化
+        processingPopup.classList.add('minimized');
+        this.textContent = '展开';
+      }
+    });
+  }
+  
   // 上传图片按钮点击事件
   const uploadFilesBtn = document.getElementById('upload-files-btn');
   const fileInput = document.getElementById('file-input');
@@ -111,21 +129,46 @@ export function initEventListeners() {
       // 显示处理中提示
       if (isGif) {
         showStatus('正在处理GIF动图，请稍候...', true);
+      } else {
+        showStatus('正在处理图片，请稍候...', true);
       }
+      
+      console.log('开始处理图片用于下载:', currentFile.name, '是GIF:', isGif);
       
       // 处理图片并下载
       processImage(currentFile, true, {
         isDownload: true, // 标记为下载模式
-        quality: watermarkState.quality || 0.92
+        quality: isGif ? 5 : (watermarkState.quality || 0.92),
+        // 保存当前水印设置
+        ...watermarkState,
+        // 确保使用当前水印设置
+        text: watermarkState.text,
+        color: watermarkState.color,
+        fontSize: watermarkState.fontSize,
+        opacity: watermarkState.opacity,
+        rotation: watermarkState.rotation,
+        position: watermarkState.relativePosition,
+        tileSpacing: watermarkState.tileSpacing
       })
         .then(result => {
-          if (!result || (!result.blobUrl && !result.blob)) {
-            showStatus('处理图片失败', false);
+          console.log('图片处理结果:', result);
+          
+          if (!result) {
+            console.error('图片处理结果为空');
+            showStatus('处理图片失败: 结果为空', false);
+            return;
+          }
+          
+          if (!result.blobUrl && !result.blob) {
+            console.error('图片处理结果没有有效的blob或blobUrl');
+            showStatus('处理图片失败: 无有效数据', false);
             return;
           }
           
           let dataUrl = result.blobUrl;
           let fileName = `watermarked_${currentFile.name}`;
+          
+          console.log('准备下载图片:', fileName, '链接:', dataUrl);
           
           // 创建下载链接
           const link = document.createElement('a');
@@ -135,6 +178,7 @@ export function initEventListeners() {
           
           // 添加到文档并触发下载
           document.body.appendChild(link);
+          console.log('触发下载...');
           link.click();
           
           // 清理
@@ -152,11 +196,12 @@ export function initEventListeners() {
             } else {
               showStatus('图片下载成功', true);
             }
+            console.log('下载完成:', fileName);
           }, 100);
         })
         .catch(error => {
           console.error('下载图片时出错:', error);
-          showStatus('处理图片时出错', false);
+          showStatus(`处理图片时出错: ${error.message || '未知错误'}`, false);
         });
     });
   }
@@ -165,6 +210,9 @@ export function initEventListeners() {
   const batchDownloadBtn = document.getElementById('batch-download-btn');
   
   if (batchDownloadBtn) {
+    // 更新按钮文本，明确表示是ZIP下载
+    batchDownloadBtn.textContent = '批量下载(ZIP)';
+    
     batchDownloadBtn.addEventListener('click', async function() {
       try {
         // 检查是否有图片被选中
@@ -175,11 +223,20 @@ export function initEventListeners() {
           return;
         }
         
+        console.log(`开始批量下载处理，共 ${selectedFiles.length} 张图片，将打包为ZIP文件`);
+        showMessage(`正在准备打包 ${selectedFiles.length} 张图片为ZIP文件...`);
+        
         // 显示处理弹窗
         const processingPopup = document.getElementById('processing-popup');
         const processingProgressBar = document.getElementById('processing-progress-bar');
         const processingStatus = document.getElementById('processing-status');
         const processingDetails = document.getElementById('processing-details');
+        
+        // 获取统计信息元素
+        const processingTime = document.querySelector('#processing-time .stats-value');
+        const processingRemaining = document.querySelector('#processing-remaining .stats-value');
+        const processingSpeed = document.querySelector('#processing-speed .stats-value');
+        const processingCount = document.querySelector('#processing-count .stats-value');
         
         if (processingPopup) processingPopup.style.display = 'block';
         if (processingProgressBar) processingProgressBar.style.width = '0%';
@@ -197,48 +254,185 @@ export function initEventListeners() {
           `;
         }
         
+        // 初始化统计信息
+        if (processingTime) processingTime.textContent = '0秒';
+        if (processingRemaining) processingRemaining.textContent = '计算中...';
+        if (processingSpeed) processingSpeed.textContent = '0张/秒';
+        if (processingCount) processingCount.textContent = `0/${selectedFiles.length}`;
+        
+        // 记录开始时间
+        const startTime = Date.now();
+        
         // 批量处理图片并下载
-        const processedImages = await batchProcessImages(selectedFiles, (progress) => {
-          // 更新进度
+        console.log('开始批量处理图片...');
+        const processedImages = await batchProcessImages(selectedFiles, (progress, stats) => {
+          // 更新进度条
           if (processingProgressBar) {
-            processingProgressBar.style.width = `${progress * 100}%`;
+            processingProgressBar.style.width = `${Math.round(progress * 100)}%`;
           }
           
           // 更新状态
           if (processingStatus) {
-            processingStatus.textContent = `已处理: ${Math.round(progress * selectedFiles.length)}/${selectedFiles.length} (${Math.round(progress * 100)}%)`;
+            const percent = Math.round(progress * 100);
+            processingStatus.textContent = `已处理: ${stats.processedCount}/${stats.totalFiles} (${percent}%)`;
+          }
+          
+          // 更新统计信息
+          if (processingTime) {
+            processingTime.textContent = `${stats.elapsedTime.toFixed(1)}秒`;
+          }
+          
+          if (processingRemaining) {
+            if (stats.remainingTime > 0) {
+              if (stats.remainingTime < 60) {
+                processingRemaining.textContent = `${stats.remainingTime.toFixed(1)}秒`;
+              } else {
+                const minutes = Math.floor(stats.remainingTime / 60);
+                const seconds = Math.round(stats.remainingTime % 60);
+                processingRemaining.textContent = `${minutes}分${seconds}秒`;
+              }
+            } else {
+              processingRemaining.textContent = '计算中...';
+            }
+          }
+          
+          if (processingSpeed) {
+            processingSpeed.textContent = `${stats.processingSpeed.toFixed(2)}张/秒`;
+          }
+          
+          if (processingCount) {
+            processingCount.textContent = `${stats.processedCount}/${stats.totalFiles}`;
+          }
+          
+          // 更新详细信息
+          if (processingDetails && stats) {
+            const elapsedTime = stats.elapsedTime.toFixed(1);
+            const speed = stats.processingSpeed.toFixed(2);
+            let remainingTimeText = '';
+            
+            if (stats.remainingTime > 0) {
+              if (stats.remainingTime < 60) {
+                remainingTimeText = `预计剩余时间: ${stats.remainingTime.toFixed(1)} 秒`;
+              } else {
+                const minutes = Math.floor(stats.remainingTime / 60);
+                const seconds = Math.round(stats.remainingTime % 60);
+                remainingTimeText = `预计剩余时间: ${minutes}分${seconds}秒`;
+              }
+            }
+            
+            processingDetails.innerHTML = `
+              总计: ${stats.totalFiles} 张图片<br>
+              已处理: ${stats.processedCount} 张 (${Math.round(progress * 100)}%)<br>
+              处理速度: ${speed} 张/秒<br>
+              已用时间: ${elapsedTime} 秒<br>
+              ${remainingTimeText}
+            `;
           }
         }, {
           gifQuality: 5, // 优化GIF质量设置
           onFrameProgress: (frameProgress) => {
             // 帧处理进度更新 (GIF专用)
             if (processingDetails) {
-              processingDetails.innerHTML += `<br>当前GIF帧进度: ${Math.round(frameProgress * 100)}%`;
+              const currentContent = processingDetails.innerHTML;
+              // 检查是否已经有GIF进度信息
+              if (!currentContent.includes('当前GIF进度')) {
+                processingDetails.innerHTML += `<br>当前GIF进度: ${Math.round(frameProgress * 100)}%`;
+              } else {
+                // 更新现有的GIF进度信息
+                const newContent = currentContent.replace(
+                  /当前GIF进度: \d+%/,
+                  `当前GIF进度: ${Math.round(frameProgress * 100)}%`
+                );
+                processingDetails.innerHTML = newContent;
+              }
             }
           }
         });
         
-        // 隐藏处理弹窗
-        if (processingPopup) processingPopup.style.display = 'none';
+        console.log(`图片处理完成，共处理 ${processedImages.length} 张图片，准备生成ZIP...`);
         
-        // 下载处理后的图片
-        processedImages.forEach(imageInfo => {
-          if (imageInfo.error) {
-            showMessage(`处理 ${imageInfo.fileName} 失败: ${imageInfo.error}`);
-            return;
-          }
+        // 使用ZIP打包下载
+        try {
+          // 导入generateAndDownloadZip函数
+          const { generateAndDownloadZip } = await import('../utils/image-processor.js');
           
-          // 下载图片
-          const link = document.createElement('a');
-          link.download = imageInfo.fileName;
-          link.href = imageInfo.result.blobUrl;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        });
-        
-        showMessage(`已批量下载 ${processedImages.length} 张图片`);
-        
+          // 生成ZIP文件名
+          const zipFileName = `watermarked_images_${new Date().toISOString().replace(/[:.]/g, '-')}.zip`;
+          
+          // 更新状态
+          if (processingStatus) processingStatus.textContent = '正在生成ZIP文件...';
+          if (processingDetails) processingDetails.innerHTML = '正在将处理后的图片添加到ZIP文件中，请稍候...';
+          
+          console.log('开始生成ZIP文件...');
+          
+          // 生成并下载ZIP，传入进度回调
+          const addedCount = await generateAndDownloadZip(processedImages, zipFileName, (progress, stats) => {
+            // ZIP生成进度已经在函数内部更新
+            if (processingProgressBar) {
+              processingProgressBar.style.width = `${Math.round(progress * 100)}%`;
+            }
+            
+            // 更新统计信息
+            if (processingStatus && stats) {
+              processingStatus.textContent = stats.status || '正在生成ZIP文件...';
+            }
+            
+            // 更新进度计数
+            if (processingCount && stats) {
+              processingCount.textContent = `${stats.processedCount}/${stats.totalCount}`;
+            }
+            
+            // 更新时间
+            if (processingTime && stats) {
+              processingTime.textContent = `${stats.elapsedTime.toFixed(1)}秒`;
+            }
+            
+            // 更新剩余时间
+            if (processingRemaining && stats && stats.remainingTime) {
+              if (stats.remainingTime < 60) {
+                processingRemaining.textContent = `${stats.remainingTime.toFixed(1)}秒`;
+              } else {
+                const minutes = Math.floor(stats.remainingTime / 60);
+                const seconds = Math.round(stats.remainingTime % 60);
+                processingRemaining.textContent = `${minutes}分${seconds}秒`;
+              }
+            }
+          });
+          
+          console.log(`ZIP生成完成，成功添加 ${addedCount} 张图片到ZIP文件`);
+          
+          // 隐藏处理弹窗
+          if (processingPopup) processingPopup.style.display = 'none';
+          
+          // 计算总处理时间
+          const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+          
+          // 显示实际添加到ZIP的图片数量
+          showMessage(`已批量下载 ${addedCount} 张图片（共处理 ${processedImages.length} 张，用时 ${totalTime} 秒）`);
+        } catch (zipError) {
+          console.error('创建ZIP文件时出错:', zipError);
+          showMessage('创建ZIP文件时出错: ' + zipError.message);
+          
+          // 隐藏处理弹窗
+          if (processingPopup) processingPopup.style.display = 'none';
+          
+          // 如果ZIP创建失败，尝试单独下载每张图片
+          console.log('ZIP创建失败，尝试单独下载每张图片...');
+          processedImages.forEach(imageInfo => {
+            if (imageInfo.error) {
+              showMessage(`处理 ${imageInfo.fileName} 失败: ${imageInfo.error}`);
+              return;
+            }
+            
+            // 下载图片
+            const link = document.createElement('a');
+            link.download = imageInfo.fileName;
+            link.href = imageInfo.result.blobUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          });
+        }
       } catch (error) {
         console.error('批量下载出错:', error);
         showMessage('批量下载出错: ' + error.message);
@@ -461,6 +655,27 @@ function showStatus(message, isSuccess) {
   } else {
     console.log(message);
   }
+}
+
+/**
+ * 显示消息（用于批量下载）
+ * @param {string} message - 消息文本
+ */
+function showMessage(message) {
+  // 使用已有的showStatus函数显示消息
+  showStatus(message, true);
+}
+
+/**
+ * 获取选中的文件
+ * @returns {Array} - 选中的文件数组
+ */
+function getSelectedFiles() {
+  // 如果有特定的选择机制，在这里实现
+  // 确保返回所有已加载的文件
+  const files = watermarkState.files || [];
+  console.log(`获取选中文件：共 ${files.length} 个文件`);
+  return files;
 }
 
 /**

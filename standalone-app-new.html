@@ -6,23 +6,105 @@
   <title>图片水印工具 - 独立版</title>
   <!-- 引入CSS -->
   <link rel="stylesheet" href="css/main.css">
-  <!-- 引入JSZip库 -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <!-- 引入GIF.js库 -->
-  <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js"></script>
-  <!-- 引入libgif-js库 -->
+  <link rel="icon" href="public/libs/favicon.ico" type="image/x-icon">
+  
+  <!-- 错误处理和调试 -->
   <script>
+    // 全局错误处理
+    window.onerror = function(message, source, lineno, colno, error) {
+      console.error('全局错误:', message, 'at', source, ':', lineno, ':', colno);
+      const errorContainer = document.getElementById('error-container');
+      if (errorContainer) {
+        errorContainer.innerHTML += `<p>加载错误: ${message}</p>`;
+        errorContainer.classList.add('show');
+      }
+      return false;
+    };
+    
+    // 库加载状态
+    window.libraryStatus = {
+      jszip: false,
+      gifjs: false,
+      libgifjs: false
+    };
+    
+    // 库加载函数
+    function loadScript(localUrl, cdnUrl, id) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = localUrl;
+        script.async = true;
+        script.id = id;
+        
+        script.onload = function() {
+          console.log(`成功加载库: ${id}`);
+          window.libraryStatus[id] = true;
+          resolve();
+        };
+        
+        script.onerror = function() {
+          console.warn(`从 ${localUrl} 加载库失败，尝试备用URL: ${cdnUrl}`);
+          if (cdnUrl) {
+            const backupScript = document.createElement('script');
+            backupScript.src = cdnUrl;
+            backupScript.async = true;
+            backupScript.id = id + '-backup';
+            
+            backupScript.onload = function() {
+              console.log(`成功从备用URL加载库: ${id}`);
+              window.libraryStatus[id] = true;
+              resolve();
+            };
+            
+            backupScript.onerror = function() {
+              console.error(`从备用URL加载库失败: ${id}`);
+              reject(new Error(`无法加载库: ${id}`));
+            };
+            
+            document.head.appendChild(backupScript);
+          } else {
+            reject(new Error(`无法加载库: ${id}`));
+          }
+        };
+        
+        document.head.appendChild(script);
+      });
+    }
+  </script>
+  
+  <!-- 库加载 -->
+  <script>
+    // 加载所有必要的库
+    Promise.all([
+      loadScript('public/libs/jszip.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'jszip'),
+      loadScript('public/libs/gif.min.js', 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js', 'gifjs'),
+      loadScript('public/libs/libgif.js', 'https://cdn.jsdelivr.net/gh/buzzfeed/libgif-js@master/libgif.js', 'libgifjs')
+    ]).then(() => {
+      console.log('所有库加载成功');
+    }).catch(error => {
+      console.error('库加载失败:', error);
+      const errorContainer = document.getElementById('error-container');
+      if (errorContainer) {
+        errorContainer.innerHTML += `<p>库加载失败: ${error.message}</p>`;
+        errorContainer.classList.add('show');
+      }
+    });
+    
     // 创建一个全局容器用于SuperGif
     window.onload = function() {
-      const gifContainer = document.createElement('div');
-      gifContainer.id = 'gif-container';
-      gifContainer.style.position = 'absolute';
-      gifContainer.style.left = '-9999px';
-      gifContainer.style.top = '-9999px';
-      document.body.appendChild(gifContainer);
+      try {
+        const gifContainer = document.createElement('div');
+        gifContainer.id = 'gif-container';
+        gifContainer.style.position = 'absolute';
+        gifContainer.style.left = '-9999px';
+        gifContainer.style.top = '-9999px';
+        document.body.appendChild(gifContainer);
+        console.log('GIF容器创建成功');
+      } catch (error) {
+        console.error('创建GIF容器失败:', error);
+      }
     };
   </script>
-  <script src="https://cdn.jsdelivr.net/gh/buzzfeed/libgif-js@master/libgif.js"></script>
 </head>
 <body>
   <header>
@@ -188,9 +270,77 @@
         
         <p class="help-text">提示：可以直接拖动水印调整位置，鼠标滚轮调整大小</p>
         
+        <!-- 水印定位和缩放控制 -->
+        <div class="control-group">
+          <h3>水印位置</h3>
+          <div class="position-controls">
+            <div class="radio-group">
+              <label><input type="radio" name="position" value="custom" checked> <span>自定义位置</span></label>
+              <label><input type="radio" name="position" value="top-left"> <span>左上角</span></label>
+              <label><input type="radio" name="position" value="top-right"> <span>右上角</span></label>
+              <label><input type="radio" name="position" value="bottom-left"> <span>左下角</span></label>
+              <label><input type="radio" name="position" value="bottom-right"> <span>右下角</span></label>
+              <label><input type="radio" name="position" value="center"> <span>居中</span></label>
+              <label><input type="radio" name="position" value="tile"> <span>平铺</span></label>
+            </div>
+            
+            <div id="margin-controls">
+              <div class="slider-control">
+                <label>水平边距 <span class="tooltip-icon" title="水印距离边缘的水平距离">?</span></label>
+                <input type="range" id="margin-x-slider" min="0" max="100" value="20">
+                <div class="slider-value">
+                  <input type="number" id="margin-x-value" min="0" max="100" value="20">
+                  <span>px</span>
+                </div>
+              </div>
+              
+              <div class="slider-control">
+                <label>垂直边距 <span class="tooltip-icon" title="水印距离边缘的垂直距离">?</span></label>
+                <input type="range" id="margin-y-slider" min="0" max="100" value="20">
+                <div class="slider-value">
+                  <input type="number" id="margin-y-value" min="0" max="100" value="20">
+                  <span>px</span>
+                </div>
+              </div>
+            </div>
+            
+            <div id="tile-controls" style="display: none;">
+              <div class="slider-control">
+                <label>平铺间距 <span class="tooltip-icon" title="水印之间的间距">?</span></label>
+                <input type="range" id="tile-spacing-slider" min="50" max="300" value="150">
+                <div class="slider-value">
+                  <input type="number" id="tile-spacing-value" min="50" max="300" value="150">
+                  <span>px</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <h3>水印缩放</h3>
+          <div class="scale-controls">
+            <div class="radio-group">
+              <label><input type="radio" name="scale-mode" value="fixed" checked> <span>固定大小</span></label>
+              <label><input type="radio" name="scale-mode" value="relative"> <span>相对图片大小</span></label>
+            </div>
+            
+            <div id="relative-scale-controls" style="display: none;">
+              <div class="slider-control">
+                <label>缩放比例 <span class="tooltip-icon" title="水印相对于图片大小的比例">?</span></label>
+                <input type="range" id="scale-ratio-slider" min="5" max="50" value="20">
+                <div class="slider-value">
+                  <input type="number" id="scale-ratio-value" min="5" max="50" value="20">
+                  <span>%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <div class="batch-buttons">
           <button class="button" id="download-btn">下载单张图片</button>
-          <button class="button" id="batch-download-btn">批量下载</button>
+          <button class="button" id="batch-download-btn">批量下载(ZIP)</button>
         </div>
         
         <!-- 撤销/重做按钮 -->
@@ -216,7 +366,7 @@
         <div id="gif-badge" class="gif-badge" style="display: none;">GIF</div>
         <img id="preview-image" class="preview-image" style="display: none;">
         <canvas id="preview-canvas" class="preview-image" style="display: none;"></canvas>
-        <div id="watermark-container" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; pointer-events: auto; z-index: 10;"></div>
+        <div id="watermark-container" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; pointer-events: auto; z-index: 9999;"></div>
       </div>
       
       <div class="thumbnails-container" id="thumbnails-container" style="display: none;"></div>
@@ -249,11 +399,42 @@
   <div id="processing-popup" class="modal" style="display: none;">
     <div class="modal-content">
       <h3>处理中...</h3>
-      <div id="processing-status">正在准备图片...</div>
+      <div id="processing-status" class="processing-status">正在准备图片...</div>
       <div class="progress-container">
         <div id="processing-progress-bar" class="progress-bar"></div>
       </div>
-      <div id="processing-details" style="margin-top: 10px; font-size: 0.9em;"></div>
+      <div id="processing-details" class="processing-details"></div>
+      
+      <!-- 添加处理统计信息区域 -->
+      <div class="processing-stats">
+        <div class="stats-row">
+          <div class="stats-item" id="processing-time">
+            <div class="stats-label">已用时间</div>
+            <div class="stats-value">0秒</div>
+          </div>
+          <div class="stats-item" id="processing-remaining">
+            <div class="stats-label">预计剩余</div>
+            <div class="stats-value">计算中...</div>
+          </div>
+        </div>
+        <div class="stats-row">
+          <div class="stats-item" id="processing-speed">
+            <div class="stats-label">处理速度</div>
+            <div class="stats-value">0张/秒</div>
+          </div>
+          <div class="stats-item" id="processing-count">
+            <div class="stats-label">处理进度</div>
+            <div class="stats-value">0/0</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 添加取消按钮 -->
+      <div class="processing-actions">
+        <button id="processing-minimize-btn" class="button secondary">最小化</button>
+        <!-- 取消功能暂未实现，先注释掉 -->
+        <!-- <button id="processing-cancel-btn" class="button danger">取消</button> -->
+      </div>
     </div>
   </div>
   
@@ -268,17 +449,36 @@
         console.log('模块加载失败，尝试使用传统脚本加载');
         const errorMsg = document.getElementById('error-container');
         if (errorMsg) {
-          errorMsg.innerHTML = '<p>模块加载失败。请通过本地服务器访问，而不是直接从文件系统打开。</p>' +
-            '<p>推荐方法：</p>' +
+          errorMsg.innerHTML = '<div class="error-title">模块加载失败</div>' +
+            '<p>可能的原因：</p>' +
+            '<ul>' +
+            '<li>浏览器不支持ES模块</li>' +
+            '<li>外部库加载失败</li>' +
+            '<li>JavaScript错误阻止了初始化</li>' +
+            '</ul>' +
+            '<p>请尝试以下解决方法：</p>' +
             '<ol>' +
             '<li>使用命令行进入项目目录</li>' +
-            '<li>运行 <code>npx http-server</code> 或任何本地开发服务器</li>' +
+            '<li>运行 <code>npx http-server .</code> 启动本地服务器</li>' +
             '<li>在浏览器中访问 <a href="http://localhost:8080/standalone-app-new.html">http://localhost:8080/standalone-app-new.html</a></li>' +
+            '<li>打开浏览器控制台(F12)查看具体错误</li>' +
             '</ol>';
           errorMsg.classList.add('show');
+          
+          // 显示库加载状态
+          const libraryStatus = window.libraryStatus || {};
+          const statusHTML = '<div class="library-status">' +
+            '<p>库加载状态：</p>' +
+            '<ul>' +
+            `<li>JSZip: ${libraryStatus.jszip ? '✅' : '❌'}</li>` +
+            `<li>GIF.js: ${libraryStatus.gifjs ? '✅' : '❌'}</li>` +
+            `<li>libgif.js: ${libraryStatus.libgifjs ? '✅' : '❌'}</li>` +
+            '</ul>' +
+            '</div>';
+          errorMsg.innerHTML += statusHTML;
         }
       }
-    }, 1000);
+    }, 3000); // 增加超时时间到3秒
   </script>
 </body>
 </html>  

@@ -313,7 +313,20 @@ async function processGifImage(file, shouldApplyWatermark = false, options = {})
       const result = await processGif(file, {
         applyWatermark: shouldApplyWatermark,
         quality: options.quality || 10,
-        onProgress: options.onProgress
+        onProgress: options.onProgress,
+        // 添加完整的水印参数
+        type: watermarkState.type || 'text',
+        text: watermarkState.text || '仅供验证使用',
+        color: watermarkState.color || '#ff0000',
+        fontSize: watermarkState.fontSize || 24,
+        opacity: watermarkState.opacity || 50,
+        rotation: watermarkState.rotation || 0,
+        position: options.position || watermarkState.relativePosition || { x: 50, y: 50 },
+        tileSpacing: watermarkState.tileSpacing || 150,
+        watermarkImage: watermarkState.watermarkImage,
+        isDownload: options.isDownload || false,
+        // 保留其他选项
+        ...options
       });
       
       // 添加GIF标记
@@ -619,11 +632,44 @@ export function batchProcessImages(files, progressCallback, options = {}) {
       const processedImages = [];
       const totalFiles = files.length;
       let processedCount = 0;
+      const startTime = Date.now();
+      let lastUpdateTime = startTime;
+      let processingSpeed = 0; // 每秒处理图片数
       
       // 设置进度更新函数
       const updateProgress = () => {
         if (progressCallback) {
-          progressCallback(processedCount / totalFiles);
+          const currentTime = Date.now();
+          const elapsedTime = (currentTime - startTime) / 1000; // 秒
+          const elapsedSinceLastUpdate = (currentTime - lastUpdateTime) / 1000;
+          
+          // 至少每秒更新一次处理速度
+          if (elapsedSinceLastUpdate >= 1 || processedCount === totalFiles) {
+            // 计算处理速度（张/秒）
+            if (processedCount > 0) {
+              processingSpeed = processedCount / elapsedTime;
+            }
+            
+            lastUpdateTime = currentTime;
+          }
+          
+          // 估计剩余时间（秒）
+          let remainingTime = 0;
+          if (processingSpeed > 0 && processedCount < totalFiles) {
+            remainingTime = (totalFiles - processedCount) / processingSpeed;
+          }
+          
+          // 调用进度回调
+          progressCallback(
+            processedCount / totalFiles, 
+            {
+              processedCount,
+              totalFiles,
+              processingSpeed,
+              remainingTime,
+              elapsedTime
+            }
+          );
         }
       };
       
@@ -661,6 +707,19 @@ export function batchProcessImages(files, progressCallback, options = {}) {
           processingStatus.textContent = `正在处理: ${file.name} (${processedCount}/${totalFiles})`;
         }
         
+        // 更新处理详情
+        const processingDetails = document.getElementById('processing-details');
+        if (processingDetails) {
+          const fileType = isGif ? 'GIF动图' : '普通图片';
+          const fileSize = (file.size / 1024 / 1024).toFixed(2); // MB
+          processingDetails.innerHTML = `
+            当前处理: ${file.name}<br>
+            文件类型: ${fileType}<br>
+            文件大小: ${fileSize} MB<br>
+            处理进度: ${processedCount}/${totalFiles}
+          `;
+        }
+        
         const shouldApplyWatermark = options.shouldApplyWatermark !== false;
         
         // 水印选项
@@ -692,7 +751,9 @@ export function batchProcessImages(files, progressCallback, options = {}) {
             processedImages.push({
               file,
               result,
-              fileName: file.name
+              fileName: file.name,
+              // 保留原始文件路径信息
+              webkitRelativePath: file.webkitRelativePath || null
             });
             
             running--;
@@ -709,7 +770,9 @@ export function batchProcessImages(files, progressCallback, options = {}) {
             processedImages.push({
               file,
               error: error.message,
-              fileName: file.name
+              fileName: file.name,
+              // 保留原始文件路径信息
+              webkitRelativePath: file.webkitRelativePath || null
             });
             
             running--;
@@ -759,82 +822,225 @@ export function batchProcessImages(files, progressCallback, options = {}) {
  * 生成并下载ZIP
  * @param {Array} processedImages - 处理后的图片数组
  * @param {string} zipFileName - ZIP文件名
+ * @param {Function} progressCallback - 进度回调函数，可选
  * @returns {Promise} - 下载完成的Promise
  */
-export function generateAndDownloadZip(processedImages, zipFileName = 'watermarked_images.zip') {
+export function generateAndDownloadZip(processedImages, zipFileName = 'watermarked_images.zip', progressCallback) {
   return new Promise((resolve, reject) => {
     // 检查是否有JSZip库
-    if (!window.JSZip) {
-      reject(new Error('JSZip库未加载'));
+    if (typeof JSZip === 'undefined' && !window.JSZip) {
+      console.error('JSZip库未加载，尝试动态加载...');
+      
+      // 尝试动态加载JSZip库
+      const script = document.createElement('script');
+      script.src = 'public/libs/jszip.min.js';
+      script.onload = () => {
+        console.log('JSZip库动态加载成功，继续生成ZIP');
+        // 递归调用自身，此时JSZip应该已经加载
+        generateAndDownloadZip(processedImages, zipFileName, progressCallback)
+          .then(resolve)
+          .catch(reject);
+      };
+      script.onerror = () => {
+        // 尝试从CDN加载
+        const backupScript = document.createElement('script');
+        backupScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        backupScript.onload = () => {
+          console.log('JSZip库从CDN加载成功，继续生成ZIP');
+          // 递归调用自身，此时JSZip应该已经加载
+          generateAndDownloadZip(processedImages, zipFileName, progressCallback)
+            .then(resolve)
+            .catch(reject);
+        };
+        backupScript.onerror = () => {
+          console.error('无法加载JSZip库，无法生成ZIP文件');
+          reject(new Error('无法加载JSZip库，请检查网络连接或刷新页面重试'));
+        };
+        document.head.appendChild(backupScript);
+      };
+      document.head.appendChild(script);
       return;
     }
     
+    console.log(`开始生成ZIP文件，处理 ${processedImages.length} 张图片`);
+    
+    // 获取JSZip对象
+    const JSZipConstructor = window.JSZip || JSZip;
+    
     // 创建一个新的ZIP
-    const zip = new window.JSZip();
+    const zip = new JSZipConstructor();
     
     // 添加所有图片到ZIP
-    const promises = processedImages.map(async (item) => {
+    let addedCount = 0; // 计数器，记录实际添加到ZIP的图片数量
+    const fileNameMap = new Map(); // 用于检测文件名重复
+    const totalImages = processedImages.length;
+    let processedZipCount = 0;
+    const startTime = Date.now();
+    
+    // 更新进度的函数
+    const updateZipProgress = (status) => {
+      if (progressCallback) {
+        const currentTime = Date.now();
+        const elapsedTime = (currentTime - startTime) / 1000; // 秒
+        const progress = processedZipCount / totalImages;
+        let remainingTime = 0;
+        
+        if (processedZipCount > 0 && progress > 0) {
+          remainingTime = (elapsedTime / progress) - elapsedTime;
+        }
+        
+        progressCallback(progress, {
+          status,
+          processedCount: processedZipCount,
+          totalCount: totalImages,
+          elapsedTime,
+          remainingTime
+        });
+      }
+    };
+    
+    // 初始化进度
+    updateZipProgress('正在准备添加图片到ZIP...');
+    
+    // 添加所有图片到ZIP
+    const promises = processedImages.map(async (item, index) => {
       try {
+        processedZipCount++;
+        
         if (item.error) {
           console.warn(`跳过添加图片 ${item.fileName} 到ZIP，因为处理时出错:`, item.error);
+          updateZipProgress(`正在添加图片到ZIP: ${processedZipCount}/${totalImages}`);
           return;
         }
         
         // 获取blob
         let blob;
-        if (item.result.blob) {
-          // 如果已经有blob，直接使用
-          blob = item.result.blob;
-        } else if (item.result.blobUrl) {
-          // 如果只有blobUrl，获取blob
-          const response = await fetch(item.result.blobUrl);
-          blob = await response.blob();
-        } else {
-          console.warn(`跳过添加图片 ${item.fileName} 到ZIP，因为没有blob或blobUrl`);
+        try {
+          if (item.result.blob) {
+            // 如果已经有blob，直接使用
+            blob = item.result.blob;
+          } else if (item.result.blobUrl) {
+            // 如果只有blobUrl，获取blob
+            const response = await fetch(item.result.blobUrl);
+            if (!response.ok) {
+              throw new Error(`获取图片数据失败: ${response.status} ${response.statusText}`);
+            }
+            blob = await response.blob();
+          } else {
+            console.warn(`跳过添加图片 ${item.fileName} 到ZIP，因为没有blob或blobUrl`);
+            updateZipProgress(`正在添加图片到ZIP: ${processedZipCount}/${totalImages}`);
+            return;
+          }
+        } catch (blobError) {
+          console.error(`获取图片 ${item.fileName} 的blob数据时出错:`, blobError);
+          updateZipProgress(`正在添加图片到ZIP: ${processedZipCount}/${totalImages}`);
           return;
         }
         
-        // 确定文件扩展名
-        let extension;
-        if (item.result.isGif) {
-          extension = '.gif'; // GIF文件保持.gif扩展名
-        } else if (blob.type === 'image/png') {
-          extension = '.png';
-        } else if (blob.type === 'image/jpeg') {
-          extension = '.jpg';
-        } else if (blob.type === 'image/webp') {
-          extension = '.webp';
+        // 保留原始文件名和路径
+        const fileName = item.fileName;
+        let filePath = item.webkitRelativePath || item.file.webkitRelativePath || fileName;
+        
+        // 添加到ZIP，保留原始文件夹结构
+        if (filePath !== fileName) {
+          // 如果有相对路径信息，使用它来保留目录结构
+          // 检查是否已存在相同路径的文件
+          if (fileNameMap.has(filePath)) {
+            // 已存在同名文件，需要生成唯一路径
+            // 分解路径和文件名
+            const lastSlashIndex = filePath.lastIndexOf('/');
+            const dirPath = lastSlashIndex > -1 ? filePath.substring(0, lastSlashIndex + 1) : '';
+            const baseName = lastSlashIndex > -1 ? filePath.substring(lastSlashIndex + 1) : filePath;
+            
+            const fileExt = baseName.lastIndexOf('.') > 0 ? baseName.substring(baseName.lastIndexOf('.')) : '';
+            const nameWithoutExt = baseName.lastIndexOf('.') > 0 ? baseName.substring(0, baseName.lastIndexOf('.')) : baseName;
+            
+            let uniqueFilePath = filePath;
+            let counter = 1;
+            
+            // 生成唯一文件名
+            while (fileNameMap.has(uniqueFilePath)) {
+              uniqueFilePath = `${dirPath}${nameWithoutExt}_${counter}${fileExt}`;
+              counter++;
+            }
+            
+            filePath = uniqueFilePath;
+          }
+          
+          // 记录文件路径
+          fileNameMap.set(filePath, true);
+          
+          // 添加到ZIP
+          zip.file(filePath, blob);
+          console.log(`添加图片 ${filePath} 到ZIP (保留目录结构)`);
+          addedCount++;
         } else {
-          // 默认使用原始文件的扩展名
-          const originalExt = item.fileName.substring(item.fileName.lastIndexOf('.'));
-          extension = originalExt || '.jpg';
+          // 没有相对路径信息，直接使用文件名
+          // 检查是否已存在同名文件
+          if (fileNameMap.has(fileName)) {
+            // 已存在同名文件，需要生成唯一文件名
+            const fileExt = fileName.lastIndexOf('.') > 0 ? fileName.substring(fileName.lastIndexOf('.')) : '';
+            const nameWithoutExt = fileName.lastIndexOf('.') > 0 ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
+            
+            let uniqueFileName = fileName;
+            let counter = 1;
+            
+            // 生成唯一文件名
+            while (fileNameMap.has(uniqueFileName)) {
+              uniqueFileName = `${nameWithoutExt}_${counter}${fileExt}`;
+              counter++;
+            }
+            
+            // 使用唯一文件名
+            fileNameMap.set(uniqueFileName, true);
+            zip.file(uniqueFileName, blob);
+            console.log(`添加图片 ${uniqueFileName} 到ZIP (重命名解决冲突)`);
+            addedCount++;
+          } else {
+            // 使用原始文件名
+            fileNameMap.set(fileName, true);
+            zip.file(fileName, blob);
+            console.log(`添加图片 ${fileName} 到ZIP`);
+            addedCount++;
+          }
         }
         
-        // 创建新的文件名（去除原始扩展名）
-        const baseName = item.fileName.substring(0, item.fileName.lastIndexOf('.'));
-        const newFileName = `${baseName}_watermarked${extension}`;
-        
-        // 添加到ZIP
-        zip.file(newFileName, blob);
-        console.log(`添加图片 ${newFileName} 到ZIP`);
+        // 更新进度
+        updateZipProgress(`正在添加图片到ZIP: ${processedZipCount}/${totalImages}`);
       } catch (error) {
         console.error(`添加图片 ${item.fileName} 到ZIP时出错:`, error);
+        updateZipProgress(`正在添加图片到ZIP: ${processedZipCount}/${totalImages}`);
       }
     });
     
     // 等待所有图片添加完成
     Promise.all(promises)
       .then(() => {
+        // 更新进度状态
+        updateZipProgress('正在生成ZIP文件...');
+        console.log(`所有图片已添加到ZIP，共 ${addedCount} 张，开始生成ZIP文件...`);
+        
         // 生成ZIP
         return zip.generateAsync({
           type: 'blob',
           compression: 'DEFLATE',
           compressionOptions: {
             level: 6 // 压缩级别，1-9，9为最高压缩率
+          },
+          onUpdate: (metadata) => {
+            // 更新ZIP生成进度
+            if (progressCallback) {
+              const percent = metadata.percent / 100;
+              updateZipProgress(`正在压缩ZIP文件: ${metadata.percent.toFixed(1)}%`);
+            }
           }
         });
       })
       .then((blob) => {
+        // 更新状态
+        updateZipProgress('ZIP文件生成完成，准备下载...');
+        console.log(`ZIP文件生成完成，大小: ${(blob.size / 1024 / 1024).toFixed(2)} MB，准备下载...`);
+        
         // 创建下载链接
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -851,7 +1057,9 @@ export function generateAndDownloadZip(processedImages, zipFileName = 'watermark
           URL.revokeObjectURL(url);
         }, 1000);
         
-        resolve();
+        // 使用实际添加的图片数量
+        console.log(`ZIP文件下载已触发，包含 ${addedCount} 张图片`);
+        resolve(addedCount);
       })
       .catch((error) => {
         console.error('生成ZIP文件时出错:', error);
@@ -1046,4 +1254,124 @@ function updateWatermarkPosition() {
   } catch (error) {
     console.error('更新水印位置时出错:', error);
   }
+}
+
+/**
+ * 在ImageData上应用水印
+ * @param {ImageData} imageData - 图像数据
+ * @param {Object} watermarkOptions - 水印选项
+ * @returns {ImageData} - 应用水印后的图像数据
+ */
+export function applyWatermarkToImageData(imageData, watermarkOptions) {
+  // 创建临时canvas来处理图像数据
+  const canvas = document.createElement('canvas');
+  canvas.width = imageData.width;
+  canvas.height = imageData.height;
+  const ctx = canvas.getContext('2d');
+  
+  // 绘制原始图像数据
+  ctx.putImageData(imageData, 0, 0);
+  
+  // 应用水印
+  const { 
+    type, 
+    text, 
+    color, 
+    fontSize, 
+    opacity, 
+    rotation, 
+    position = { x: 50, y: 50 }, // 默认值，居中
+    tileSpacing,
+    watermarkImage
+  } = watermarkOptions;
+  
+  // 计算实际位置（基于百分比）
+  const actualX = (position.x / 100) * canvas.width;
+  const actualY = (position.y / 100) * canvas.height;
+  
+  // 设置透明度
+  ctx.globalAlpha = opacity / 100;
+  
+  // 保存当前的变换状态
+  ctx.save();
+  
+  // 根据水印类型渲染
+  switch (type) {
+    case 'text':
+      // 设置旋转中心点到水印位置
+      ctx.translate(actualX, actualY);
+      ctx.rotate((rotation * Math.PI) / 180);
+      
+      // 设置字体和颜色
+      ctx.font = `${fontSize}px Arial`;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // 绘制文字
+      ctx.fillText(text, 0, 0);
+      break;
+      
+    case 'tiled':
+      // 设置字体和颜色
+      ctx.font = `${fontSize}px Arial`;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // 计算行列数
+      const spacing = tileSpacing || 150;
+      const cols = Math.ceil(canvas.width / spacing);
+      const rows = Math.ceil(canvas.height / spacing);
+      
+      // 计算起始偏移，使水印居中分布
+      const offsetX = (canvas.width - (cols - 1) * spacing) / 2;
+      const offsetY = (canvas.height - (rows - 1) * spacing) / 2;
+      
+      // 绘制平铺水印
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const x = offsetX + col * spacing;
+          const y = offsetY + row * spacing;
+          
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate((rotation * Math.PI) / 180);
+          ctx.fillText(text, 0, 0);
+          ctx.restore();
+        }
+      }
+      break;
+      
+    case 'image':
+      if (watermarkImage) {
+        // 计算水印图片尺寸（默认为30%的画布宽度）
+        const watermarkWidth = canvas.width * 0.3;
+        const aspectRatio = watermarkImage.height / watermarkImage.width;
+        const watermarkHeight = watermarkWidth * aspectRatio;
+        
+        // 设置旋转中心点到水印位置
+        ctx.translate(actualX, actualY);
+        ctx.rotate((rotation * Math.PI) / 180);
+        
+        // 绘制水印图片
+        ctx.drawImage(
+          watermarkImage,
+          -watermarkWidth / 2,
+          -watermarkHeight / 2,
+          watermarkWidth,
+          watermarkHeight
+        );
+      }
+      break;
+  }
+  
+  // 恢复变换状态
+  ctx.restore();
+  
+  // 重置透明度
+  ctx.globalAlpha = 1.0;
+  
+  // 获取处理后的图像数据
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
 } 
