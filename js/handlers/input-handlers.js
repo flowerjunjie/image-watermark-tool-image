@@ -55,10 +55,11 @@ export function initInputHandlers() {
   const fontSizeIncrease = document.getElementById('font-size-increase');
   
   if (fontSizeInput && fontSizeValue) {
-    // 初始化值
-    updateState({
-      fontSize: parseInt(fontSizeInput.value)
-    });
+    // 使用状态中的值初始化界面元素，而不是从界面元素获取值
+    const stateValue = watermarkState.fontSize || 36;
+    fontSizeInput.value = stateValue;
+    fontSizeValue.textContent = stateValue;
+    if (fontSizeNumberInput) fontSizeNumberInput.value = stateValue;
     
     // 滑动条事件
     fontSizeInput.addEventListener('input', handleFontSizeInput);
@@ -170,10 +171,11 @@ export function initInputHandlers() {
   const opacityIncrease = document.getElementById('opacity-increase');
   
   if (opacityInput && opacityValue) {
-    // 初始化值
-    updateState({
-      opacity: parseInt(opacityInput.value)
-    });
+    // 使用状态中的值初始化界面元素
+    const stateValue = watermarkState.opacity || 50;
+    opacityInput.value = stateValue;
+    opacityValue.textContent = `${stateValue}%`;
+    if (opacityNumberInput) opacityNumberInput.value = stateValue;
     
     // 滑动条事件
     opacityInput.addEventListener('input', handleOpacityInput);
@@ -285,10 +287,11 @@ export function initInputHandlers() {
   const rotationIncrease = document.getElementById('rotation-increase');
   
   if (rotationInput && rotationValue) {
-    // 初始化值
-    updateState({
-      rotation: parseInt(rotationInput.value)
-    });
+    // 使用状态中的值初始化界面元素
+    const stateValue = watermarkState.rotation || 0;
+    rotationInput.value = stateValue;
+    rotationValue.textContent = `${stateValue}°`;
+    if (rotationNumberInput) rotationNumberInput.value = stateValue;
     
     // 滑动条事件
     rotationInput.addEventListener('input', handleRotationInput);
@@ -396,10 +399,8 @@ export function initInputHandlers() {
   const colorInput = document.getElementById('color');
   
   if (colorInput) {
-    // 初始化值
-    updateState({
-      color: colorInput.value
-    });
+    // 使用状态中的颜色值初始化
+    colorInput.value = watermarkState.color || '#ff0000';
     
     // 颜色选择事件
     colorInput.addEventListener('input', function() {
@@ -418,6 +419,11 @@ export function initInputHandlers() {
   const watermarkImageSizeValue = document.getElementById('watermark-image-size-value');
   
   if (watermarkImageSizeInput && watermarkImageSizeValue) {
+    // 使用状态中的值初始化界面元素
+    const stateValue = watermarkState.watermarkImageSize || 40;
+    watermarkImageSizeInput.value = stateValue;
+    watermarkImageSizeValue.textContent = `${stateValue}%`;
+    
     watermarkImageSizeInput.addEventListener('input', function() {
       const value = parseInt(this.value);
       
@@ -439,10 +445,10 @@ export function initInputHandlers() {
   const imageQualityValue = document.getElementById('image-quality-value');
   
   if (imageQualityInput && imageQualityValue) {
-    // 初始化值
-    updateState({
-      quality: parseInt(imageQualityInput.value) / 100
-    });
+    // 使用状态中的值初始化界面元素
+    const qualityPercent = Math.round((watermarkState.quality || 0.92) * 100);
+    imageQualityInput.value = qualityPercent;
+    imageQualityValue.textContent = `${qualityPercent}%`;
     
     // 滑动条事件
     imageQualityInput.addEventListener('input', function() {
