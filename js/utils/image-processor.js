@@ -627,20 +627,40 @@ export function batchProcessImages(files, progressCallback, options = {}) {
         }
       };
       
+      // 分离GIF和非GIF图片，先处理普通图片，后处理GIF图片（GIF处理更慢）
+      const gifFiles = [];
+      const nonGifFiles = [];
+      
+      // 检查文件类型并分类
+      files.forEach(file => {
+        if (file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif')) {
+          gifFiles.push(file);
+        } else {
+          nonGifFiles.push(file);
+        }
+      });
+      
+      console.log(`分离图片类型: ${nonGifFiles.length} 张普通图片, ${gifFiles.length} 张GIF图片`);
+      
       // 创建队列
       const tasks = [];
-      const maxConcurrent = 2; // 最大并发数
+      // 根据系统性能自动调整并发数，普通图片使用更高并发，GIF使用较低并发
+      const maxConcurrentNonGif = Math.min(navigator.hardwareConcurrency || 4, 6); // 最多6个并发
+      const maxConcurrentGif = Math.min(navigator.hardwareConcurrency || 2, 2);    // GIF最多2个并发
       let running = 0;
       
       // 处理单张图片的函数
-      const processOneImage = (index) => {
-        if (index >= files.length) {
-          // 所有图片都已开始处理
+      const processOneImage = (file, index, isGif = false) => {
+        if (!file) {
           return;
         }
         
-        // 当前文件
-        const file = files[index];
+        // 显示当前处理的文件名
+        const processingStatus = document.getElementById('processing-status');
+        if (processingStatus) {
+          processingStatus.textContent = `正在处理: ${file.name} (${processedCount}/${totalFiles})`;
+        }
+        
         const shouldApplyWatermark = options.shouldApplyWatermark !== false;
         
         // 水印选项
@@ -663,7 +683,9 @@ export function batchProcessImages(files, progressCallback, options = {}) {
         processImage(file, shouldApplyWatermark, {
           ...options,
           ...watermarkOptions,
-          isDownload: true // 确保GIF水印被烧录
+          isDownload: true, // 确保GIF水印被烧录
+          // GIF处理优化：降低GIF质量参数，减少处理时间
+          quality: isGif ? (options.gifQuality || 5) : (options.quality || 0.92)
         })
           .then(result => {
             // 添加到处理后的图片列表
@@ -677,16 +699,8 @@ export function batchProcessImages(files, progressCallback, options = {}) {
             processedCount++;
             updateProgress();
             
-            // 检查是否还有更多图片需要处理
-            if (index + maxConcurrent < files.length) {
-              processOneImage(index + maxConcurrent);
-            }
-            
-            // 检查是否所有图片都已处理完成
-            if (processedCount === totalFiles) {
-              console.log('所有图片处理完成');
-              resolve(processedImages);
-            }
+            // 继续处理队列中的下一个图片
+            processNextImage();
           })
           .catch(error => {
             console.error(`处理图片 ${file.name} 失败:`, error);
@@ -702,29 +716,38 @@ export function batchProcessImages(files, progressCallback, options = {}) {
             processedCount++;
             updateProgress();
             
-            // 检查是否还有更多图片需要处理
-            if (index + maxConcurrent < files.length) {
-              processOneImage(index + maxConcurrent);
-            }
-            
-            // 检查是否所有图片都已处理完成
-            if (processedCount === totalFiles) {
-              console.log('所有图片处理完成');
-              resolve(processedImages);
-            }
+            // 继续处理队列中的下一个图片
+            processNextImage();
           });
       };
       
-      // 启动下一批处理
-      const startNextProcesses = () => {
-        // 开始处理前maxConcurrent个文件
-        for (let i = 0; i < Math.min(maxConcurrent, files.length); i++) {
-          processOneImage(i);
+      // 要处理的文件队列
+      let fileQueue = [...nonGifFiles, ...gifFiles];
+      let currentIndex = 0;
+      
+      // 开始处理下一个图片
+      const processNextImage = () => {
+        // 检查是否还有需要处理的图片且未超过最大并发数
+        while (currentIndex < fileQueue.length && 
+              ((currentIndex < nonGifFiles.length && running < maxConcurrentNonGif) || 
+               (currentIndex >= nonGifFiles.length && running < maxConcurrentGif))) {
+          
+          const file = fileQueue[currentIndex];
+          const isGif = currentIndex >= nonGifFiles.length; // 是否是GIF队列中的图片
+          
+          processOneImage(file, currentIndex, isGif);
+          currentIndex++;
+        }
+        
+        // 检查是否所有图片都已处理完成
+        if (processedCount === totalFiles) {
+          console.log('所有图片处理完成');
+          resolve(processedImages);
         }
       };
       
       // 开始处理
-      startNextProcesses();
+      processNextImage();
     } catch (error) {
       console.error('批量处理图片时出错:', error);
       reject(error);

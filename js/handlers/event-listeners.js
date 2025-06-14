@@ -165,89 +165,88 @@ export function initEventListeners() {
   const batchDownloadBtn = document.getElementById('batch-download-btn');
   
   if (batchDownloadBtn) {
-    batchDownloadBtn.addEventListener('click', function() {
-      // 检查是否有上传的图片
-      if (!watermarkState.files || watermarkState.files.length === 0) {
-        showStatus('请先上传图片', false);
-        return;
-      }
-      
-      // 显示处理模态框
-      const processingModal = document.getElementById('processing-modal');
-      const modalProgressBar = document.getElementById('modal-progress-bar');
-      const processingStatus = document.getElementById('processing-status');
-      
-      if (processingModal) {
-        processingModal.style.display = 'flex';
-        if (processingStatus) processingStatus.textContent = '正在处理图片...';
-        if (modalProgressBar) {
-          modalProgressBar.style.width = '0%';
-          modalProgressBar.textContent = '0%';
+    batchDownloadBtn.addEventListener('click', async function() {
+      try {
+        // 检查是否有图片被选中
+        const selectedFiles = getSelectedFiles();
+        
+        if (selectedFiles.length === 0) {
+          showMessage('请选择要下载的图片');
+          return;
         }
-      }
-      
-      console.log(`开始批量处理 ${watermarkState.files.length} 张图片`);
-      
-      // 确保已保存第一张图片的水印设置
-      if (!watermarkState.firstImageSettings) {
-        // 如果没有保存第一张图片的设置，则保存当前设置
-        saveFirstImageSettings();
-      }
-      
-      // 批量处理图片
-      batchProcessImages(
-        watermarkState.files,
-        (progress) => {
-          // 更新进度条
-          if (modalProgressBar) {
-            modalProgressBar.style.width = `${progress * 100}%`;
-            modalProgressBar.textContent = `${Math.round(progress * 100)}%`;
+        
+        // 显示处理弹窗
+        const processingPopup = document.getElementById('processing-popup');
+        const processingProgressBar = document.getElementById('processing-progress-bar');
+        const processingStatus = document.getElementById('processing-status');
+        const processingDetails = document.getElementById('processing-details');
+        
+        if (processingPopup) processingPopup.style.display = 'block';
+        if (processingProgressBar) processingProgressBar.style.width = '0%';
+        if (processingStatus) processingStatus.textContent = '正在准备批量处理...';
+        if (processingDetails) {
+          const gifCount = selectedFiles.filter(file => 
+            file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif')
+          ).length;
+          
+          processingDetails.innerHTML = `
+            总计: ${selectedFiles.length} 张图片<br>
+            普通图片: ${selectedFiles.length - gifCount} 张<br>
+            GIF动图: ${gifCount} 张<br>
+            <small>注意: GIF处理速度较慢，请耐心等待</small>
+          `;
+        }
+        
+        // 批量处理图片并下载
+        const processedImages = await batchProcessImages(selectedFiles, (progress) => {
+          // 更新进度
+          if (processingProgressBar) {
+            processingProgressBar.style.width = `${progress * 100}%`;
           }
+          
+          // 更新状态
           if (processingStatus) {
-            processingStatus.textContent = `已处理: ${Math.round(progress * watermarkState.files.length)}/${watermarkState.files.length} (${Math.round(progress * 100)}%)`;
+            processingStatus.textContent = `已处理: ${Math.round(progress * selectedFiles.length)}/${selectedFiles.length} (${Math.round(progress * 100)}%)`;
           }
-        },
-        {
-          shouldApplyWatermark: true,
-          quality: watermarkState.quality || 0.92,
-          isDownload: true // 添加isDownload标记，确保GIF水印被烧录
-        }
-      )
-        .then(processedImages => {
-          // 生成ZIP文件并下载
-          generateAndDownloadZip(processedImages, 'watermarked_images.zip')
-            .then(() => {
-              // 隐藏模态框
-              if (processingModal) {
-                processingModal.style.display = 'none';
-              }
-              
-              // 显示成功消息
-              showStatus('批量处理完成，ZIP文件已下载', true);
-            })
-            .catch(error => {
-              console.error('生成ZIP文件时出错:', error);
-              
-              // 隐藏模态框
-              if (processingModal) {
-                processingModal.style.display = 'none';
-              }
-              
-              // 显示错误消息
-              showStatus('生成ZIP文件时出错', false);
-            });
-        })
-        .catch(error => {
-          console.error('批量处理图片时出错:', error);
-          
-          // 隐藏模态框
-          if (processingModal) {
-            processingModal.style.display = 'none';
+        }, {
+          gifQuality: 5, // 优化GIF质量设置
+          onFrameProgress: (frameProgress) => {
+            // 帧处理进度更新 (GIF专用)
+            if (processingDetails) {
+              processingDetails.innerHTML += `<br>当前GIF帧进度: ${Math.round(frameProgress * 100)}%`;
+            }
           }
-          
-          // 显示错误消息
-          showStatus('处理图片时出错', false);
         });
+        
+        // 隐藏处理弹窗
+        if (processingPopup) processingPopup.style.display = 'none';
+        
+        // 下载处理后的图片
+        processedImages.forEach(imageInfo => {
+          if (imageInfo.error) {
+            showMessage(`处理 ${imageInfo.fileName} 失败: ${imageInfo.error}`);
+            return;
+          }
+          
+          // 下载图片
+          const link = document.createElement('a');
+          link.download = imageInfo.fileName;
+          link.href = imageInfo.result.blobUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        });
+        
+        showMessage(`已批量下载 ${processedImages.length} 张图片`);
+        
+      } catch (error) {
+        console.error('批量下载出错:', error);
+        showMessage('批量下载出错: ' + error.message);
+        
+        // 隐藏处理弹窗
+        const processingPopup = document.getElementById('processing-popup');
+        if (processingPopup) processingPopup.style.display = 'none';
+      }
     });
   }
   

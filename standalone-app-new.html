@@ -245,6 +245,18 @@
   <!-- 状态消息 -->
   <div id="status-message" class="status-message"></div>
   
+  <!-- 处理中弹窗 -->
+  <div id="processing-popup" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h3>处理中...</h3>
+      <div id="processing-status">正在准备图片...</div>
+      <div class="progress-container">
+        <div id="processing-progress-bar" class="progress-bar"></div>
+      </div>
+      <div id="processing-details" style="margin-top: 10px; font-size: 0.9em;"></div>
+    </div>
+  </div>
+  
   <!-- 引入JavaScript模块 -->
   <script type="module" src="js/main.js"></script>
   
