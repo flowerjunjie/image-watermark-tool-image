@@ -1,0 +1,827 @@
+/* 水印工具样式表 */
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f5f5f5;
+  color: #333;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  background-color: #1976d2;
+  color: white;
+  padding: 8px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 10;
+}
+
+.version {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+main {
+  display: flex;
+  flex: 1;
+  padding: 10px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.sidebar {
+  flex: 0 0 300px;
+  background-color: white;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 15px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.preview-area {
+  flex: 1;
+  background-color: white;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 15px;
+  overflow: auto; /* 滚动条应该出现在这里，修改为auto */
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: background-color 0.3s ease; /* 添加过渡效果 */
+}
+
+.upload-area {
+  border: 2px dashed #ccc;
+  border-radius: 6px;
+  padding: 15px;
+  text-align: center;
+  cursor: pointer;
+  margin-bottom: 15px;
+  transition: border-color 0.3s;
+}
+
+.upload-area:hover {
+  border-color: #1976d2;
+  background-color: #f5f8ff;
+}
+
+.upload-area p {
+  margin: 0;
+}
+
+.button {
+  background-color: #1976d2;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.button:hover {
+  background-color: #1565c0;
+}
+
+.watermark-options {
+  margin: 15px 0;
+}
+
+.form-group {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+label {
+  display: block;
+  margin-bottom: 2px;
+  font-weight: 500;
+  font-size: 14px;
+  color: #444;
+}
+
+input[type="text"], 
+input[type="number"], 
+input[type="range"],
+input[type="color"],
+select {
+  width: 100%;
+  padding: 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* 滑动条容器样式优化 */
+.range-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 滑动条样式优化 */
+.range-container input[type="range"] {
+  flex: 1;
+  height: 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(to right, #1976d2, #64b5f6);
+  border-radius: 4px;
+  outline: none;
+  margin: 0;
+}
+
+/* 滑动条滑块样式 */
+.range-container input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #1976d2;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* 滑动条值显示样式 */
+.range-container span {
+  width: 40px;
+  text-align: right;
+  margin-left: 10px;
+  font-size: 13px;
+  color: #555;
+  font-weight: bold;
+}
+
+/* 工具提示图标样式 */
+.tooltip-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: #1976d2;
+  color: white;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 16px;
+  font-size: 12px;
+  margin-left: 5px;
+  cursor: help;
+}
+
+/* 添加工具提示样式 */
+.tooltip {
+  position: absolute;
+  background-color: #333;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 1000;
+  max-width: 250px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  pointer-events: none;
+}
+
+/* 添加工具提示箭头 */
+.tooltip:after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 0 5px 5px;
+  border-style: solid;
+  border-color: transparent transparent #333;
+}
+
+/* 顶部菜单样式 */
+.menu-bar {
+  display: flex;
+  background-color: #f0f0f0;
+  border-bottom: 1px solid #ddd;
+  padding: 0;
+  margin: 0;
+}
+
+.menu-item {
+  position: relative;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+}
+
+.menu-item:hover {
+  background-color: #e0e0e0;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: white;
+  border: 1px solid #ccc;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  min-width: 160px;
+  z-index: 1000;
+  display: none;
+}
+
+.menu-item:hover .dropdown-menu {
+  display: block;
+}
+
+.dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.dropdown-item:hover {
+  background-color: #f0f0f0;
+}
+
+/* 背景色切换按钮样式 */
+.bg-color-controls {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 15px;
+  padding: 8px;
+  border-radius: 6px;
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.bg-color-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.bg-color-button:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.bg-color-button.active {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.3);
+}
+
+.bg-color-button::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #1976d2;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.bg-color-button.active::after {
+  opacity: 1;
+}
+
+.bg-white {
+  background-color: #ffffff;
+}
+
+.bg-light-gray {
+  background-color: #f5f5f5;
+}
+
+.bg-light-blue {
+  background-color: #e6f7ff;
+}
+
+.bg-light-green {
+  background-color: #e6ffed;
+}
+
+.bg-light-yellow {
+  background-color: #fffbe6;
+}
+
+/* 帮助卡片样式 */
+.help-card {
+  background-color: #e3f2fd;
+  border-left: 4px solid #1976d2;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.help-card h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #1976d2;
+  font-size: 15px;
+}
+
+.help-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.help-card li {
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.help-icon {
+  margin-right: 5px;
+}
+
+.batch-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+.batch-buttons .button {
+  flex: 1;
+  min-width: 80px;
+}
+
+.preview-container {
+  position: relative;
+  max-width: 100%;
+  max-height: 80vh; /* 增加高度 */
+  margin: 0 auto;
+  flex-grow: 1; /* 让预览区域占据更多空间 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  user-select: none; /* 防止文本选择 */
+  touch-action: none; /* 防止触摸设备上的默认行为 */
+  overflow: visible; /* 内部容器不需要滚动条，改为visible */
+  background-color: transparent !important; /* 确保背景是透明的，使用!important确保优先级 */
+  z-index: 5; /* 确保在适当的层级 */
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 80vh; /* 增加高度 */
+  display: block;
+  position: relative; /* 添加相对定位 */
+  z-index: 5; /* 确保在水印容器下方 */
+}
+
+#watermark-container {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: auto !important;
+  z-index: 9999 !important;
+  display: block !important;
+  justify-content: center;
+  align-items: center;
+  overflow: visible; /* 允许水印内容溢出容器 */
+}
+
+.watermark {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  transform-origin: center;
+  white-space: nowrap;
+}
+
+.draggable-watermark {
+  position: absolute;
+  transform-origin: center;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: auto;
+  z-index: 9999;
+}
+
+.draggable-watermark:hover {
+  border: 2px dashed rgba(0, 0, 255, 0.8); /* 悬停时更明显 */
+}
+
+.draggable-watermark:active {
+  border: 2px solid rgba(0, 0, 255, 0.8); /* 拖动时变成实线 */
+}
+
+.draggable-watermark::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  right: -5px;
+  bottom: -5px;
+  border: 1px dashed rgba(0,0,0,0.3);
+  border-radius: 4px;
+  pointer-events: none;
+  display: none;
+}
+
+.draggable-watermark:hover::after {
+  display: block;
+}
+
+footer {
+  background-color: #f0f2f5;
+  padding: 8px;
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  border-top: 1px solid #e0e0e0;
+}
+
+.status-message {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  background-color: #4caf50;
+  color: white;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 1000;
+}
+
+.status-message.show {
+  opacity: 1;
+}
+
+.help-text {
+  font-size: 12px;
+  color: #666;
+  margin-top: 5px;
+}
+
+/* 错误处理样式 */
+.error-container {
+  background-color: #ffebee;
+  border: 1px solid #ffcdd2;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 10px 0;
+  color: #b71c1c;
+  display: none;
+}
+
+.error-container.show {
+  display: block;
+}
+
+/* 缩略图相关样式 */
+.thumbnails-container {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 15px;
+  height: 180px; /* 增加高度以显示两行缩略图 */
+  min-height: 180px; /* 确保最小高度 */
+  overflow-y: auto;
+  width: 100%;
+  padding: 8px;
+  background-color: transparent; /* 修改为透明背景 */
+  border-radius: 6px;
+  box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+  justify-content: center; /* 居中显示缩略图 */
+}
+
+.thumbnail {
+  position: relative;
+  flex: 0 0 80px;
+  height: 80px;
+  margin: 5px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbnail.active {
+  border-color: #1976d2;
+  transform: scale(1.05);
+  box-shadow: 0 0 8px rgba(25, 118, 210, 0.5);
+}
+
+.thumbnail .file-name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 8px;
+  padding: 2px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 进度条样式 */
+.progress-container {
+  width: 100%;
+  background-color: #f1f1f1;
+  border-radius: 4px;
+  margin: 10px 0;
+  overflow: hidden;
+  height: 20px;
+  display: none;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: #4caf50;
+  text-align: center;
+  line-height: 20px;
+  color: white;
+  font-size: 12px;
+  transition: width 0.3s;
+}
+
+/* 模态框样式 */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  width: 80%;
+  max-width: 500px;
+}
+
+/* 帮助文档模态框样式 */
+.help-modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.help-section {
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.help-section:last-child {
+  border-bottom: none;
+}
+
+.help-section h3 {
+  color: #1976d2;
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.help-section p {
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.help-section ul {
+  padding-left: 20px;
+}
+
+.help-section li {
+  margin-bottom: 5px;
+}
+
+.help-image {
+  max-width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin: 10px 0;
+}
+
+.close-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+}
+
+.close-button:hover {
+  color: #333;
+}
+
+.modal-title {
+  margin-top: 0;
+  color: #1976d2;
+}
+
+/* 帮助按钮样式 */
+.help-button {
+  background-color: transparent;
+  color: white;
+  border: 1px solid white;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: all 0.3s;
+}
+
+.help-button:hover {
+  background-color: white;
+  color: #1976d2;
+}
+
+.number-input-container {
+  display: flex;
+  align-items: center;
+  margin-left: 10px;
+}
+
+.number-input {
+  width: 50px;
+  text-align: center;
+  padding: 2px 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.number-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  user-select: none;
+}
+
+.number-btn:hover {
+  background-color: #e0e0e0;
+}
+
+/* 确保只有一个水印显示 */
+#watermark-element {
+  pointer-events: auto !important;
+}
+
+/* 水印拖动控制元素样式 */
+.watermark-drag-handle {
+  position: absolute;
+  transform-origin: center;
+  transform: translate(-50%, -50%);
+  cursor: move;
+  user-select: none;
+  pointer-events: auto !important;
+  z-index: 9999;
+  box-sizing: border-box;
+  /* 确保只有一个元素显示 */
+  background: transparent !important;
+  color: transparent !important;
+}
+
+/* 防止水印重叠 */
+#watermark-container {
+  pointer-events: auto;
+}
+
+#watermark-container > *:not(#watermark-element) {
+  display: none !important;
+}
+
+/* 缩略图加载指示器 */
+.thumbnail-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+}
+
+/* 加载动画 */
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top-color: #1976d2;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 错误图标 */
+.error-icon {
+  width: 20px;
+  height: 20px;
+  background-color: #f44336;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+}
+
+/* 撤销/重做按钮样式 */
+.undo-redo-buttons {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-button:hover {
+  background-color: #e0e0e0;
+}
+
+.icon-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon {
+  font-size: 18px;
+  color: #333;
+} 
