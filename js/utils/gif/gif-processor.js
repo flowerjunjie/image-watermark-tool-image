@@ -1,59 +1,162 @@
 /**
- * GIF处理器
- * 用于处理GIF动图的水印
+ * GIF处理工具
+ * 用于处理GIF动图，添加水印等
  */
 
-import { watermarkState } from '../../core/state.js';
-import { renderWatermarkOnCanvas } from '../../core/watermark.js';
-import { extractGifFrames, extractGifFramesNative } from './gif-extractor.js';
-import { applyWatermarkToImageData } from '../image-processor.js';
+import { extractGifFrames } from './gif-extractor.js';
+import { renderWatermarkOnCanvas, applyWatermarkToCanvas } from '../../core/watermark.js';
+import { GifWorkerProcessor } from './gif-worker-manager.js';
+
+// 创建一个缓存对象，用于存储处理过的GIF
+const gifCache = new Map();
+const MAX_CACHE_SIZE = 20; // 最大缓存数量
+const MAX_PROCESSING_TIME = 15000; // 最大处理时间（毫秒）
+const GIF_WORKER_TIMEOUT = 10000; // Worker处理超时（毫秒）
+
+// 添加一个处理状态标志，避免重复处理同一个文件
+const processingGifs = new Map();
+
+// 添加GIF处理队列和控制同时处理的GIF数量，避免处理大量GIF时UI卡住
+const gifProcessingQueue = [];
+const MAX_CONCURRENT_GIF_PROCESSING = 2; // 最大并发GIF处理数量
+let activeGifProcessingCount = 0;
 
 /**
- * 检查文件是否为GIF
- * @param {File} file - 文件对象
- * @returns {boolean} - 是否为GIF
+ * 处理GIF队列中的下一个任务
  */
-export function isGif(file) {
-  return file && (file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif'));
+function processNextGifInQueue() {
+  if (gifProcessingQueue.length === 0 || activeGifProcessingCount >= MAX_CONCURRENT_GIF_PROCESSING) {
+    return;
+  }
+  
+  const nextTask = gifProcessingQueue.shift();
+  if (!nextTask) return;
+  
+  activeGifProcessingCount++;
+  console.log(`开始处理GIF队列中的任务，当前活跃任务数: ${activeGifProcessingCount}，剩余任务: ${gifProcessingQueue.length}`);
+  
+  // 执行任务
+  nextTask.execute()
+    .then(result => {
+      // 任务完成
+      activeGifProcessingCount--;
+      console.log(`GIF处理任务完成，当前活跃任务数: ${activeGifProcessingCount}，剩余任务: ${gifProcessingQueue.length}`);
+      
+      // 检查是否所有任务都已完成
+      checkAllTasksCompleted();
+      
+      // 处理下一个任务
+      processNextGifInQueue();
+      
+      // 调用成功回调
+      if (nextTask.resolve) nextTask.resolve(result);
+    })
+    .catch(error => {
+      // 任务失败
+      activeGifProcessingCount--;
+      console.error(`GIF处理任务失败: ${error.message || error}`);
+      
+      // 检查是否所有任务都已完成
+      checkAllTasksCompleted();
+      
+      // 处理下一个任务
+      processNextGifInQueue();
+      
+      // 调用失败回调
+      if (nextTask.reject) nextTask.reject(error);
+    });
 }
 
-// 创建GIF处理的缓存池，避免重复处理相同参数的GIF
-const gifCache = new Map();
-
-// 设置缓存限制，避免内存溢出
-const MAX_CACHE_SIZE = 10; // 最多缓存10个不同参数的GIF处理结果
+/**
+ * 检查是否所有GIF处理任务都已完成
+ * 如果所有任务都已完成，则关闭模态对话框
+ */
+function checkAllTasksCompleted() {
+  if (activeGifProcessingCount === 0 && gifProcessingQueue.length === 0) {
+    console.log('所有GIF处理任务已完成，确保模态对话框关闭');
+    
+    // 关闭处理模态框
+    const processingModal = document.getElementById('processing-modal');
+    if (processingModal && processingModal.style.display === 'flex') {
+      console.log('GIF处理完成，关闭处理模态框');
+      processingModal.style.display = 'none';
+    }
+  }
+}
 
 /**
- * 清除最旧的缓存项
+ * 将GIF处理任务添加到队列
+ * @param {Function} processTask - 处理任务函数
+ * @returns {Promise} - 处理完成的Promise
+ */
+function enqueueGifProcessingTask(processTask) {
+  return new Promise((resolve, reject) => {
+    // 创建任务对象
+    const task = {
+      execute: processTask,
+      resolve: resolve,
+      reject: reject
+    };
+    
+    // 添加到队列
+    gifProcessingQueue.push(task);
+    console.log(`添加GIF处理任务到队列，当前队列长度: ${gifProcessingQueue.length}`);
+    
+    // 尝试处理队列
+    processNextGifInQueue();
+  });
+}
+
+/**
+ * 生成缓存键
+ * @param {Object} options - 水印选项
+ * @returns {string} - 缓存键
+ */
+function generateCacheKey(options) {
+  return `${options.fileName}_${options.type}_${options.text}_${options.position.x}_${options.position.y}_${options.rotation}_${options.opacity}`;
+}
+
+/**
+ * 清理最旧的缓存
  */
 function clearOldestCache() {
-  if (gifCache.size >= MAX_CACHE_SIZE) {
-    // 获取第一个键（最旧的）并删除
-    const firstKey = gifCache.keys().next().value;
+  if (gifCache.size === 0) return;
+  
+  // 获取第一个键
+  const firstKey = gifCache.keys().next().value;
+  
+  // 删除第一个缓存项
+  if (firstKey) {
     gifCache.delete(firstKey);
   }
 }
 
 /**
- * 生成GIF缓存键
- * @param {Object} params - 参数对象
- * @returns {String} 缓存键
+ * 判断文件是否为GIF
+ * @param {File|Blob|string} file - 文件或URL
+ * @returns {boolean} - 是否为GIF
  */
-function generateCacheKey(params) {
-  // 为了避免对象循环引用问题，只取需要的参数
-  const keyParams = {
-    fileName: params.fileName || '',
-    watermarkText: params.watermarkText || '',
-    x: params.x || 0,
-    y: params.y || 0,
-    fontSize: params.fontSize || 24,
-    opacity: params.opacity || 1.0,
-    angle: params.angle || 0,
-    color: params.color || '#000000',
-    quality: params.quality || 10
-  };
+export function isGif(file) {
+  // 检查MIME类型
+  if (file instanceof File || file instanceof Blob) {
+    // 同时检查MIME类型和文件扩展名
+    const isGifMime = file.type === 'image/gif';
+    
+    // 如果有文件名，检查扩展名
+    if (file.name) {
+      const isGifExt = file.name.toLowerCase().endsWith('.gif');
+      return isGifMime || isGifExt; // 满足任一条件即认为是GIF
+    }
+    
+    return isGifMime;
+  }
   
-  return JSON.stringify(keyParams);
+  // 如果是字符串URL，检查扩展名
+  if (typeof file === 'string') {
+    return file.toLowerCase().endsWith('.gif');
+  }
+  
+  return false;
 }
 
 /**
@@ -65,431 +168,1153 @@ function generateCacheKey(params) {
 export function processGif(gifSource, watermarkOptions = {}) {
   return new Promise((resolve, reject) => {
     try {
-      // 显示进度条
-      const progressContainer = document.getElementById('gif-progress-container');
-      const progressBar = document.getElementById('gif-progress-bar');
+      // 生成唯一标识符
+      const sourceId = generateCacheKey(watermarkOptions);
       
-      if (progressContainer) progressContainer.style.display = 'block';
-      if (progressBar) progressBar.style.width = '0%';
-      
-      console.log('开始处理GIF:', typeof gifSource, '是下载模式:', watermarkOptions.isDownload);
-      
-      // 如果是预览模式，则直接返回原始GIF
-      if (watermarkOptions.isPreview) {
-        if (progressContainer) progressContainer.style.display = 'none';
-        console.log('GIF预览模式，直接返回原始GIF');
-        resolve(gifSource);
+      // 检查是否已经在处理中
+      if (processingGifs.has(sourceId)) {
+        console.log('GIF已经在处理中，等待完成...');
+        
+        // 等待处理完成
+        const existingTask = processingGifs.get(sourceId);
+        existingTask.then(resolve).catch(reject);
         return;
       }
       
-      // 确保水印选项完整
-      const completeWatermarkOptions = {
-        type: watermarkOptions.type || 'text',
-        text: watermarkOptions.text || '仅供验证使用',
-        color: watermarkOptions.color || '#ff0000',
-        fontSize: watermarkOptions.fontSize || 24,
-        opacity: watermarkOptions.opacity || 50,
-        rotation: watermarkOptions.rotation || 0,
-        position: watermarkOptions.position || { x: 50, y: 50 },
-        tileSpacing: watermarkOptions.tileSpacing || 150,
-        watermarkImage: watermarkOptions.watermarkImage,
-        quality: watermarkOptions.quality || 5,
-        isDownload: watermarkOptions.isDownload || false,
-        applyWatermark: watermarkOptions.applyWatermark !== false, // 默认为true
-        ...watermarkOptions // 保留其他可能的选项
-      };
-      
-      console.log('GIF水印选项:', JSON.stringify({
-        type: completeWatermarkOptions.type,
-        text: completeWatermarkOptions.text.substring(0, 20) + (completeWatermarkOptions.text.length > 20 ? '...' : ''),
-        position: completeWatermarkOptions.position,
-        isDownload: completeWatermarkOptions.isDownload,
-        applyWatermark: completeWatermarkOptions.applyWatermark
-      }));
-      
-      // 检查缓存是否存在
-      const cacheKey = generateCacheKey({
-        fileName: watermarkOptions.fileName || '',
-        ...completeWatermarkOptions
-      });
-      
-      // 如果在缓存中找到，直接返回缓存结果
-      if (gifCache.has(cacheKey)) {
-        console.log('从缓存加载GIF处理结果');
-        if (progressContainer) progressContainer.style.display = 'none';
-        resolve(gifCache.get(cacheKey));
+      // 检查缓存
+      if (gifCache.has(sourceId)) {
+        const cachedGif = gifCache.get(sourceId);
+        console.log('使用缓存的GIF结果');
+        resolve(cachedGif);
         return;
       }
       
-      // 确保我们有一个URL或Blob
-      let gifUrl = gifSource;
-      if (gifSource instanceof File || gifSource instanceof Blob) {
-        gifUrl = URL.createObjectURL(gifSource);
-      }
-      
-      // 获取GIF的帧信息
-      console.log('开始提取GIF帧...');
-      if (progressBar) progressBar.style.width = '10%';
-      
-      extractGifFrames(gifUrl)
-        .then(frames => {
-          if (!frames || frames.length === 0) {
-            console.error('无法提取GIF帧');
-            throw new Error('无法提取GIF帧');
-          }
+      // 创建一个新的处理任务
+      let processingPromise;
+      processingPromise = new Promise((resolveTask, rejectTask) => {
+        // 添加到处理中列表
+        processingGifs.set(sourceId, processingPromise);
+        
+        // 创建进度条
+        const progressContainer = document.createElement('div');
+        progressContainer.id = 'gif-progress-container';
+        progressContainer.style.position = 'fixed';
+        progressContainer.style.bottom = '10px';
+        progressContainer.style.left = '10px';
+        progressContainer.style.right = '10px';
+        progressContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        progressContainer.style.padding = '10px';
+        progressContainer.style.borderRadius = '5px';
+        progressContainer.style.zIndex = '9999';
+        progressContainer.style.display = 'none';
+        
+        const progressText = document.createElement('div');
+        progressText.style.color = 'white';
+        progressText.style.marginBottom = '5px';
+        progressText.textContent = '处理GIF中...';
+        
+        const progressBarContainer = document.createElement('div');
+        progressBarContainer.style.backgroundColor = '#444';
+        progressBarContainer.style.height = '10px';
+        progressBarContainer.style.borderRadius = '5px';
+        progressBarContainer.style.overflow = 'hidden';
+        
+        const progressBar = document.createElement('div');
+        progressBar.style.backgroundColor = '#4CAF50';
+        progressBar.style.height = '100%';
+        progressBar.style.width = '0%';
+        progressBar.style.transition = 'width 0.3s';
+        
+        progressBarContainer.appendChild(progressBar);
+        progressContainer.appendChild(progressText);
+        progressContainer.appendChild(progressBarContainer);
+        
+        // 添加到文档
+        if (!document.getElementById('gif-progress-container')) {
+          document.body.appendChild(progressContainer);
+        }
+        
+        // 显示进度条（如果不是预览模式）
+        if (!watermarkOptions.isPreview) {
+          progressContainer.style.display = 'block';
+        }
+        
+        // 设置强制完成定时器，防止处理时间过长
+        const forceCompleteTimer = setTimeout(() => {
+          console.warn('GIF处理超时，强制返回原始GIF');
           
-          console.log(`成功提取 ${frames.length} 帧，开始添加水印`);
-          if (progressBar) progressBar.style.width = '30%';
-          
-          // 检查GIF.js库是否可用
-          if (typeof window.GIF === 'undefined') {
-            console.error('GIF.js库未加载');
-            throw new Error('GIF.js库未加载');
-          }
-          
-          // 使用Web Worker优化GIF编码
-          const gif = new window.GIF({
-            workers: Math.min(navigator.hardwareConcurrency || 2, 2), // 根据CPU核心数优化，但不超过2个worker
-            quality: completeWatermarkOptions.quality, // 使用完整的水印选项
-            workerScript: 'public/libs/gif.worker.min.js'
-          });
-          
-          // 为每一帧添加水印
-          const watermarkedFrames = [];
-          let processedFrames = 0;
-          
-          // 创建一个临时canvas
-          const tempCanvas = document.createElement('canvas');
-          const ctx = tempCanvas.getContext('2d', { willReadFrequently: true });
-          
-          // 设置canvas尺寸
-          let width, height;
-          
-          // 确定尺寸
-          if (frames[0].width && frames[0].height) {
-            width = frames[0].width;
-            height = frames[0].height;
-          } else if (frames[0].dims) {
-            width = frames[0].dims.width;
-            height = frames[0].dims.height;
-          } else if (frames[0].imageData) {
-            width = frames[0].imageData.width;
-            height = frames[0].imageData.height;
-          } else {
-            console.error('无法确定GIF尺寸');
-            throw new Error('无法确定GIF尺寸');
-          }
-          
-          console.log(`GIF尺寸: ${width}x${height}, 总帧数: ${frames.length}`);
-          
-          tempCanvas.width = width;
-          tempCanvas.height = height;
-          
-          // 处理每一帧
-          for (let i = 0; i < frames.length; i++) {
-            const frame = frames[i];
-            
-            // 清除canvas
-            ctx.clearRect(0, 0, width, height);
-            
-            // 绘制帧
-            if (frame.imageData) {
-              ctx.putImageData(frame.imageData, 0, 0);
-            } else if (frame.patch) {
-              const imageData = ctx.createImageData(width, height);
-              imageData.data.set(frame.patch);
-              ctx.putImageData(imageData, 0, 0);
-            } else {
-              console.error('无法处理GIF帧:', i);
-              throw new Error('无法处理GIF帧');
-            }
-            
-            // 应用水印
-            applyWatermarkToCanvas(ctx, width, height, completeWatermarkOptions);
-            
-            // 将帧添加到GIF
-            gif.addFrame(tempCanvas, {
-              copy: true,
-              delay: frame.delay || 100
-            });
-            
-            processedFrames++;
-            if (progressBar) {
-              const progress = 30 + (50 * processedFrames / frames.length);
-              progressBar.style.width = `${progress}%`;
-            }
-          }
-          
-          // GIF渲染完成的回调
-          gif.on('finished', function(blob) {
-            console.log('GIF渲染完成', blob.size);
-            
-            // 更新进度条
-            if (progressBar) progressBar.style.width = '100%';
-            
-            // 隐藏进度条
-            setTimeout(() => {
-              if (progressContainer) progressContainer.style.display = 'none';
-            }, 500);
-            
-            // 清理资源
-            if (gifUrl !== gifSource) {
-              URL.revokeObjectURL(gifUrl);
-            }
-            
-            // 缓存结果
-            clearOldestCache();
-            gifCache.set(cacheKey, blob);
-            
-            // 创建结果对象
-            const result = {
-              blob: blob,
-              blobUrl: URL.createObjectURL(blob),
-              width: width,
-              height: height
-            };
-            
-            console.log('GIF处理完成，返回结果:', result);
-            resolve(result);
-          });
-          
-          // 错误处理
-          gif.on('error', function(error) {
-            console.error('GIF渲染错误:', error);
-            if (progressContainer) progressContainer.style.display = 'none';
-            reject(error);
-          });
-          
-          // 开始渲染
-          console.log('开始渲染GIF...');
-          gif.render();
-        })
-        .catch(error => {
-          console.error('处理GIF帧时出错:', error);
-          
-          // 隐藏进度条
+          // 关闭进度条
           if (progressContainer) progressContainer.style.display = 'none';
           
-          // 尝试使用备用方法
-          console.log('尝试使用备用方法处理GIF');
-          extractGifFramesNative(gifUrl)
-            .then(frames => {
-              if (!frames || frames.length === 0) {
-                console.error('备用方法无法提取GIF帧');
-                throw new Error('备用方法无法提取GIF帧');
-              }
+          // 关闭处理模态框
+          const processingModal = document.getElementById('processing-modal');
+          if (processingModal && processingModal.style.display === 'flex') {
+            console.log('由于GIF处理超时，关闭处理模态框');
+            processingModal.style.display = 'none';
+          }
+          
+          // 从处理中移除
+          processingGifs.delete(sourceId);
+          
+          // 返回原始GIF
+          resolveTask(gifSource);
+        }, MAX_PROCESSING_TIME);
+        
+        // 3. 明确指定保留原始GIF - 优化路径
+        // 只有在预览模式或明确指定不应用水印时才返回原始GIF
+        if (watermarkOptions.isPreview || watermarkOptions.applyWatermark === false) {
+          clearTimeout(forceCompleteTimer);
+          if (progressContainer) progressContainer.style.display = 'none';
+          console.log('返回原始GIF，保留动画效果:', 
+            watermarkOptions.isPreview ? '预览模式' : 
+            watermarkOptions.applyWatermark === false ? '无需水印' : 
+            '指定保留动画');
+          
+          // 如果是预览模式，确保关闭处理模态框
+          if (watermarkOptions.isPreview) {
+            const processingModal = document.getElementById('processing-modal');
+            if (processingModal && processingModal.style.display === 'flex') {
+              console.log('预览模式下，关闭处理模态框');
+              processingModal.style.display = 'none';
+            }
+          }
+          
+          // 从处理中移除
+          processingGifs.delete(sourceId);
+          
+          resolveTask(gifSource);
+          return;
+        }
+        
+        // 注意：这里不再根据preserveAnimation决定是否应用水印
+        // 如果代码执行到这里，说明需要应用水印，即使preserveAnimation为true
+        
+        // 处理preserveAnimation选项 - 现在我们需要处理GIF，但保留动画效果
+        // 这意味着我们需要应用水印到每一帧，但保留动画效果
+        const shouldPreserveAnimation = watermarkOptions.preserveAnimation === true;
+        
+        // 尝试使用Worker处理
+        if (typeof Worker !== 'undefined' && GifWorkerProcessor) {
+          console.log('使用GIF Worker处理');
+          
+          // 初始化Worker
+          GifWorkerProcessor.init()
+            .then(() => {
+              console.log('GIF Worker初始化成功，开始提取帧');
               
-              console.log(`备用方法成功提取了 ${frames.length} 帧`);
-              
-              // 简化的GIF处理，只返回第一帧
-              const firstFrame = frames[0];
-              
-              // 创建一个临时canvas
-              const tempCanvas = document.createElement('canvas');
-              tempCanvas.width = firstFrame.width;
-              tempCanvas.height = firstFrame.height;
-              const tempCtx = tempCanvas.getContext('2d');
-              
-              // 绘制第一帧
-              tempCtx.putImageData(firstFrame.imageData, 0, 0);
-              
-              // 应用水印
-              applyWatermarkToCanvas(tempCtx, firstFrame.width, firstFrame.height, completeWatermarkOptions);
-              
-              // 转换为Blob
-              tempCanvas.toBlob(blob => {
-                console.log('使用备用方法处理了GIF的第一帧');
-                
-                // 清理资源
-                if (gifUrl !== gifSource) {
-                  URL.revokeObjectURL(gifUrl);
-                }
-                
-                // 创建结果对象
-                const result = {
-                  blob: blob,
-                  blobUrl: URL.createObjectURL(blob),
-                  width: firstFrame.width,
-                  height: firstFrame.height
-                };
-                
-                console.log('备用方法处理完成，返回结果:', result);
-                resolve(result);
-              }, 'image/png');
+              // 提取GIF帧
+              extractGifFrames(gifSource)
+                .then(frames => {
+                  console.log(`成功提取GIF帧，共${frames.length}帧`);
+                  
+                  // 使用Worker处理帧
+                  // 检查position是否为对象而不是字符串
+                  let position = watermarkOptions.position;
+                  let positionX = watermarkOptions.positionX;
+                  let positionY = watermarkOptions.positionY;
+                  
+                  // 如果position是对象，提取x和y值
+                  if (typeof position === 'object' && position !== null) {
+                    positionX = position.x || positionX;
+                    positionY = position.y || positionY;
+                    position = 'custom'; // 强制使用custom模式
+                  }
+                  
+                  console.log('传递给Worker的水印选项:', JSON.stringify({
+                    position: position,
+                    positionX: positionX,
+                    positionY: positionY
+                  }));
+                  
+                  GifWorkerProcessor.processGifFrames(frames, {
+                    ...watermarkOptions,
+                    applyWatermark: true,
+                    // 确保正确传递位置信息
+                    position: position || 'custom',
+                    positionX: positionX || 50,
+                    positionY: positionY || 50
+                  }, {
+                    onStart: () => {
+                      console.log('开始处理GIF帧');
+                    },
+                    onProgress: (progress) => {
+                      if (progressBar) {
+                        progressBar.style.width = `${Math.round(progress * 100)}%`;
+                      }
+                    },
+                    onFrameProgress: (progress, info) => {
+                      console.log(`处理GIF帧进度: ${Math.round(progress * 100)}%, ${info.current}/${info.total}`);
+                    },
+                    onComplete: (blob) => {
+                      // 检查blob是否有效
+                      if (!blob || typeof blob !== 'object') {
+                        console.error('GIF处理完成但返回的blob无效，回退到主线程处理');
+                        processInMainThread();
+                        return;
+                      }
+                      
+                      try {
+                        console.log('GIF处理完成，大小:', blob.size);
+                        clearTimeout(forceCompleteTimer);
+                        
+                        // 关闭进度条
+                        if (progressContainer) progressContainer.style.display = 'none';
+                        
+                        // 关闭处理模态框
+                        const processingModal = document.getElementById('processing-modal');
+                        if (processingModal && processingModal.style.display === 'flex') {
+                          console.log('GIF处理完成，关闭处理模态框');
+                          processingModal.style.display = 'none';
+                        }
+                        
+                        // 从处理中移除
+                        processingGifs.delete(sourceId);
+                        
+                        // 缓存结果
+                        if (!watermarkOptions.isPreview) {
+                          // 清理旧缓存
+                          if (gifCache.size >= MAX_CACHE_SIZE) {
+                            clearOldestCache();
+                          }
+                          gifCache.set(sourceId, blob);
+                        }
+                        
+                        // 返回处理后的GIF
+                        resolveTask(blob);
+                      } catch (error) {
+                        console.error('GIF处理完成回调出错:', error);
+                        processInMainThread();
+                      }
+                    },
+                    onError: (error) => {
+                      console.error('GIF Worker处理错误:', error);
+                      clearTimeout(forceCompleteTimer);
+                      
+                      // 关闭进度条
+                      if (progressContainer) progressContainer.style.display = 'none';
+                      
+                      // 关闭处理模态框
+                      const processingModal = document.getElementById('processing-modal');
+                      if (processingModal && processingModal.style.display === 'flex') {
+                        console.log('由于GIF处理错误，关闭处理模态框');
+                        processingModal.style.display = 'none';
+                      }
+                      
+                      // 从处理中移除
+                      processingGifs.delete(sourceId);
+                      
+                      // 回退到主线程处理
+                      console.log('回退到主线程处理GIF');
+                      processInMainThread();
+                    }
+                  })
+                  .catch(error => {
+                    console.error('GIF Worker处理失败:', error);
+                    
+                    // 关闭处理模态框
+                    const processingModal = document.getElementById('processing-modal');
+                    if (processingModal && processingModal.style.display === 'flex') {
+                      console.log('由于GIF Worker处理失败，关闭处理模态框');
+                      processingModal.style.display = 'none';
+                    }
+                    
+                    // 回退到主线程处理
+                    processInMainThread();
+                  });
+                })
+                .catch(error => {
+                  console.error('提取GIF帧失败:', error);
+                  
+                  // 关闭处理模态框
+                  const processingModal = document.getElementById('processing-modal');
+                  if (processingModal && processingModal.style.display === 'flex') {
+                    console.log('由于提取GIF帧失败，关闭处理模态框');
+                    processingModal.style.display = 'none';
+                  }
+                  
+                  // 回退到主线程处理
+                  processInMainThread();
+                });
             })
-            .catch(backupError => {
-              console.error('备用GIF处理方法失败:', backupError);
+            .catch(error => {
+              console.error('初始化GIF Worker失败:', error);
               
-              // 清理资源
-              if (gifUrl !== gifSource) {
-                URL.revokeObjectURL(gifUrl);
+              // 关闭处理模态框
+              const processingModal = document.getElementById('processing-modal');
+              if (processingModal && processingModal.style.display === 'flex') {
+                console.log('由于初始化GIF Worker失败，关闭处理模态框');
+                processingModal.style.display = 'none';
               }
               
-              reject(new Error('所有GIF处理方法均失败: ' + backupError.message));
+              // 回退到主线程处理
+              processInMainThread();
             });
-        });
+        } else {
+          // 在主线程处理
+          processInMainThread();
+        }
+        
+        // 主线程处理函数
+        function processInMainThread() {
+          console.log('在主线程处理GIF');
+          
+          // 提取GIF帧
+          extractGifFrames(gifSource)
+            .then(frames => {
+              console.log(`提取了${frames.length}帧`);
+              
+              // 处理帧
+              // 检查position是否为对象而不是字符串
+              let position = watermarkOptions.position;
+              let positionX = watermarkOptions.positionX;
+              let positionY = watermarkOptions.positionY;
+              
+              // 如果position是对象，提取x和y值
+              if (typeof position === 'object' && position !== null) {
+                positionX = position.x || positionX;
+                positionY = position.y || positionY;
+                position = 'custom'; // 强制使用custom模式
+              }
+              
+              console.log('传递给主线程处理的水印选项:', JSON.stringify({
+                position: position,
+                positionX: positionX,
+                positionY: positionY
+              }));
+              
+              processGifFrames(frames, {
+                ...watermarkOptions,
+                // 确保正确传递位置信息
+                position: position || 'custom',
+                positionX: positionX || 50,
+                positionY: positionY || 50
+              }, progressBar, progressContainer)
+                .then(result => {
+                  console.log('GIF处理完成');
+                  clearTimeout(forceCompleteTimer);
+                  
+                  // 关闭进度条
+                  if (progressContainer) progressContainer.style.display = 'none';
+                  
+                  // 关闭处理模态框
+                  const processingModal = document.getElementById('processing-modal');
+                  if (processingModal && processingModal.style.display === 'flex') {
+                    console.log('GIF处理完成，关闭处理模态框');
+                    processingModal.style.display = 'none';
+                  }
+                  
+                  // 从处理中移除
+                  processingGifs.delete(sourceId);
+                  
+                  // 缓存结果
+                  if (!watermarkOptions.isPreview) {
+                    // 清理旧缓存
+                    if (gifCache.size >= MAX_CACHE_SIZE) {
+                      clearOldestCache();
+                    }
+                    gifCache.set(sourceId, result);
+                  }
+                  
+                  // 返回处理后的GIF
+                  resolveTask(result);
+                })
+                .catch(error => {
+                  console.error('处理GIF帧失败:', error);
+                  clearTimeout(forceCompleteTimer);
+                  
+                  // 关闭进度条
+                  if (progressContainer) progressContainer.style.display = 'none';
+                  
+                  // 关闭处理模态框
+                  const processingModal = document.getElementById('processing-modal');
+                  if (processingModal && processingModal.style.display === 'flex') {
+                    console.log('由于GIF处理错误，关闭处理模态框');
+                    processingModal.style.display = 'none';
+                  }
+                  
+                  // 从处理中移除
+                  processingGifs.delete(sourceId);
+                  
+                  // 返回原始GIF
+                  resolveTask(gifSource);
+                });
+            })
+            .catch(error => {
+              console.error('提取GIF帧失败:', error);
+              clearTimeout(forceCompleteTimer);
+              
+              // 关闭进度条
+              if (progressContainer) progressContainer.style.display = 'none';
+              
+              // 关闭处理模态框
+              const processingModal = document.getElementById('processing-modal');
+              if (processingModal && processingModal.style.display === 'flex') {
+                console.log('由于GIF处理错误，关闭处理模态框');
+                processingModal.style.display = 'none';
+              }
+              
+              // 从处理中移除
+              processingGifs.delete(sourceId);
+              
+              // 返回原始GIF
+              resolveTask(gifSource);
+            });
+        }
+      });
+      
+      // 返回处理任务的Promise
+      processingPromise.then(resolve).catch(reject);
     } catch (error) {
       console.error('处理GIF时出错:', error);
       
-      // 隐藏进度条
+      // 关闭进度条
       const progressContainer = document.getElementById('gif-progress-container');
       if (progressContainer) progressContainer.style.display = 'none';
       
+      // 关闭处理模态框
+      const processingModal = document.getElementById('processing-modal');
+      if (processingModal && processingModal.style.display === 'flex') {
+        console.log('由于GIF处理错误，关闭处理模态框');
+        processingModal.style.display = 'none';
+      }
+      
+      // 返回原始GIF
+      resolve(gifSource);
+    }
+  });
+}
+
+/**
+ * 创建静态备用图像
+ * 当GIF处理失败时使用
+ * @param {Blob|File|string} source - 原始GIF源
+ * @param {Object} options - 水印选项
+ * @returns {Promise<Blob>} - 处理后的静态图像
+ */
+function createStaticFallback(source, options) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 创建图像元素
+      const img = new Image();
+      
+      // 设置加载事件
+      img.onload = function() {
+        try {
+          // 创建canvas
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width || 200;
+          canvas.height = img.height || 200;
+          const ctx = canvas.getContext('2d');
+          
+          // 绘制图像
+          ctx.drawImage(img, 0, 0);
+          
+          // 应用水印
+          if (options.applyWatermark) {
+            // 使用applyWatermarkToCanvas函数，它接受options参数
+            applyWatermarkToCanvas(ctx, canvas.width, canvas.height, options);
+          }
+          
+          // 转换为Blob
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob);
+              } else {
+                // 创建空白图像作为最后的备用
+                createEmptyImage()
+                  .then(resolve)
+                  .catch(reject);
+              }
+            },
+            'image/png',
+            0.92
+          );
+        } catch (error) {
+          console.error('创建静态备用图像时出错:', error);
+          // 创建空白图像作为最后的备用
+          createEmptyImage()
+            .then(resolve)
+            .catch(reject);
+        }
+      };
+      
+      // 设置错误事件
+      img.onerror = function(error) {
+        console.error('加载图像失败:', error);
+        // 创建空白图像作为最后的备用
+        createEmptyImage()
+          .then(resolve)
+          .catch(reject);
+      };
+      
+      // 设置图像源
+      if (source instanceof File || source instanceof Blob) {
+        img.src = URL.createObjectURL(source);
+      } else if (typeof source === 'string') {
+        img.src = source;
+      } else {
+        // 如果无法确定源类型，创建空白图像
+        createEmptyImage()
+          .then(resolve)
+          .catch(reject);
+      }
+    } catch (error) {
+      console.error('创建静态备用图像时出错:', error);
+      // 创建空白图像作为最后的备用
+      createEmptyImage()
+        .then(resolve)
+        .catch(reject);
+    }
+  });
+}
+
+/**
+ * 创建空白图像
+ * 作为最后的备用方案
+ * @returns {Promise<Blob>} - 空白图像Blob
+ */
+function createEmptyImage() {
+  return new Promise((resolve) => {
+    // 创建canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = 200;
+    canvas.height = 200;
+    const ctx = canvas.getContext('2d');
+    
+    // 填充白色背景
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 200, 200);
+    
+    // 添加文本
+    ctx.fillStyle = '#ff0000';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('GIF处理失败', 100, 100);
+    
+    // 转换为Blob
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          // 如果toBlob失败，创建一个简单的Blob
+          const simpleBlob = new Blob(['GIF处理失败'], { type: 'image/png' });
+          resolve(simpleBlob);
+        }
+      },
+      'image/png',
+      0.92
+    );
+  });
+}
+
+/**
+ * 处理GIF帧
+ * @param {Array} frames - GIF帧数组
+ * @param {Object} options - 处理选项
+ * @param {HTMLElement} progressBar - 进度条元素
+ * @param {HTMLElement} progressContainer - 进度条容器
+ * @returns {Promise<Blob>} - 处理后的GIF Blob
+ */
+function processGifFrames(frames, options, progressBar, progressContainer) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 检查是否需要应用水印
+      const shouldApplyWatermark = options.applyWatermark !== false;
+      
+      // 如果不需要应用水印，直接返回原始帧
+      if (!shouldApplyWatermark) {
+        console.log('不需要应用水印，直接处理GIF');
+        return processGifFramesDirect(frames, options)
+          .then(resolve)
+          .catch(reject);
+      }
+      
+      console.log('处理GIF帧，应用水印');
+      
+      // 获取第一帧的尺寸
+      let width = 0;
+      let height = 0;
+      
+      // 检查frames结构，适应不同的帧格式
+      if (frames && frames.length > 0) {
+        if (frames[0].dims) {
+          width = frames[0].dims.width;
+          height = frames[0].dims.height;
+        } else if (frames[0].width && frames[0].height) {
+          width = frames[0].width;
+          height = frames[0].height;
+        } else if (frames[0].canvas) {
+          width = frames[0].canvas.width;
+          height = frames[0].canvas.height;
+        } else if (frames[0].imageData) {
+          width = frames[0].imageData.width;
+          height = frames[0].imageData.height;
+        } else {
+          console.warn('无法从帧中获取尺寸，使用默认值');
+          width = 500;
+          height = 500;
+        }
+      } else {
+        console.error('无有效帧数据');
+        reject(new Error('无有效帧数据'));
+        return;
+      }
+      
+      console.log(`检测到GIF尺寸: ${width}x${height}`);
+      
+      // 检查GIF.js是否已加载
+      if (typeof window.GIF === 'undefined') {
+        console.error('GIF.js库未加载，无法处理GIF');
+        reject(new Error('GIF.js库未加载'));
+        return;
+      }
+      
+      // 检查frames是否有效
+      if (!frames || !Array.isArray(frames) || frames.length === 0) {
+        console.error('无效的帧数据');
+        reject(new Error('无效的帧数据'));
+        return;
+      }
+      
+      const gif = new window.GIF({
+        workers: Math.min(navigator.hardwareConcurrency || 2, 2), // 根据CPU核心数优化，但不超过2个worker
+        quality: options.quality || 10, // 使用较高的质量值，确保GIF清晰
+        workerScript: '/public/libs/gif.worker.js',
+        width: Math.floor(width),
+        height: Math.floor(height),
+        workerOptions: {
+          transferable: true
+        },
+        dither: false, // 不使用抖动效果
+        transparent: null, // 不使用透明色
+        background: '#ffffff', // 设置白色背景
+        debug: false
+      });
+      
+      // 为每一帧添加水印
+      const watermarkedFrames = [];
+      let processedFrames = 0;
+      
+      // 创建一个临时canvas
+      const tempCanvas = document.createElement('canvas');
+      const ctx = tempCanvas.getContext('2d', { willReadFrequently: true });
+      
+      // 确保宽度和高度是整数
+      width = Math.floor(width);
+      height = Math.floor(height);
+      
+      // 确保宽度和高度至少为1
+      width = Math.max(1, width);
+      height = Math.max(1, height);
+      
+      console.log(`GIF尺寸: ${width}x${height}, 总帧数: ${frames.length}`);
+      
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      
+      // 设置处理超时
+      const frameProcessingTimeout = setTimeout(() => {
+        console.warn('GIF帧处理超时，使用已处理的帧');
+        
+        // 如果有已处理的帧，使用它们
+        if (watermarkedFrames.length > 0) {
+          try {
+            // 完成GIF生成
+            gif.on('finished', function(blob) {
+              if (progressBar) progressBar.style.width = '100%';
+              if (progressContainer) progressContainer.style.display = 'none';
+              
+              // 返回处理后的Blob
+              const result = new Blob([blob], { type: 'image/gif' });
+              console.log(`GIF处理部分完成，大小: ${Math.round(result.size / 1024)}KB`);
+              resolve(result);
+            });
+            
+            gif.render();
+          } catch (renderError) {
+            console.error('GIF渲染失败:', renderError);
+            reject(new Error('GIF渲染失败'));
+          }
+        } else {
+          // 如果没有已处理的帧，创建静态图像
+          console.error('GIF帧处理超时且无已处理帧');
+          reject(new Error('GIF帧处理超时'));
+        }
+      }, 20000); // 20秒超时
+      
+      // 处理每一帧
+      for (let i = 0; i < frames.length; i++) {
+        const frame = frames[i];
+        
+        // 清除canvas
+        ctx.clearRect(0, 0, width, height);
+        
+        // 绘制帧
+        // 首先绘制白色背景，确保不会有透明问题
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        
+        let frameDrawn = false;
+        
+        // 尝试使用canvas属性
+        if (frame.canvas) {
+          try {
+            ctx.drawImage(frame.canvas, 0, 0);
+            frameDrawn = true;
+            console.log(`帧 ${i}: 使用canvas绘制成功`);
+          } catch (error) {
+            console.warn(`帧 ${i}: canvas绘制失败:`, error);
+          }
+        }
+        
+        // 尝试使用imageData
+        if (!frameDrawn && frame.imageData) {
+          try {
+            // 创建临时canvas来绘制imageData
+            const tmpCanvas = document.createElement('canvas');
+            tmpCanvas.width = width;
+            tmpCanvas.height = height;
+            const tmpCtx = tmpCanvas.getContext('2d');
+            tmpCtx.putImageData(frame.imageData, 0, 0);
+            
+            // 将临时canvas绘制到主canvas
+            ctx.drawImage(tmpCanvas, 0, 0);
+            frameDrawn = true;
+            console.log(`帧 ${i}: 使用imageData绘制成功`);
+          } catch (error) {
+            console.warn(`帧 ${i}: imageData绘制失败:`, error);
+          }
+        }
+        
+        // 尝试使用data数组
+        if (!frameDrawn && frame.data) {
+          try {
+            const imageData = new ImageData(
+              new Uint8ClampedArray(frame.data), 
+              width, 
+              height
+            );
+            
+            // 创建临时canvas来绘制imageData
+            const tmpCanvas = document.createElement('canvas');
+            tmpCanvas.width = width;
+            tmpCanvas.height = height;
+            const tmpCtx = tmpCanvas.getContext('2d');
+            tmpCtx.putImageData(imageData, 0, 0);
+            
+            // 将临时canvas绘制到主canvas
+            ctx.drawImage(tmpCanvas, 0, 0);
+            frameDrawn = true;
+            console.log(`帧 ${i}: 使用data数组绘制成功`);
+          } catch (error) {
+            console.warn(`帧 ${i}: data数组绘制失败:`, error);
+          }
+        }
+        
+        // 如果所有方法都失败，绘制一个带有文字的帧
+        if (!frameDrawn) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.fillStyle = '#ff0000';
+          ctx.font = '16px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('仅供验证使用', width/2, height/2);
+          console.warn(`帧 ${i}: 使用默认帧替代`);
+        }
+        
+        // 应用水印
+        if (shouldApplyWatermark) {
+          // 检查position是否为对象而不是字符串
+          let position = options.position;
+          let positionX = options.positionX;
+          let positionY = options.positionY;
+          
+          // 如果position是对象，提取x和y值
+          if (typeof position === 'object' && position !== null) {
+            positionX = position.x || positionX;
+            positionY = position.y || positionY;
+            position = 'custom'; // 强制使用custom模式
+          }
+          
+          // 记录水印位置信息
+          console.log(`应用水印到帧 ${i}, 位置: ${position}, X: ${positionX}, Y: ${positionY}`);
+          
+          // 使用applyWatermarkToCanvas函数，它接受options参数
+          applyWatermarkToCanvas(ctx, tempCanvas.width, tempCanvas.height, {
+            ...options,
+            // 确保位置信息正确
+            position: position || 'custom',
+            positionX: positionX || 50,
+            positionY: positionY || 50
+          });
+        }
+        
+              // 添加帧到GIF
+      try {
+        // 检查帧是否有足够的数据
+        if (tempCanvas.width === 0 || tempCanvas.height === 0) {
+          console.warn('跳过无效的帧 - 尺寸为0');
+          return;
+        }
+        
+        // 确保画布中有内容
+        const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+        const hasData = Array.from(imageData.data).some(val => val > 0);
+        
+        if (!hasData) {
+          console.warn('跳过空白帧');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+          ctx.fillStyle = '#ff0000';
+          ctx.font = '16px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('仅供验证使用', tempCanvas.width/2, tempCanvas.height/2);
+        }
+        
+        // 直接添加canvas到GIF
+        gif.addFrame(tempCanvas, {
+          delay: frame.delay || 100,
+          copy: true,
+          dispose: 2 // 使用"恢复到背景色"的处置方法
+        });
+        } catch (error) {
+          console.warn(`添加帧 ${i} 到GIF时出错:`, error);
+          // 尝试创建一个新的临时画布并复制内容
+          try {
+            const safeCanvas = document.createElement('canvas');
+            safeCanvas.width = Math.floor(width);
+            safeCanvas.height = Math.floor(height);
+            const safeCtx = safeCanvas.getContext('2d', { willReadFrequently: true });
+            safeCtx.drawImage(tempCanvas, 0, 0);
+            
+            // 使用toDataURL方法替代直接传递context
+            const dataURL = safeCanvas.toDataURL('image/png');
+            const img = new Image();
+            img.src = dataURL;
+            
+            gif.addFrame(img, {
+              delay: frame.delay || 100,
+              copy: true
+            });
+          } catch (secondError) {
+            console.error(`第二次尝试添加帧 ${i} 失败:`, secondError);
+          }
+        }
+        
+        // 收集处理后的帧
+        watermarkedFrames.push({
+          delay: frame.delay || 100
+        });
+        
+        // 更新进度
+        processedFrames++;
+        if (progressBar) {
+          progressBar.style.width = `${30 + Math.round((processedFrames / frames.length) * 50)}%`;
+        }
+      }
+      
+      // 清除超时
+      clearTimeout(frameProcessingTimeout);
+      
+      // 添加完成事件处理器
+      gif.on('finished', function(blob) {
+        if (progressBar) progressBar.style.width = '100%';
+        if (progressContainer) progressContainer.style.display = 'none';
+        
+        // 检查blob是否有效
+        if (!blob || blob.size === 0) {
+          console.error('生成的GIF blob无效');
+          reject(new Error('无有效的blob或blobUrl'));
+          return;
+        }
+        
+        // 返回处理后的Blob
+        const result = new Blob([blob], { type: 'image/gif' });
+        console.log(`GIF处理完成，大小: ${Math.round(result.size / 1024)}KB`);
+        resolve(result);
+      });
+      
+      // 添加错误事件处理器
+      gif.on('error', function(error) {
+        console.error('GIF生成错误:', error);
+        reject(error);
+      });
+      
+      // 开始渲染
+      try {
+        console.log('开始渲染GIF...');
+        gif.render();
+      } catch (renderError) {
+        console.error('GIF渲染失败:', renderError);
+        reject(new Error('GIF渲染失败'));
+      }
+    } catch (error) {
+      console.error('处理GIF帧时出错:', error);
       reject(error);
     }
   });
 }
 
 /**
- * 在Canvas上应用水印
- * @param {CanvasRenderingContext2D} ctx - Canvas上下文
- * @param {number} canvasWidth - Canvas宽度
- * @param {number} canvasHeight - Canvas高度
- * @param {Object} watermarkOptions - 水印选项
+ * 直接处理GIF帧，避免使用getImageData
+ * @param {Array} frames - GIF帧数组
+ * @param {Object} options - 水印选项
+ * @returns {Promise<Blob>} - 处理后的GIF文件
  */
-function applyWatermarkToCanvas(ctx, canvasWidth, canvasHeight, watermarkOptions) {
-  const { 
-    type, 
-    text, 
-    color, 
-    fontSize, 
-    opacity, 
-    rotation, 
-    position, 
-    tileSpacing,
-    watermarkImage
-  } = watermarkOptions;
-  
-  // 确保position是一个有效的对象
-  const pos = position || { x: 50, y: 50 };
-  
-  // 计算实际位置（基于百分比）
-  const actualX = (pos.x / 100) * canvasWidth;
-  const actualY = (pos.y / 100) * canvasHeight;
-  
-  console.log(`应用水印到Canvas: 位置=${JSON.stringify(pos)}, 实际坐标=(${actualX}, ${actualY})`);
-  
-  // 设置透明度
-  ctx.globalAlpha = opacity / 100;
-  
-  // 保存当前的变换状态
-  ctx.save();
-  
-  // 根据水印类型渲染
-  switch (type) {
-    case 'text':
-      renderTextWatermark(ctx, actualX, actualY, text, fontSize, color, rotation);
-      break;
-      
-    case 'tiled':
-      renderTiledWatermark(ctx, text, fontSize, color, rotation, tileSpacing, canvasWidth, canvasHeight);
-      break;
-      
-    case 'image':
-      if (watermarkImage) {
-        renderImageWatermark(ctx, actualX, actualY, watermarkImage, rotation, canvasWidth, canvasHeight);
+function processGifFramesDirect(frames, options) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 检查GIF.js是否已加载
+      if (typeof window.GIF === 'undefined') {
+        console.error('GIF.js库未加载，无法处理GIF');
+        reject(new Error('GIF.js库未加载'));
+        return;
       }
-      break;
-  }
-  
-  // 恢复变换状态
-  ctx.restore();
-  
-  // 重置透明度
-  ctx.globalAlpha = 1.0;
-}
-
-/**
- * 渲染文字水印
- */
-function renderTextWatermark(ctx, x, y, text, fontSize, color, rotation) {
-  // 设置旋转中心点到水印位置
-  ctx.translate(x, y);
-  ctx.rotate((rotation * Math.PI) / 180);
-  
-  // 设置字体和颜色
-  ctx.font = `${fontSize}px Arial`;
-  ctx.fillStyle = color;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  
-  // 绘制文字
-  ctx.fillText(text, 0, 0);
-}
-
-/**
- * 渲染平铺水印
- */
-function renderTiledWatermark(ctx, text, fontSize, color, rotation, spacing, width, height) {
-  // 设置字体和颜色
-  ctx.font = `${fontSize}px Arial`;
-  ctx.fillStyle = color;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  
-  // 计算行列数
-  const cols = Math.ceil(width / spacing);
-  const rows = Math.ceil(height / spacing);
-  
-  // 计算起始偏移，使水印居中分布
-  const offsetX = (width - (cols - 1) * spacing) / 2;
-  const offsetY = (height - (rows - 1) * spacing) / 2;
-  
-  // 绘制平铺水印
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const x = offsetX + col * spacing;
-      const y = offsetY + row * spacing;
       
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate((rotation * Math.PI) / 180);
-      ctx.fillText(text, 0, 0);
-      ctx.restore();
+      // 确定尺寸
+      let width, height;
+      if (frames[0].width && frames[0].height) {
+        width = Math.floor(frames[0].width);
+        height = Math.floor(frames[0].height);
+      } else if (frames[0].dims) {
+        width = Math.floor(frames[0].dims.width);
+        height = Math.floor(frames[0].dims.height);
+      } else if (frames[0].imageData) {
+        width = Math.floor(frames[0].imageData.width);
+        height = Math.floor(frames[0].imageData.height);
+      } else {
+        console.error('无法确定GIF尺寸，使用默认值');
+        width = 200;
+        height = 200;
+      }
+      
+      // 帧数抽样处理 - 对于帧数过多的GIF进行抽帧处理
+      let processedFrames = frames;
+      const MAX_FRAMES_FULL_PROCESS = 30; // 完全处理的最大帧数
+      let samplingRate = 1; // 默认采样率
+      
+      if (frames.length > MAX_FRAMES_FULL_PROCESS) {
+        // 计算采样率，确保至少处理10帧
+        samplingRate = Math.max(1, Math.floor(frames.length / 10));
+        
+        // 抽样帧
+        processedFrames = [];
+        for (let i = 0; i < frames.length; i++) {
+          if (i % samplingRate === 0 || i === frames.length - 1) {
+            // 保留关键帧（第一帧、最后一帧和按采样率选择的帧）
+            processedFrames.push(frames[i]);
+          }
+        }
+        
+        console.log(`GIF帧数过多(${frames.length})，采用抽帧处理，采样率: 1/${samplingRate}，实际处理帧数: ${processedFrames.length}`);
+      }
+      
+      console.log(`直接GIF处理尺寸: ${width}x${height}, 总帧数: ${processedFrames.length}`);
+      
+      // 创建一个临时canvas
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      const ctx = tempCanvas.getContext('2d', { willReadFrequently: true });
+      
+      // 优化：使用更多的worker提高并行处理能力
+      const workerCount = navigator.hardwareConcurrency 
+        ? Math.min(4, navigator.hardwareConcurrency) // 最多使用4个worker或CPU核心数
+        : 2; // 默认使用2个worker
+        
+      console.log(`使用 ${workerCount} 个worker处理GIF`);
+      
+      // 创建GIF编码器
+      const gif = new window.GIF({
+        workers: workerCount,
+        quality: options.quality || 10, // 使用较高的质量值，确保GIF清晰
+        workerScript: '/public/libs/gif.worker.js',
+        width: width,
+        height: height,
+        transparent: null, // 不使用透明色
+        background: '#ffffff', // 设置白色背景
+        dither: false, // 不使用抖动效果
+        debug: false
+      });
+      
+      // 处理完成回调
+      gif.on('finished', function(blob) {
+        console.log(`直接GIF处理完成，大小: ${Math.round(blob.size / 1024)}KB`);
+        resolve(new Blob([blob], { type: 'image/gif' }));
+      });
+      
+      // 错误回调
+      gif.on('error', function(error) {
+        console.error('GIF生成错误:', error);
+        reject(error);
+      });
+      
+      // 进度回调
+      if (options.onProgress) {
+        gif.on('progress', function(p) {
+          options.onProgress(Math.round(p * 100));
+        });
+      }
+      
+      // 预渲染水印到模板
+      const watermarkTemplate = document.createElement('canvas');
+      watermarkTemplate.width = width;
+      watermarkTemplate.height = height;
+      const watermarkCtx = watermarkTemplate.getContext('2d', { willReadFrequently: true });
+      
+      // 只绘制一次水印模板
+      if (options.applyWatermark) {
+        watermarkCtx.fillStyle = 'rgba(0,0,0,0)'; // 透明背景
+        watermarkCtx.fillRect(0, 0, width, height);
+        // 使用applyWatermarkToCanvas函数，它接受options参数
+        applyWatermarkToCanvas(watermarkCtx, watermarkTemplate.width, watermarkTemplate.height, options);
+      }
+      
+      // 批量处理帧，每次处理一批，避免阻塞主线程
+      const BATCH_SIZE = 5; // 每批处理的帧数
+      let frameIndex = 0;
+      
+      function processBatch() {
+        if (frameIndex >= processedFrames.length) {
+          // 所有帧处理完毕，渲染GIF
+          try {
+            gif.render();
+          } catch (error) {
+            console.error('GIF渲染失败:', error);
+            reject(error);
+          }
+          return;
+        }
+        
+        // 处理当前批次
+        const endIndex = Math.min(frameIndex + BATCH_SIZE, processedFrames.length);
+        const promises = [];
+        
+        for (let i = frameIndex; i < endIndex; i++) {
+          promises.push(processFrame(processedFrames[i], i));
+        }
+        
+        // 等待当前批次完成后处理下一批
+        Promise.all(promises)
+          .then(() => {
+            frameIndex = endIndex;
+            // 使用requestAnimationFrame确保UI响应性
+            requestAnimationFrame(processBatch);
+          })
+          .catch(error => {
+            console.error('批处理帧时出错:', error);
+            // 继续处理下一批
+            frameIndex = endIndex;
+            requestAnimationFrame(processBatch);
+          });
+      }
+      
+      // 处理单个帧
+      function processFrame(frame, index) {
+        return new Promise((resolve) => {
+          try {
+            // 创建帧专用canvas
+            const frameCanvas = document.createElement('canvas');
+            frameCanvas.width = width;
+            frameCanvas.height = height;
+            const frameCtx = frameCanvas.getContext('2d', { willReadFrequently: true });
+            
+            // 绘制帧
+            if (frame.imageData) {
+              try {
+                frameCtx.putImageData(frame.imageData, 0, 0);
+              } catch (error) {
+                console.warn(`绘制帧 ${index} 出错:`, error);
+                frameCtx.fillStyle = '#ffffff';
+                frameCtx.fillRect(0, 0, width, height);
+              }
+            } else {
+              // 使用空白帧
+              frameCtx.fillStyle = '#ffffff';
+              frameCtx.fillRect(0, 0, width, height);
+            }
+            
+            // 应用水印
+            if (options.applyWatermark) {
+              // 直接复制预渲染的水印
+              frameCtx.drawImage(watermarkTemplate, 0, 0);
+            }
+            
+            // 计算实际延迟（考虑采样率）
+            let delay = frame.delay || 100;
+            if (samplingRate > 1) {
+              // 根据采样率调整延迟，保持总动画时长
+              delay = delay * samplingRate;
+            }
+            
+            // 添加帧到GIF
+            gif.addFrame(frameCanvas, {
+              delay: delay,
+              copy: true,
+              dispose: 1 // 使用背景处理模式，减小文件大小
+            });
+            
+            resolve();
+          } catch (error) {
+            console.error(`处理帧 ${index} 失败:`, error);
+            resolve(); // 即使失败也继续处理
+          }
+        });
+      }
+      
+      // 开始批处理
+      processBatch();
+    } catch (error) {
+      console.error('直接处理GIF帧时出错:', error);
+      reject(error);
     }
-  }
-}
-
-/**
- * 渲染图片水印
- */
-function renderImageWatermark(ctx, x, y, watermarkImage, rotation, canvasWidth, canvasHeight) {
-  // 计算水印图片尺寸（默认为30%的画布宽度）
-  const watermarkWidth = canvasWidth * 0.3;
-  const aspectRatio = watermarkImage.height / watermarkImage.width;
-  const watermarkHeight = watermarkWidth * aspectRatio;
-  
-  // 设置旋转中心点到水印位置
-  ctx.translate(x, y);
-  ctx.rotate((rotation * Math.PI) / 180);
-  
-  // 绘制水印图片
-  ctx.drawImage(
-    watermarkImage,
-    -watermarkWidth / 2,
-    -watermarkHeight / 2,
-    watermarkWidth,
-    watermarkHeight
-  );
+  });
 }
 
 /**
  * 初始化GIF处理器
  */
 export function initGifProcessor() {
-  console.log('初始化GIF处理器');
-  
-  // 初始化GIF质量控制
-  const gifQualitySlider = document.getElementById('gif-quality');
-  const gifQualityValue = document.getElementById('gif-quality-value');
-  
-  if (gifQualitySlider && gifQualityValue) {
-    gifQualitySlider.addEventListener('input', function() {
-      const value = this.value;
-      gifQualityValue.textContent = value;
-      
-      // 更新状态
-      watermarkState.gifQuality = parseInt(value, 10);
-    });
+  try {
+    // 确保GIF.js库已加载
+    if (typeof window.GIF === 'undefined') {
+      console.warn('GIF.js库未加载，GIF处理功能可能不可用');
+    }
+    
+    // 初始化GIF Worker
+    try {
+      // 动态导入GIF Worker管理器
+      import('../gif/gif-worker-manager.js')
+        .then(module => {
+          // 将GIF Worker处理器添加到全局对象
+          window.GifWorkerProcessor = module.GifWorkerProcessor;
+          
+          // 初始化Worker
+          module.GifWorkerProcessor.init()
+            .then(() => {
+              console.log('GIF Worker初始化成功，多线程处理可用');
+            })
+            .catch(error => {
+              console.warn('GIF Worker初始化失败，将使用单线程处理:', error);
+            });
+        })
+        .catch(error => {
+          console.warn('加载GIF Worker管理器失败:', error);
+        });
+    } catch (workerError) {
+      console.warn('初始化GIF Worker失败:', workerError);
+    }
+    
+    // 初始化缓存
+    if (!gifCache) {
+      gifCache = new Map();
+    }
+    
+    console.log('GIF处理器初始化完成');
+  } catch (error) {
+    console.error('初始化GIF处理器时出错:', error);
   }
 } 

@@ -35,6 +35,147 @@ window.watermarkState = {
   imageHeight: 0   // 当前图片高度
 };
 
+// 安全超时时间 - 确保模态框不会永远显示
+const MODAL_CHECK_INTERVAL = 2000; // 检查间隔（毫秒）
+const MAX_MODAL_TIME = 30000;      // 最长显示时间（毫秒）
+let modalCheckTimer = null;
+let modalShowTime = null;
+
+// 处理模态框计时器
+let modalCountdownTimer = null;
+let modalCountdownValue = 0;
+const MODAL_COUNTDOWN_START = 10;  // 倒计时从10秒开始
+let countdownStartTime = null;     // 记录倒计时开始时间
+
+// 检查处理中模态框的函数
+function checkProcessingModal() {
+  const processingModal = document.getElementById('processing-modal');
+  if (processingModal && processingModal.style.display === 'flex') {
+    // 记录模态框显示时间
+    if (!modalShowTime) {
+      modalShowTime = Date.now();
+      
+      // 初始化倒计时
+      startModalCountdown();
+    }
+    
+    // 如果模态框显示时间过长，自动关闭它
+    const currentTime = Date.now();
+    if (currentTime - modalShowTime > MAX_MODAL_TIME) {
+      console.warn('模态框显示时间过长，强制关闭');
+      closeProcessingModal();
+      
+      // 显示消息
+      window.showStatusMessage('处理完成（由于耗时过长已自动关闭）');
+      
+      // 尝试更新和显示已加载的图片
+      window.showImage(0);
+      
+      // 更新缩略图
+      if (typeof window.updateThumbnails === 'function') {
+        window.updateThumbnails();
+      }
+    }
+    
+    // 检查倒计时是否需要更新（基于实际经过的时间）
+    if (countdownStartTime) {
+      const elapsedSeconds = Math.floor((currentTime - countdownStartTime) / 1000);
+      const newCountdownValue = Math.max(0, MODAL_COUNTDOWN_START - elapsedSeconds);
+      
+      // 如果倒计时值发生变化，更新显示
+      if (newCountdownValue !== modalCountdownValue) {
+        modalCountdownValue = newCountdownValue;
+        updateModalCountdown();
+        
+        // 倒计时结束时关闭模态框
+        if (modalCountdownValue <= 0) {
+          console.log('倒计时结束，关闭模态框');
+          closeProcessingModal();
+        }
+      }
+    }
+  } else {
+    // 重置显示时间
+    modalShowTime = null;
+    countdownStartTime = null;
+    
+    // 停止倒计时
+    stopModalCountdown();
+  }
+}
+
+// 开始模态框倒计时
+function startModalCountdown() {
+  // 重置之前的倒计时
+  stopModalCountdown();
+  
+  // 设置初始值
+  modalCountdownValue = MODAL_COUNTDOWN_START;
+  countdownStartTime = Date.now();
+  updateModalCountdown();
+  
+  // 使用requestAnimationFrame实现更可靠的倒计时
+  function animateCountdown() {
+    if (!countdownStartTime) return; // 如果倒计时已停止，不再继续
+    
+    const currentTime = Date.now();
+    const elapsedSeconds = Math.floor((currentTime - countdownStartTime) / 1000);
+    const newCountdownValue = Math.max(0, MODAL_COUNTDOWN_START - elapsedSeconds);
+    
+    // 如果倒计时值发生变化，更新显示
+    if (newCountdownValue !== modalCountdownValue) {
+      modalCountdownValue = newCountdownValue;
+      updateModalCountdown();
+      
+      // 倒计时结束时关闭模态框
+      if (modalCountdownValue <= 0) {
+        console.log('倒计时结束，关闭模态框');
+        closeProcessingModal();
+        return; // 结束动画循环
+      }
+    }
+    
+    // 继续动画循环
+    requestAnimationFrame(animateCountdown);
+  }
+  
+  // 启动动画循环
+  requestAnimationFrame(animateCountdown);
+}
+
+// 停止模态框倒计时
+function stopModalCountdown() {
+  countdownStartTime = null; // 这将停止动画循环
+  if (modalCountdownTimer) {
+    clearInterval(modalCountdownTimer);
+    modalCountdownTimer = null;
+  }
+}
+
+// 更新倒计时显示
+function updateModalCountdown() {
+  const countdownElement = document.getElementById('modal-countdown');
+  if (countdownElement) {
+    countdownElement.textContent = `自动关闭: ${modalCountdownValue}`;
+  }
+}
+
+// 关闭处理模态框的函数
+function closeProcessingModal() {
+  const processingModal = document.getElementById('processing-modal');
+  if (processingModal) {
+    processingModal.style.display = 'none';
+    console.log('处理模态框已关闭');
+    
+    // 重置显示时间
+    modalShowTime = null;
+    countdownStartTime = null;
+    
+    // 停止倒计时
+    stopModalCountdown();
+  }
+}
+
 // 等待页面完全加载
 document.addEventListener('DOMContentLoaded', function() {
   console.log('水印集成脚本已加载');
@@ -52,8 +193,42 @@ document.addEventListener('DOMContentLoaded', function() {
   initDragAndDrop();
   initWheelZoom();
   
+  // 添加取消按钮事件
+  const cancelButton = document.getElementById('cancel-processing-btn');
+  if (cancelButton) {
+    cancelButton.addEventListener('click', function() {
+      console.log('取消按钮被点击，关闭处理模态框');
+      closeProcessingModal();
+      
+      // 显示取消消息
+      window.showStatusMessage('处理已取消');
+      
+      // 尝试显示已加载的图片
+      if (window.watermarkState.files.length > 0) {
+        window.showImage(0);
+        
+        // 更新缩略图
+        if (typeof window.updateThumbnails === 'function') {
+          window.updateThumbnails();
+        }
+      }
+    });
+  }
+  
   // 标记为已初始化
   window.__WATERMARK_EVENTS_INITIALIZED__ = true;
+  
+  // 设置定期检查模态框显示状态的计时器
+  modalCheckTimer = setInterval(checkProcessingModal, MODAL_CHECK_INTERVAL);
+  
+  // 确保页面卸载时清除计时器
+  window.addEventListener('beforeunload', () => {
+    if (modalCheckTimer) {
+      clearInterval(modalCheckTimer);
+      modalCheckTimer = null;
+    }
+    stopModalCountdown();
+  });
   
   console.log('水印集成脚本初始化完成');
 });
@@ -1434,15 +1609,23 @@ function initDragAndDrop() {
     
     console.log('处理文件，数量:', files.length);
     
-    // 过滤非图片文件
+    // 过滤图片文件 (包括GIF)
     const imageFiles = Array.from(files).filter(file => {
-      return file.type.startsWith('image/');
+      return file.type.startsWith('image/') || file.name.toLowerCase().endsWith('.gif');
     });
     
     if (imageFiles.length === 0) {
       alert('未选择有效的图片文件');
       return;
     }
+    
+    // 检查是否有GIF文件
+    const hasGifFiles = imageFiles.some(file => 
+      file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif')
+    );
+    
+    // 如果只有一个文件且是GIF，设置较短的处理超时
+    const isSingleGif = imageFiles.length === 1 && hasGifFiles;
     
     // 保存文件列表
     window.watermarkState.files = imageFiles;
@@ -1452,81 +1635,175 @@ function initDragAndDrop() {
     const progressBar = document.getElementById('modal-progress-bar');
     const statusText = document.getElementById('processing-status');
     
+    // 重置倒计时 - 在显示模态框前
+    modalCountdownValue = MODAL_COUNTDOWN_START;
+    updateModalCountdown();
+    
     if (processingModal) {
+      // 重置之前可能存在的超时
+      if (modalCountdownTimer) {
+        clearInterval(modalCountdownTimer);
+      }
+      
+      // 在模态框显示后开始倒计时
+      modalShowTime = Date.now(); // 记录显示时间
+      countdownStartTime = Date.now(); // 记录倒计时开始时间
       processingModal.style.display = 'flex';
+      
+      // 立即更新倒计时显示
+      updateModalCountdown();
+      
+      // 确保倒计时能够工作 - 使用requestAnimationFrame
+      function updateCountdown() {
+        if (!countdownStartTime) return; // 如果倒计时已停止，不再继续
+        
+        const currentTime = Date.now();
+        const elapsedSeconds = Math.floor((currentTime - countdownStartTime) / 1000);
+        const newCountdownValue = Math.max(0, MODAL_COUNTDOWN_START - elapsedSeconds);
+        
+        // 如果倒计时值发生变化，更新显示
+        if (newCountdownValue !== modalCountdownValue) {
+          modalCountdownValue = newCountdownValue;
+          const countdownElement = document.getElementById('modal-countdown');
+          if (countdownElement) {
+            countdownElement.textContent = `自动关闭: ${modalCountdownValue}`;
+          }
+          
+          // 倒计时结束时关闭模态框
+          if (modalCountdownValue <= 0) {
+            console.log('倒计时结束，关闭模态框');
+            if (processingModal) processingModal.style.display = 'none';
+            countdownStartTime = null;
+            return; // 结束动画循环
+          }
+        }
+        
+        // 继续动画循环
+        requestAnimationFrame(updateCountdown);
+      }
+      
+      // 启动倒计时动画
+      requestAnimationFrame(updateCountdown);
     }
+    
+    // 设置多层次超时保护机制
+    let safetyTimeouts = [];
+    
+    // 添加一个超时，使用我们更可靠的全局函数进行关闭
+    safetyTimeouts.push(setTimeout(() => {
+      console.log('第一层超时保护 - 尝试关闭模态框');
+      closeProcessingModal();
+      
+      // 显示第一张图片
+      window.watermarkState.currentIndex = 0;
+      window.showImage(0);
+      
+      // 更新缩略图
+      if (typeof window.updateThumbnails === 'function') {
+        window.updateThumbnails();
+      }
+      
+      window.showStatusMessage('处理已完成');
+    }, isSingleGif ? 8000 : 15000)); // 单GIF使用8秒，其他使用15秒
+    
+    // 添加第二层超时保护，直接操作DOM
+    safetyTimeouts.push(setTimeout(() => {
+      console.log('第二层超时保护 - 强制关闭模态框');
+      
+      // 直接操作DOM强制关闭
+      if (processingModal) processingModal.style.display = 'none';
+      
+      // 显示第一张图片
+      window.watermarkState.currentIndex = 0;
+      window.showImage(0);
+      
+      window.showStatusMessage('处理完成（安全机制已触发）');
+    }, isSingleGif ? 10000 : 18000)); // 单GIF使用10秒，其他使用18秒
     
     // 清空已处理图片
     window.watermarkState.processed = {};
     
-    // 递归处理图片
-    const processNextImage = function(index) {
-      if (index >= imageFiles.length) {
-        // 处理完成
+    // 使用setTimeout避免阻塞主线程
+    setTimeout(() => {
+      // 递归处理图片，使用setTimeout避免阻塞主线程
+      const processNextImage = function(index) {
+        if (index >= imageFiles.length) {
+          // 处理完成
+          if (statusText) {
+            statusText.textContent = '处理完成！';
+          }
+          
+          // 更新进度条
+          if (progressBar) {
+            progressBar.style.width = '100%';
+            progressBar.textContent = '100%';
+          }
+          
+          // 清理所有安全超时
+          if (safetyTimeouts && safetyTimeouts.length > 0) {
+            console.log('清理所有安全超时');
+            safetyTimeouts.forEach(timeoutId => {
+              clearTimeout(timeoutId);
+            });
+            safetyTimeouts = [];
+          }
+          
+          // 立即更新状态消息，并缩短模态框关闭延迟
+          window.showStatusMessage(`已成功处理 ${imageFiles.length} 张图片`);
+          
+          // 延迟关闭模态框
+          setTimeout(function() {
+            // 使用统一的关闭函数
+            closeProcessingModal();
+            
+            // 显示第一张图片
+            window.watermarkState.currentIndex = 0;
+            window.showImage(0);
+            
+            // 更新缩略图
+            window.updateThumbnails();
+          }, 500);
+          
+          return;
+        }
+        
+        // 更新状态文本
         if (statusText) {
-          statusText.textContent = '处理完成！';
+          statusText.textContent = `正在处理图片 ${index + 1}/${imageFiles.length}`;
         }
         
         // 更新进度条
         if (progressBar) {
-          progressBar.style.width = '100%';
-          progressBar.textContent = '100%';
+          const progress = Math.round((index / imageFiles.length) * 100);
+          progressBar.style.width = progress + '%';
+          progressBar.textContent = progress + '%';
         }
         
-        // 延迟关闭模态框
-        setTimeout(function() {
-          if (processingModal) {
-            processingModal.style.display = 'none';
-          }
-          
-          // 显示第一张图片
-          window.watermarkState.currentIndex = 0;
-          window.showImage(0);
-          
-          // 更新缩略图
-          window.updateThumbnails();
-          
-          // 显示状态消息
-          window.showStatusMessage(`已成功处理 ${imageFiles.length} 张图片`);
-        }, 1000);
-        
-        return;
-      }
+        // 使用setTimeout处理当前图片，避免长时间阻塞主线程
+        setTimeout(() => {
+          window.processImage(imageFiles[index], false)
+            .then(result => {
+              if (result) {
+                // 存储处理结果
+                window.watermarkState.processed[index] = result;
+                
+                // 处理下一张，使用setTimeout避免阻塞
+                setTimeout(() => processNextImage(index + 1), 10);
+              } else {
+                console.error('处理图片失败:', imageFiles[index].name);
+                setTimeout(() => processNextImage(index + 1), 10);
+              }
+            })
+            .catch(error => {
+              console.error('处理图片时出错:', error);
+              setTimeout(() => processNextImage(index + 1), 10);
+            });
+        }, 0);
+      };
       
-      // 更新状态文本
-      if (statusText) {
-        statusText.textContent = `正在处理图片 ${index + 1}/${imageFiles.length}`;
-      }
-      
-      // 更新进度条
-      if (progressBar) {
-        const progress = Math.round((index / imageFiles.length) * 100);
-        progressBar.style.width = progress + '%';
-        progressBar.textContent = progress + '%';
-      }
-      
-      // 处理当前图片
-      window.processImage(imageFiles[index], false)
-        .then(result => {
-          if (result) {
-            // 存储处理结果
-            window.watermarkState.processed[index] = result;
-            
-            // 处理下一张
-            setTimeout(() => processNextImage(index + 1), 10);
-          } else {
-            console.error('处理图片失败:', imageFiles[index].name);
-            processNextImage(index + 1);
-          }
-        })
-        .catch(error => {
-          console.error('处理图片时出错:', error);
-          processNextImage(index + 1);
-        });
-    };
-    
-    // 开始处理
-    processNextImage(0);
+      // 开始处理
+      processNextImage(0);
+    }, 0); // 使用setTimeout确保UI先更新
   };
   
   // 显示错误消息

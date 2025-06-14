@@ -465,8 +465,16 @@ export function initInputHandlers() {
         type: this.value
       });
       
-      // 更新UI显示/隐藏相关控制项
-      updateUIFromState();
+      // 直接更新UI显示/隐藏相关控制项，而不是调用updateUIFromState
+      const type = this.value;
+      const textOptions = document.getElementById('text-options');
+      const imageOptions = document.getElementById('image-options');
+      const tiledOptions = document.getElementById('tiled-options');
+      
+      // 根据类型显示/隐藏相关选项
+      if (textOptions) textOptions.style.display = type === 'text' ? 'block' : 'none';
+      if (imageOptions) imageOptions.style.display = type === 'image' ? 'block' : 'none';
+      if (tiledOptions) tiledOptions.style.display = type === 'tiled' ? 'block' : 'none';
       
       // 更新水印
       updateWatermark();
@@ -603,112 +611,126 @@ export function initInputHandlers() {
  * 根据当前状态更新UI控件
  */
 function updateUIFromState() {
-  // 更新水印类型
-  const watermarkType = document.getElementById('watermark-type');
-  if (watermarkType) {
-    watermarkType.value = watermarkState.type;
-    
-    // 触发change事件以更新相关UI
-    const event = new Event('change');
-    watermarkType.dispatchEvent(event);
+  // 防止递归调用
+  if (window._isUpdatingUI) {
+    console.log('防止递归调用updateUIFromState');
+    return;
   }
   
-  // 更新水印文字
-  const watermarkTextInput = document.getElementById('watermark-text');
-  if (watermarkTextInput) {
-    watermarkTextInput.value = watermarkState.text;
-  }
+  // 设置更新标志
+  window._isUpdatingUI = true;
   
-  // 更新字体大小
-  const fontSizeInput = document.getElementById('font-size');
-  const fontSizeValue = document.getElementById('font-size-value');
-  const fontSizeNumberInput = document.getElementById('font-size-input');
-  
-  if (fontSizeInput) {
-    fontSizeInput.value = watermarkState.fontSize;
-    
-    if (fontSizeValue) {
-      fontSizeValue.textContent = watermarkState.fontSize;
+  try {
+    // 更新水印类型
+    const watermarkType = document.getElementById('watermark-type');
+    if (watermarkType) {
+      watermarkType.value = watermarkState.type;
+      
+      // 触发change事件以更新相关UI
+      const event = new Event('change', { bubbles: false });
+      watermarkType.dispatchEvent(event);
     }
     
-    if (fontSizeNumberInput) {
-      fontSizeNumberInput.value = watermarkState.fontSize;
-    }
-  }
-  
-  // 更新透明度
-  const opacityInput = document.getElementById('opacity');
-  const opacityValue = document.getElementById('opacity-value');
-  const opacityNumberInput = document.getElementById('opacity-input');
-  
-  if (opacityInput) {
-    opacityInput.value = watermarkState.opacity;
-    
-    if (opacityValue) {
-      opacityValue.textContent = `${watermarkState.opacity}%`;
+    // 更新水印文字
+    const watermarkTextInput = document.getElementById('watermark-text');
+    if (watermarkTextInput) {
+      watermarkTextInput.value = watermarkState.text;
     }
     
-    if (opacityNumberInput) {
-      opacityNumberInput.value = watermarkState.opacity;
-    }
-  }
-  
-  // 更新旋转角度
-  const rotationInput = document.getElementById('rotation');
-  const rotationValue = document.getElementById('rotation-value');
-  const rotationNumberInput = document.getElementById('rotation-input');
-  
-  if (rotationInput) {
-    rotationInput.value = watermarkState.rotation;
+    // 更新字体大小
+    const fontSizeInput = document.getElementById('font-size');
+    const fontSizeValue = document.getElementById('font-size-value');
+    const fontSizeNumberInput = document.getElementById('font-size-input');
     
-    if (rotationValue) {
-      rotationValue.textContent = `${watermarkState.rotation}°`;
+    if (fontSizeInput) {
+      fontSizeInput.value = watermarkState.fontSize;
+      
+      if (fontSizeValue) {
+        fontSizeValue.textContent = watermarkState.fontSize;
+      }
+      
+      if (fontSizeNumberInput) {
+        fontSizeNumberInput.value = watermarkState.fontSize;
+      }
     }
     
-    if (rotationNumberInput) {
-      rotationNumberInput.value = watermarkState.rotation;
-    }
-  }
-  
-  // 更新颜色
-  const colorInput = document.getElementById('watermark-color');
-  if (colorInput) {
-    colorInput.value = watermarkState.color;
-  }
-  
-  // 更新平铺间距
-  const tileSpacingInput = document.getElementById('tile-spacing');
-  const tileSpacingValue = document.getElementById('tile-spacing-value');
-  
-  if (tileSpacingInput && watermarkState.type === 'tiled') {
-    tileSpacingInput.value = watermarkState.tileSpacing;
+    // 更新透明度
+    const opacityInput = document.getElementById('opacity');
+    const opacityValue = document.getElementById('opacity-value');
+    const opacityNumberInput = document.getElementById('opacity-input');
     
-    if (tileSpacingValue) {
-      tileSpacingValue.textContent = `${watermarkState.tileSpacing}px`;
+    if (opacityInput) {
+      opacityInput.value = watermarkState.opacity;
+      
+      if (opacityValue) {
+        opacityValue.textContent = `${watermarkState.opacity}%`;
+      }
+      
+      if (opacityNumberInput) {
+        opacityNumberInput.value = watermarkState.opacity;
+      }
     }
-  }
-  
-  // 更新图片质量
-  const imageQualityInput = document.getElementById('image-quality');
-  const imageQualityValue = document.getElementById('image-quality-value');
-  
-  if (imageQualityInput) {
-    const qualityPercent = Math.round(watermarkState.quality * 100);
-    imageQualityInput.value = qualityPercent;
     
-    if (imageQualityValue) {
-      imageQualityValue.textContent = `${qualityPercent}%`;
+    // 更新旋转角度
+    const rotationInput = document.getElementById('rotation');
+    const rotationValue = document.getElementById('rotation-value');
+    const rotationNumberInput = document.getElementById('rotation-input');
+    
+    if (rotationInput) {
+      rotationInput.value = watermarkState.rotation;
+      
+      if (rotationValue) {
+        rotationValue.textContent = `${watermarkState.rotation}°`;
+      }
+      
+      if (rotationNumberInput) {
+        rotationNumberInput.value = watermarkState.rotation;
+      }
     }
+    
+    // 更新颜色
+    const colorInput = document.getElementById('watermark-color');
+    if (colorInput) {
+      colorInput.value = watermarkState.color;
+    }
+    
+    // 更新平铺间距
+    const tileSpacingInput = document.getElementById('tile-spacing');
+    const tileSpacingValue = document.getElementById('tile-spacing-value');
+    
+    if (tileSpacingInput && watermarkState.type === 'tiled') {
+      tileSpacingInput.value = watermarkState.tileSpacing;
+      
+      if (tileSpacingValue) {
+        tileSpacingValue.textContent = `${watermarkState.tileSpacing}px`;
+      }
+    }
+    
+    // 更新图片质量
+    const imageQualityInput = document.getElementById('image-quality');
+    const imageQualityValue = document.getElementById('image-quality-value');
+    
+    if (imageQualityInput) {
+      const qualityPercent = Math.round(watermarkState.quality * 100);
+      imageQualityInput.value = qualityPercent;
+      
+      if (imageQualityValue) {
+        imageQualityValue.textContent = `${qualityPercent}%`;
+      }
+    }
+    
+    // 更新输出格式
+    const imageFormatSelect = document.getElementById('image-format');
+    if (imageFormatSelect) {
+      imageFormatSelect.value = watermarkState.format;
+    }
+    
+    // 更新撤销/重做按钮状态
+    updateUndoRedoButtons();
+  } finally {
+    // 无论如何都要清除标志
+    window._isUpdatingUI = false;
   }
-  
-  // 更新输出格式
-  const imageFormatSelect = document.getElementById('image-format');
-  if (imageFormatSelect) {
-    imageFormatSelect.value = watermarkState.format;
-  }
-  
-  // 更新撤销/重做按钮状态
-  updateUndoRedoButtons();
 }
 
 /**

@@ -18,6 +18,21 @@ export function updateWatermark() {
     const previewCanvas = document.getElementById('preview-canvas');
     const watermarkTextInput = document.getElementById('watermark-text');
     
+    // 检查预览图像是否已加载
+    if (previewImage && (!previewImage.complete || previewImage.naturalWidth === 0)) {
+      console.log('预览图像尚未完全加载，等待加载完成再更新水印');
+      
+      // 添加一次性加载事件监听器
+      const onImageLoad = () => {
+        previewImage.removeEventListener('load', onImageLoad);
+        // 图像加载完成后再次调用更新水印
+        setTimeout(() => updateWatermark(), 100);
+      };
+      
+      previewImage.addEventListener('load', onImageLoad);
+      return;
+    }
+    
     // 修改条件判断，支持Canvas模式
     if (!previewCanvas && (!previewImage || !previewImage.src || previewImage.style.display === 'none')) {
       if (!watermarkState.originalImage) {
@@ -58,8 +73,17 @@ export function updateWatermark() {
       currentImageWidth = watermarkState.originalImage.width;
       currentImageHeight = watermarkState.originalImage.height;
     } else if (previewImage && previewImage.complete) {
-      currentImageWidth = previewImage.naturalWidth;
-      currentImageHeight = previewImage.naturalHeight;
+      currentImageWidth = previewImage.naturalWidth || previewImage.width;
+      currentImageHeight = previewImage.naturalHeight || previewImage.height;
+    }
+    
+    // 如果图片尺寸为0，可能是图片还没有完全加载
+    if (currentImageWidth === 0 || currentImageHeight === 0) {
+      console.warn('图片尺寸异常，使用元素尺寸');
+      if (previewImage) {
+        currentImageWidth = previewImage.offsetWidth || 500;
+        currentImageHeight = previewImage.offsetHeight || 500;
+      }
     }
     
     // 更新状态中的图片尺寸
@@ -565,36 +589,54 @@ function applyImageWatermark(ctx, width, height, options) {
  * @returns {Object} - 水印位置坐标
  */
 function calculatePosition(canvasWidth, canvasHeight, watermarkWidth, watermarkHeight, options) {
-  // 默认使用自定义位置
-  let x = options.positionX;
-  let y = options.positionY;
+  // 默认使用中心位置
+  let x = canvasWidth / 2;
+  let y = canvasHeight / 2;
 
-  // 根据定位方式计算位置
-  switch (options.position) {
-    case WatermarkPosition.TOP_LEFT:
-      x = watermarkWidth / 2 + options.marginX;
-      y = watermarkHeight / 2 + options.marginY;
-      break;
-    case WatermarkPosition.TOP_RIGHT:
-      x = canvasWidth - watermarkWidth / 2 - options.marginX;
-      y = watermarkHeight / 2 + options.marginY;
-      break;
-    case WatermarkPosition.BOTTOM_LEFT:
-      x = watermarkWidth / 2 + options.marginX;
-      y = canvasHeight - watermarkHeight / 2 - options.marginY;
-      break;
-    case WatermarkPosition.BOTTOM_RIGHT:
-      x = canvasWidth - watermarkWidth / 2 - options.marginX;
-      y = canvasHeight - watermarkHeight / 2 - options.marginY;
-      break;
-    case WatermarkPosition.CENTER:
-      x = canvasWidth / 2;
-      y = canvasHeight / 2;
-      break;
-    case WatermarkPosition.CUSTOM:
-    default:
-      // 使用传入的自定义位置
-      break;
+  // 检查position是否为对象
+  if (typeof options.position === 'object' && options.position !== null) {
+    // 如果position是对象，使用其x和y属性计算位置（百分比）
+    x = (options.position.x / 100) * canvasWidth;
+    y = (options.position.y / 100) * canvasHeight;
+  }
+  // 如果是自定义位置且提供了positionX和positionY
+  else if (options.position === 'custom' && options.positionX !== undefined && options.positionY !== undefined) {
+    // 使用positionX和positionY（百分比）
+    x = (options.positionX / 100) * canvasWidth;
+    y = (options.positionY / 100) * canvasHeight;
+  }
+  // 根据预定义位置计算
+  else if (typeof options.position === 'string') {
+    switch (options.position) {
+      case WatermarkPosition.TOP_LEFT:
+      case 'top-left':
+        x = watermarkWidth / 2 + options.marginX;
+        y = watermarkHeight / 2 + options.marginY;
+        break;
+      case WatermarkPosition.TOP_RIGHT:
+      case 'top-right':
+        x = canvasWidth - watermarkWidth / 2 - options.marginX;
+        y = watermarkHeight / 2 + options.marginY;
+        break;
+      case WatermarkPosition.BOTTOM_LEFT:
+      case 'bottom-left':
+        x = watermarkWidth / 2 + options.marginX;
+        y = canvasHeight - watermarkHeight / 2 - options.marginY;
+        break;
+      case WatermarkPosition.BOTTOM_RIGHT:
+      case 'bottom-right':
+        x = canvasWidth - watermarkWidth / 2 - options.marginX;
+        y = canvasHeight - watermarkHeight / 2 - options.marginY;
+        break;
+      case WatermarkPosition.CENTER:
+      case 'center':
+        x = canvasWidth / 2;
+        y = canvasHeight / 2;
+        break;
+      default:
+        // 默认使用中心位置
+        break;
+    }
   }
 
   return { x, y };

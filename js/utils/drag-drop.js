@@ -124,113 +124,338 @@ function handleWatermarkImageClick() {
 }
 
 /**
- * 处理图片文件
- * @param {FileList} files - 文件列表
+ * 显示文件统计信息
+ * @param {Object} extensionCount - 文件扩展名计数对象
+ * @param {number} totalFiles - 总文件数
+ * @param {number} originalTotal - 原始总文件数，如果与totalFiles不同则显示过滤率
+ * @param {Object} errorStats - 错误统计信息 {total: 数量, types: {错误类型: 数量}}
+ */
+export function displayFileStatistics(extensionCount, totalFiles, originalTotal, errorStats) {
+  // 创建或获取文件统计信息区域
+  let fileStatsContainer = document.getElementById('file-stats-container');
+  
+  if (!fileStatsContainer) {
+    // 创建文件统计容器
+    fileStatsContainer = document.createElement('div');
+    fileStatsContainer.id = 'file-stats-container';
+    fileStatsContainer.className = 'file-stats-container';
+    fileStatsContainer.style.padding = '10px';
+    fileStatsContainer.style.margin = '10px 0';
+    fileStatsContainer.style.backgroundColor = '#f0f8ff';
+    fileStatsContainer.style.borderRadius = '5px';
+    fileStatsContainer.style.fontSize = '14px';
+    
+    // 添加到适当位置
+    const uploadArea = document.getElementById('upload-area');
+    if (uploadArea && uploadArea.parentNode) {
+      uploadArea.parentNode.insertBefore(fileStatsContainer, uploadArea.nextSibling);
+    } else {
+      // 如果找不到上传区域，添加到缩略图容器前面
+      const thumbnailsContainer = document.getElementById('thumbnails-container');
+      if (thumbnailsContainer && thumbnailsContainer.parentNode) {
+        thumbnailsContainer.parentNode.insertBefore(fileStatsContainer, thumbnailsContainer);
+      }
+    }
+  }
+  
+  // 计算处理成功的文件数
+  const successFiles = totalFiles - (errorStats?.total || 0);
+  const successRate = totalFiles > 0 ? ((successFiles / totalFiles) * 100).toFixed(1) : "0.0";
+  
+  // 生成统计信息HTML
+  let statsHTML = '<div style="font-weight: bold; margin-bottom: 5px;">';
+  
+  // 如果有原始文件总数且与处理的文件数不同，显示过滤信息
+  if (originalTotal && originalTotal !== totalFiles) {
+    const filteredPercentage = ((totalFiles / originalTotal) * 100).toFixed(1);
+    const filteredOutCount = originalTotal - totalFiles;
+    
+    statsHTML += `文件统计信息 (共 ${totalFiles}/${originalTotal} 个文件，已过滤 ${filteredOutCount} 个非图片文件)`;
+    
+    // 添加过滤比例指示器
+    statsHTML += `
+      <div style="margin-top: 5px; height: 6px; background-color: #eee; border-radius: 3px; overflow: hidden;">
+        <div style="height: 100%; width: ${filteredPercentage}%; background-color: #4caf50;"></div>
+      </div>
+      <div style="font-size: 12px; color: #666; text-align: right; margin-top: 2px;">
+        处理率: ${filteredPercentage}%
+      </div>
+    `;
+    
+    // 添加更详细的文件类型提示
+    statsHTML += `
+      <div style="margin-top: 5px; font-size: 12px; color: #666;">
+        <span style="color: #4caf50;">✓</span> 系统将自动识别和处理以下格式的图片文件: JPG, JPEG, PNG, GIF, WEBP, SVG, BMP, ICO
+      </div>
+    `;
+  } else {
+    statsHTML += `文件统计信息 (共 ${totalFiles} 个文件)`;
+  }
+  
+  // 如果有错误统计，显示处理成功率
+  if (errorStats && errorStats.total > 0) {
+    statsHTML += `
+      <div style="margin-top: 8px; font-size: 13px;">
+        <span style="color: ${successRate > 90 ? '#4caf50' : (successRate > 70 ? '#ff9800' : '#f44336')};">
+          处理成功: ${successFiles}/${totalFiles} 文件 (${successRate}%)
+        </span>
+        <span style="color: #f44336; margin-left: 10px;">
+          处理失败: ${errorStats.total} 文件
+        </span>
+      </div>
+      <div style="margin-top: 5px; height: 6px; background-color: #eee; border-radius: 3px; overflow: hidden;">
+        <div style="height: 100%; width: ${successRate}%; background-color: ${
+          successRate > 90 ? '#4caf50' : (successRate > 70 ? '#ff9800' : '#f44336')
+        };"></div>
+      </div>
+    `;
+    
+    // 显示错误类型统计
+    if (errorStats.types && Object.keys(errorStats.types).length > 0) {
+      statsHTML += `<div style="margin-top: 5px; font-size: 12px; color: #666;">错误类型统计: `;
+      
+      for (const [errorType, count] of Object.entries(errorStats.types)) {
+        statsHTML += `<span style="color: #f44336;">${errorType}: ${count}个文件</span>; `;
+      }
+      
+      statsHTML = statsHTML.slice(0, -2) + '</div>';
+    }
+  }
+  
+  statsHTML += '</div>';
+  statsHTML += '<div style="display: flex; flex-wrap: wrap;">';
+  
+  // 为每种扩展名创建一个项目
+  for (const [ext, count] of Object.entries(extensionCount)) {
+    const percentage = ((count / totalFiles) * 100).toFixed(1);
+    
+    // 根据文件类型使用不同颜色
+    let extColor = '#1976d2'; // 默认蓝色
+    
+    if (ext.toLowerCase() === '.gif') {
+      extColor = '#9c27b0'; // GIF紫色
+    } else if (['.jpg', '.jpeg'].includes(ext.toLowerCase())) {
+      extColor = '#2e7d32'; // JPG绿色
+    } else if (ext.toLowerCase() === '.png') {
+      extColor = '#ed6c02'; // PNG橙色
+    } else if (ext.toLowerCase() === '.webp') {
+      extColor = '#0288d1'; // WEBP蓝色
+    }
+    
+    statsHTML += `
+      <div style="margin-right: 15px; margin-bottom: 5px; display: flex; align-items: center;">
+        <span style="font-weight: bold; color: ${extColor};">${ext}</span>: 
+        <span>${count}张</span> 
+        <span style="color: #666; margin-left: 3px;">(${percentage}%)</span>
+      </div>
+    `;
+  }
+  
+  statsHTML += '</div>';
+  
+  // 更新容器内容
+  fileStatsContainer.innerHTML = statsHTML;
+  
+  // 显示容器
+  fileStatsContainer.style.display = 'block';
+}
+
+// 将函数添加到全局作用域，以便其他模块可以使用
+if (typeof window !== 'undefined') {
+  window.displayFileStatistics = displayFileStatistics;
+}
+
+/**
+ * 处理上传的图片文件
+ * @param {FileList} files - 上传的文件列表
+ * @returns {Promise} - 返回一个Promise，在处理完成时resolve
  */
 export function handleImageFiles(files) {
-  // 过滤出图片文件
-  const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-  
-  if (imageFiles.length === 0) {
-    showError('未找到有效的图片文件');
-    
-    // 隐藏进度模态框（如果已显示）
-    const processingModal = document.getElementById('processing-modal');
-    if (processingModal && processingModal.style.display === 'flex') {
-      processingModal.style.display = 'none';
-    }
-    
-    return;
-  }
-  
-  // 显示图片数量
-  console.log(`加载了 ${imageFiles.length} 张图片`);
-  
-  // 如果图片数量较多，显示处理模态框
-  const totalFiles = imageFiles.length;
-  if (totalFiles > 10) {
-    const processingModal = document.getElementById('processing-modal');
-    const modalProgressBar = document.getElementById('modal-progress-bar');
-    const processingStatus = document.getElementById('processing-status');
-    
-    if (processingModal) {
-      const modalTitle = processingModal.querySelector('.modal-title');
-      if (modalTitle) modalTitle.textContent = '处理中...';
-      if (processingStatus) processingStatus.textContent = `正在加载 0/${totalFiles} 图片文件...`;
+  return new Promise((resolve, reject) => {
+    try {
+      // 常见图片文件扩展名列表
+      const validImageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.tif', '.ico', '.heic', '.heif', '.raw', '.psd', '.cr2', '.nef', '.arw'];
       
-      // 重置进度条
-      if (modalProgressBar) {
-        modalProgressBar.style.width = '0%';
-        modalProgressBar.textContent = '0%';
+      // 过滤出图片文件 - 同时检查MIME类型和文件扩展名
+      const imageFiles = Array.from(files).filter(file => {
+        // 通过MIME类型判断
+        const isImageMime = file.type.startsWith('image/');
+        
+        // 通过文件扩展名判断
+        const fileName = file.name.toLowerCase();
+        const hasImageExtension = validImageExtensions.some(ext => fileName.endsWith(ext));
+        
+        // 统计所有尝试处理的文件
+        console.log(`文件: ${fileName}, MIME类型: ${file.type}, 是否为图片(MIME): ${isImageMime}, 是否有图片扩展名: ${hasImageExtension}`);
+        
+        // 满足任一条件即认为是图片
+        return isImageMime || hasImageExtension;
+      });
+      
+      // 记录被过滤掉的文件
+      const filteredOutFiles = Array.from(files).filter(file => {
+        const isImageMime = file.type.startsWith('image/');
+        const fileName = file.name.toLowerCase();
+        const hasImageExtension = validImageExtensions.some(ext => fileName.endsWith(ext));
+        return !(isImageMime || hasImageExtension);
+      });
+      
+      // 显示被过滤掉的文件信息
+      if (filteredOutFiles.length > 0) {
+        console.warn(`已过滤掉 ${filteredOutFiles.length} 个非图片文件:`, filteredOutFiles.map(f => f.name).join(', '));
       }
       
-      // 确保模态框显示
-      processingModal.style.display = 'flex';
-    }
-  }
-  
-  // 检查是否是首次加载图片
-  const isFirstLoad = watermarkState.files.length === 0;
-  
-  // 更新状态
-  updateState({
-    files: imageFiles,
-    currentIndex: 0,
-    initialSettingsApplied: isFirstLoad ? false : watermarkState.initialSettingsApplied
-  });
-  
-  // 如果是首次加载图片，重置处理过的设置
-  if (isFirstLoad) {
-    watermarkState.processedSettings = {};
-    watermarkState.firstImageSettings = null;
-  }
-  
-  // 显示缩略图容器
-  const thumbnailsContainer = document.getElementById('thumbnails-container');
-  if (thumbnailsContainer) {
-    thumbnailsContainer.style.display = 'flex';
-    thumbnailsContainer.innerHTML = '';
-  }
-  
-  // 生成缩略图，并显示进度
-  let processedCount = 0;
-  const processingModal = document.getElementById('processing-modal');
-  const modalProgressBar = document.getElementById('modal-progress-bar');
-  const processingStatus = document.getElementById('processing-status');
-  
-  const processThumbnails = (startIndex) => {
-    const batchSize = 5; // 每批处理的图片数
-    const endIndex = Math.min(startIndex + batchSize, imageFiles.length);
-    
-    for (let i = startIndex; i < endIndex; i++) {
-      createThumbnail(imageFiles[i], i);
-      processedCount++;
+      // 显示总体过滤统计
+      console.log(`总文件数: ${files.length}, 图片文件: ${imageFiles.length}, 非图片文件: ${filteredOutFiles.length}`);
       
-      // 更新进度
-      if (totalFiles > 10 && processingModal && modalProgressBar && processingStatus) {
-        const progress = Math.round((processedCount / totalFiles) * 100);
-        modalProgressBar.style.width = `${progress}%`;
-        modalProgressBar.textContent = `${progress}%`;
-        processingStatus.textContent = `正在加载 ${processedCount}/${totalFiles} 图片文件...`;
+      if (imageFiles.length === 0) {
+        showError('未找到有效的图片文件');
+        
+        // 隐藏进度模态框（如果已显示）
+        const processingModal = document.getElementById('processing-modal');
+        if (processingModal && processingModal.style.display === 'flex') {
+          processingModal.style.display = 'none';
+        }
+        
+        reject(new Error('未找到有效的图片文件'));
+        return;
       }
-    }
-    
-    // 如果还有未处理的图片，继续处理下一批
-    if (endIndex < imageFiles.length) {
-      setTimeout(() => processThumbnails(endIndex), 10);
-    } else {
-      // 所有图片都已处理完成
-      if (totalFiles > 10 && processingModal) {
+      
+      // 显示图片数量
+      console.log(`加载了 ${imageFiles.length} 张图片`);
+      
+      // 统计文件扩展名
+      const extensionCount = {};
+      imageFiles.forEach(file => {
+        // 获取文件名和扩展名
+        const fileName = file.name;
+        const fileExt = fileName.lastIndexOf('.') > 0 ? 
+          fileName.substring(fileName.lastIndexOf('.')).toLowerCase() : 
+          '无扩展名';
+        
+        // 计数
+        extensionCount[fileExt] = (extensionCount[fileExt] || 0) + 1;
+      });
+      
+      // 显示扩展名统计信息
+      console.log('文件扩展名统计:', extensionCount);
+      let extensionSummary = '文件类型统计: ';
+      for (const [ext, count] of Object.entries(extensionCount)) {
+        extensionSummary += `${ext}: ${count}张, `;
+      }
+      extensionSummary = extensionSummary.slice(0, -2); // 移除末尾的逗号和空格
+      
+      // 获取处理状态元素
+      const processingStatus = document.getElementById('processing-status');
+      const processingModal = document.getElementById('processing-modal');
+      const modalProgressBar = document.getElementById('modal-progress-bar');
+      
+      // 显示扩展名统计信息
+      if (processingStatus) {
+        processingStatus.textContent = `${extensionSummary}`;
+        // 2秒后更新回正常状态
+        setTimeout(() => {
+          processingStatus.textContent = `正在加载 0/${imageFiles.length} 图片文件...`;
+        }, 2000);
+      }
+      
+      // 在UI中显示文件统计信息
+      displayFileStatistics(extensionCount, imageFiles.length, files.length, { total: 0, types: {} });
+      
+      // 如果图片数量较多，显示处理模态框
+      const totalFiles = imageFiles.length;
+      if (totalFiles > 10) {
+        if (processingModal) {
+          const modalTitle = processingModal.querySelector('.modal-title');
+          if (modalTitle) modalTitle.textContent = '处理中...';
+          if (processingStatus) processingStatus.textContent = `正在加载 0/${totalFiles} 图片文件...`;
+          
+          // 重置进度条
+          if (modalProgressBar) {
+            modalProgressBar.style.width = '0%';
+            modalProgressBar.textContent = '0%';
+          }
+          
+          // 确保模态框显示
+          processingModal.style.display = 'flex';
+        }
+      }
+      
+      // 检查是否是首次加载图片
+      const isFirstLoad = watermarkState.files.length === 0;
+      
+      // 更新状态
+      updateState({
+        files: imageFiles,
+        currentIndex: 0,
+        initialSettingsApplied: isFirstLoad ? false : watermarkState.initialSettingsApplied
+      });
+      
+      // 如果是首次加载图片，重置处理过的设置
+      if (isFirstLoad) {
+        watermarkState.processedSettings = {};
+        watermarkState.firstImageSettings = null;
+      }
+      
+      // 显示缩略图容器
+      const thumbnailsContainer = document.getElementById('thumbnails-container');
+      if (thumbnailsContainer) {
+        thumbnailsContainer.style.display = 'flex';
+        thumbnailsContainer.innerHTML = '';
+      }
+      
+      // 生成缩略图，并显示进度
+      let processedCount = 0;
+      
+      const processThumbnails = (startIndex) => {
+        const batchSize = 5; // 每批处理的图片数
+        const endIndex = Math.min(startIndex + batchSize, imageFiles.length);
+        
+        for (let i = startIndex; i < endIndex; i++) {
+          createThumbnail(imageFiles[i], i);
+          processedCount++;
+          
+          // 更新进度
+          if (totalFiles > 10 && processingModal && modalProgressBar && processingStatus) {
+            const progress = Math.round((processedCount / totalFiles) * 100);
+            modalProgressBar.style.width = `${progress}%`;
+            modalProgressBar.textContent = `${progress}%`;
+            processingStatus.textContent = `正在加载 ${processedCount}/${totalFiles} 图片文件...`;
+          }
+        }
+        
+        // 如果还有未处理的图片，继续处理下一批
+        if (endIndex < imageFiles.length) {
+          setTimeout(() => processThumbnails(endIndex), 10);
+        } else {
+          // 所有图片都已处理完成
+          if (totalFiles > 10 && processingModal) {
+            processingModal.style.display = 'none';
+          }
+          
+          // 处理当前选中的图片
+          processCurrentImage();
+          
+          // 完成处理，解析Promise
+          resolve();
+        }
+      };
+      
+      // 开始处理第一批图片
+      processThumbnails(0);
+    } catch (error) {
+      console.error('处理图片文件时出错:', error);
+      
+      // 确保关闭处理模态框
+      const processingModal = document.getElementById('processing-modal');
+      if (processingModal && processingModal.style.display === 'flex') {
         processingModal.style.display = 'none';
       }
       
-      // 处理当前选中的图片
-      processCurrentImage();
+      // 拒绝Promise
+      reject(error);
     }
-  };
-  
-  // 开始处理第一批图片
-  processThumbnails(0);
+  });
 }
 
 /**
@@ -268,6 +493,15 @@ function createThumbnail(file, index) {
   
   // 添加点击事件
   thumbnail.addEventListener('click', () => {
+    // 防止重复点击
+    if (thumbnail.classList.contains('processing')) {
+      console.log('正在处理此图片，请稍候...');
+      return;
+    }
+    
+    // 添加处理中标记
+    thumbnail.classList.add('processing');
+    
     // 在切换图片前保存当前图片的设置
     try {
       const currentFile = watermarkState.files[watermarkState.currentIndex];
@@ -285,13 +519,49 @@ function createThumbnail(file, index) {
     });
     thumbnail.classList.add('active');
     
+    // 获取目标文件
+    const targetFile = watermarkState.files[index];
+    if (!targetFile) {
+      console.error('无法找到索引为', index, '的文件');
+      thumbnail.classList.remove('processing');
+      return;
+    }
+    
+    // 显示加载状态
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'thumbnail-loading switch-loading';
+    loadingIndicator.innerHTML = '<div class="spinner"></div>';
+    thumbnail.appendChild(loadingIndicator);
+    
     // 更新当前索引
     updateState({
       currentIndex: index
     });
     
-    // 处理当前选中的图片
-    processCurrentImage();
+    // 直接显示预览图像，不进行复杂处理
+    displaySimplePreview(targetFile);
+    
+    // 应用设置
+    if (watermarkState.processedSettings[targetFile.name]) {
+      applyImageSettings(targetFile.name);
+    } else if (watermarkState.firstImageSettings) {
+      applyFirstImageSettings();
+    }
+    
+    // 保存当前图片的设置
+    try {
+      saveCurrentImageSettings();
+      console.log('已保存当前图片设置:', targetFile.name);
+    } catch (error) {
+      console.error('保存当前图片设置时出错:', error);
+    }
+    
+    // 移除处理中标记和加载指示器
+    setTimeout(() => {
+      thumbnail.classList.remove('processing');
+      const loadingEl = thumbnail.querySelector('.switch-loading');
+      if (loadingEl) loadingEl.remove();
+    }, 500);
   });
   
   // 添加到容器
@@ -353,21 +623,28 @@ function processCurrentImage() {
   }
   
   // 重置预览图像和Canvas的显示状态
-  if (previewImage) previewImage.style.display = 'none';
+  if (previewImage) {
+    previewImage.style.display = 'none';
+    // 确保图片没有旧的src导致缓存问题
+    if (previewImage.src) {
+      try {
+        URL.revokeObjectURL(previewImage.src);
+      } catch (e) {
+        console.warn('撤销旧URL时出错:', e);
+      }
+      previewImage.src = '';
+    }
+  }
   if (previewCanvas) previewCanvas.style.display = 'none';
   if (gifBadge) gifBadge.style.display = 'none';
-  
-  // 检查是否已经处理过这个图片
-  const fileName = currentFile.name;
-  let shouldApplyWatermark = true; // 默认应用水印
   
   // 检查是否应用设置
   let settingsApplied = false;
   
   // 如果有这个图片的保存设置，应用它
-  if (watermarkState.processedSettings[fileName]) {
-    console.log(`应用图片 ${fileName} 的保存设置`);
-    settingsApplied = applyImageSettings(fileName);
+  if (watermarkState.processedSettings[currentFile.name]) {
+    console.log(`应用图片 ${currentFile.name} 的保存设置`);
+    settingsApplied = applyImageSettings(currentFile.name);
     console.log('设置应用状态:', settingsApplied);
   }
   
@@ -378,70 +655,20 @@ function processCurrentImage() {
     settingsApplied = true;
   }
   
-  // 处理图片
-  processImage(currentFile, shouldApplyWatermark)
-    .then(result => {
-      // 检查是否为GIF结果
-      const { blobUrl, width, height, isGif } = result;
-      
-      // 更新预览图像
-      if (previewImage) {
-        previewImage.src = blobUrl;
-        previewImage.style.display = 'block';
-        
-        // 如果是GIF，添加gif类并显示GIF标识
-        if (isGif) {
-          previewImage.classList.add('gif-image');
-          if (gifBadge) gifBadge.style.display = 'block';
-          console.log('显示GIF动图');
-        } else {
-          previewImage.classList.remove('gif-image');
-          if (gifBadge) gifBadge.style.display = 'none';
-        }
-      }
-      
-      // 隐藏加载消息
-      if (noImageMessage) {
-        noImageMessage.style.display = 'none';
-      }
-      
-      // 更新图片处理状态
-      updateState({
-        processed: {
-          ...watermarkState.processed,
-          [fileName]: blobUrl
-        }
-      });
-      
-      console.log('图片处理完成，已更新预览');
-      
-      // 更新水印
-      updateWatermark();
-      console.log('processCurrentImage: 已调用updateWatermark');
-      
-      // 保存当前图片的设置
-      try {
-        saveCurrentImageSettings();
-        console.log('已保存当前图片设置:', fileName);
-      } catch (error) {
-        console.error('保存当前图片设置时出错:', error);
-      }
-      
-      // 如果是第一张图片，保存设置作为默认
-      if (watermarkState.currentIndex === 0 && !watermarkState.firstImageSettings) {
-        saveFirstImageSettings();
-        console.log('已保存第一张图片设置作为默认');
-      }
-    })
-    .catch(error => {
-      console.error('处理图片失败:', error);
-      showError('处理图片失败: ' + error.message);
-      
-      // 隐藏加载消息
-      if (noImageMessage) {
-        noImageMessage.style.display = 'none';
-      }
-    });
+  // 直接显示预览图像，不进行复杂处理
+  displaySimplePreview(currentFile);
+  
+  // 保存当前图片设置
+  setTimeout(() => {
+    saveCurrentImageSettings();
+    console.log('已保存当前图片设置:', currentFile.name);
+    
+    // 如果是第一张图片，保存设置作为默认
+    if (watermarkState.currentIndex === 0 && !watermarkState.firstImageSettings) {
+      saveFirstImageSettings();
+      console.log('已保存第一张图片设置作为默认');
+    }
+  }, 500);
 }
 
 /**
@@ -521,4 +748,739 @@ function showError(message) {
   } else {
     console.error(message);
   }
+}
+
+/**
+ * 处理文件拖放
+ * @param {Event} event - 拖放事件
+ */
+export function handleFileDrop(event) {
+  // 阻止默认行为
+  event.preventDefault();
+  event.stopPropagation();
+  
+  // 获取文件
+  const files = event.dataTransfer ? event.dataTransfer.files : event.target.files;
+  
+  // 检查是否有文件
+  if (!files || files.length === 0) {
+    console.log('没有选择文件');
+    return;
+  }
+  
+  // 处理文件
+  processFiles(files);
+}
+
+/**
+ * 处理选择的文件
+ * @param {FileList} files - 文件列表
+ */
+export function processFiles(files) {
+  console.log(`处理 ${files.length} 个文件`);
+  
+  // 显示加载指示器
+  const loadingIndicator = document.getElementById('loading-indicator');
+  if (loadingIndicator) {
+    loadingIndicator.style.display = 'block';
+  }
+  
+  // 清空缩略图容器
+  const thumbnailsContainer = document.getElementById('thumbnails-container');
+  if (thumbnailsContainer) {
+    thumbnailsContainer.innerHTML = '';
+  }
+  
+  // 过滤出图片文件
+  const imageFiles = Array.from(files).filter(file => {
+    const type = file.type.toLowerCase();
+    const name = file.name.toLowerCase();
+    
+    // 检查MIME类型和文件扩展名
+    return type.startsWith('image/') || 
+           name.endsWith('.jpg') || 
+           name.endsWith('.jpeg') || 
+           name.endsWith('.png') || 
+           name.endsWith('.gif') || 
+           name.endsWith('.webp') || 
+           name.endsWith('.svg') || 
+           name.endsWith('.bmp') || 
+           name.endsWith('.ico');
+  });
+  
+  console.log(`找到 ${imageFiles.length} 个图片文件`);
+  
+  // 如果没有图片文件，显示提示并返回
+  if (imageFiles.length === 0) {
+    if (loadingIndicator) {
+      loadingIndicator.style.display = 'none';
+    }
+    
+    alert('未找到有效的图片文件，请选择图片文件（JPG, PNG, GIF等）');
+    return;
+  }
+  
+  // 统计文件扩展名
+  const extensionCount = {};
+  const errorStats = { total: 0, types: {} };
+  
+  // 计数各种扩展名
+  imageFiles.forEach(file => {
+    const extension = getFileExtension(file.name);
+    extensionCount[extension] = (extensionCount[extension] || 0) + 1;
+  });
+  
+  // 在UI中显示文件统计信息
+  displayFileStatistics(extensionCount, imageFiles.length, files.length, { total: 0, types: {} });
+  
+  // 如果图片数量较多，显示处理模态框
+  const processModal = document.getElementById('process-modal');
+  const processProgress = document.getElementById('process-progress');
+  const processCount = document.getElementById('process-count');
+  
+  let showModal = imageFiles.length > 10;
+  
+  if (showModal && processModal && processProgress && processCount) {
+    processModal.style.display = 'flex';
+    processProgress.style.width = '0%';
+    processCount.textContent = `0/${imageFiles.length}`;
+  }
+  
+  // 处理每个图片文件
+  let processedCount = 0;
+  let errorCount = 0;
+  const errorFiles = [];
+  
+  // 创建一个处理队列
+  const processQueue = [];
+  
+  // 添加所有文件到处理队列
+  imageFiles.forEach(file => {
+    processQueue.push(file);
+  });
+  
+  // 最大并发处理数
+  const maxConcurrent = 4;
+  let activeProcesses = 0;
+  
+  // 处理队列函数
+  function processNext() {
+    // 如果队列为空或已达到最大并发数，返回
+    if (processQueue.length === 0 || activeProcesses >= maxConcurrent) {
+      return;
+    }
+    
+    // 增加活跃处理数
+    activeProcesses++;
+    
+    // 获取下一个文件
+    const file = processQueue.shift();
+    
+    // 处理文件
+    processImageFile(file)
+      .then(result => {
+        // 增加处理计数
+        processedCount++;
+        
+        // 如果处理失败，记录错误
+        if (result.error) {
+          errorCount++;
+          errorFiles.push({
+            name: file.name,
+            error: result.error
+          });
+          
+          // 更新错误统计
+          errorStats.total = errorCount;
+          const errorType = result.error.type || '处理错误';
+          errorStats.types[errorType] = (errorStats.types[errorType] || 0) + 1;
+        }
+        
+        // 更新进度
+        if (showModal && processProgress && processCount) {
+          const percent = Math.round((processedCount / imageFiles.length) * 100);
+          processProgress.style.width = `${percent}%`;
+          processCount.textContent = `${processedCount}/${imageFiles.length}`;
+        }
+        
+        // 更新文件统计信息（包含错误统计）
+        displayFileStatistics(extensionCount, imageFiles.length, files.length, errorStats);
+        
+        // 减少活跃处理数
+        activeProcesses--;
+        
+        // 继续处理队列
+        processNext();
+        
+        // 如果所有文件都已处理，隐藏加载指示器和模态框
+        if (processedCount === imageFiles.length) {
+          if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+          }
+          
+          if (showModal && processModal) {
+            setTimeout(() => {
+              processModal.style.display = 'none';
+            }, 500);
+          }
+          
+          // 显示处理结果
+          displayProcessResult(imageFiles.length, errorCount, errorFiles);
+        }
+      })
+      .catch(error => {
+        console.error('处理图片文件时出错:', error);
+        
+        // 增加处理计数和错误计数
+        processedCount++;
+        errorCount++;
+        
+        errorFiles.push({
+          name: file.name,
+          error: {
+            message: error.message || '未知错误',
+            type: '处理错误'
+          }
+        });
+        
+        // 更新错误统计
+        errorStats.total = errorCount;
+        const errorType = '处理错误';
+        errorStats.types[errorType] = (errorStats.types[errorType] || 0) + 1;
+        
+        // 更新进度
+        if (showModal && processProgress && processCount) {
+          const percent = Math.round((processedCount / imageFiles.length) * 100);
+          processProgress.style.width = `${percent}%`;
+          processCount.textContent = `${processedCount}/${imageFiles.length}`;
+        }
+        
+        // 更新文件统计信息（包含错误统计）
+        displayFileStatistics(extensionCount, imageFiles.length, files.length, errorStats);
+        
+        // 减少活跃处理数
+        activeProcesses--;
+        
+        // 继续处理队列
+        processNext();
+        
+        // 如果所有文件都已处理，隐藏加载指示器和模态框
+        if (processedCount === imageFiles.length) {
+          if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+          }
+          
+          if (showModal && processModal) {
+            setTimeout(() => {
+              processModal.style.display = 'none';
+            }, 500);
+          }
+          
+          // 显示处理结果
+          displayProcessResult(imageFiles.length, errorCount, errorFiles);
+        }
+      });
+  }
+  
+  // 启动初始处理
+  for (let i = 0; i < Math.min(maxConcurrent, processQueue.length); i++) {
+    processNext();
+  }
+}
+
+/**
+ * 处理单个图片文件
+ * @param {File} file - 图片文件
+ * @returns {Promise} - 处理结果Promise
+ */
+async function processImageFile(file) {
+  try {
+    console.log(`处理图片文件: ${file.name}`);
+    
+    // 导入图片处理模块
+    const { processImage, isGif } = await import('./image-processor.js');
+    
+    // 处理图片
+    const result = await processImage(file, false, { isPreview: true });
+    
+    // 如果处理失败，返回错误
+    if (!result || !result.blobUrl) {
+      return {
+        error: {
+          message: '处理图片失败',
+          type: '处理错误'
+        }
+      };
+    }
+    
+    // 如果处理结果标记为错误，返回错误
+    if (result.isError) {
+      return {
+        error: {
+          message: '处理图片失败',
+          type: '处理错误'
+        }
+      };
+    }
+    
+    // 如果是GIF但处理后没有有效的blob或blobUrl，返回错误
+    if (isGif(file) && (!result.blob || !result.blobUrl)) {
+      return {
+        error: {
+          message: '无有效的blob或blobUrl',
+          type: '数据错误'
+        }
+      };
+    }
+    
+    // 创建缩略图 - 使用新的缩略图创建函数
+    createProcessedThumbnail(file, result);
+    
+    return { success: true };
+  } catch (error) {
+    console.error(`处理图片文件 ${file.name} 时出错:`, error);
+    
+    return {
+      error: {
+        message: error.message || '加载图片失败',
+        type: '处理错误'
+      }
+    };
+  }
+}
+
+/**
+ * 创建处理后的图片缩略图
+ * @param {File} file - 图片文件
+ * @param {Object} processResult - 处理结果
+ */
+function createProcessedThumbnail(file, processResult) {
+  // 获取缩略图容器
+  const thumbnailsContainer = document.getElementById('thumbnails-container');
+  if (!thumbnailsContainer) return;
+  
+  // 创建缩略图元素
+  const thumbnailDiv = document.createElement('div');
+  thumbnailDiv.className = 'thumbnail';
+  thumbnailDiv.dataset.filename = file.name;
+  
+  // 创建图片元素
+  const img = document.createElement('img');
+  img.src = processResult.blobUrl;
+  img.alt = file.name;
+  img.title = file.name;
+  
+  // 如果是GIF，添加GIF标识
+  if (processResult.isGif) {
+    const gifBadge = document.createElement('span');
+    gifBadge.className = 'gif-badge';
+    gifBadge.textContent = 'GIF';
+    thumbnailDiv.appendChild(gifBadge);
+  }
+  
+  // 创建文件名元素
+  const fileNameSpan = document.createElement('span');
+  fileNameSpan.className = 'file-name';
+  fileNameSpan.textContent = file.name.length > 15 ? file.name.substring(0, 12) + '...' : file.name;
+  fileNameSpan.title = file.name;
+  
+  // 添加点击事件
+  thumbnailDiv.addEventListener('click', function() {
+    selectThumbnail(this);
+    
+    // 显示预览
+    const previewImage = document.getElementById('preview-image');
+    const previewCanvas = document.getElementById('preview-canvas');
+    
+    if (previewImage) {
+      previewImage.src = img.src;
+      previewImage.style.display = 'block';
+    }
+    
+    if (previewCanvas) {
+      previewCanvas.style.display = 'none';
+    }
+    
+    // 更新当前选中的文件
+    window.currentFile = file;
+    window.currentProcessResult = processResult;
+    
+    // 触发预览更新
+    const previewUpdateEvent = new CustomEvent('previewUpdate', { detail: { file, processResult } });
+    document.dispatchEvent(previewUpdateEvent);
+  });
+  
+  // 组装缩略图
+  thumbnailDiv.appendChild(img);
+  thumbnailDiv.appendChild(fileNameSpan);
+  thumbnailsContainer.appendChild(thumbnailDiv);
+}
+
+/**
+ * 选择缩略图
+ * @param {HTMLElement} thumbnail - 缩略图元素
+ */
+function selectThumbnail(thumbnail) {
+  // 移除所有选中状态
+  const allThumbnails = document.querySelectorAll('.thumbnail');
+  allThumbnails.forEach(thumb => {
+    thumb.classList.remove('selected');
+  });
+  
+  // 添加选中状态
+  thumbnail.classList.add('selected');
+  
+  // 更新当前选中的文件
+  const index = parseInt(thumbnail.dataset.index, 10);
+  if (!isNaN(index) && watermarkState.files && index < watermarkState.files.length) {
+    // 更新全局currentFile变量
+    window.currentFile = watermarkState.files[index];
+    
+    // 更新watermarkState中的当前索引
+    updateState({
+      currentIndex: index
+    });
+    
+    console.log(`已选择缩略图 ${index}, 文件: ${watermarkState.files[index].name}`);
+  }
+}
+
+/**
+ * 获取文件扩展名
+ * @param {string} fileName - 文件名
+ * @returns {string} - 文件扩展名（包含点）
+ */
+function getFileExtension(fileName) {
+  const lastDotIndex = fileName.lastIndexOf('.');
+  if (lastDotIndex === -1) return '';
+  return fileName.substring(lastDotIndex).toLowerCase();
+}
+
+/**
+ * 显示处理结果
+ * @param {number} totalFiles - 总文件数
+ * @param {number} errorCount - 错误数量
+ * @param {Array} errorFiles - 错误文件列表
+ */
+function displayProcessResult(totalFiles, errorCount, errorFiles) {
+  if (errorCount === 0) {
+    console.log(`所有 ${totalFiles} 个文件处理成功`);
+    return;
+  }
+  
+  console.log(`处理完成: ${totalFiles - errorCount}/${totalFiles} 成功, ${errorCount} 失败`);
+  
+  // 按错误类型分组
+  const errorsByType = {};
+  errorFiles.forEach(file => {
+    const errorType = file.error.type || '未知错误';
+    if (!errorsByType[errorType]) {
+      errorsByType[errorType] = [];
+    }
+    errorsByType[errorType].push(file);
+  });
+  
+  // 显示错误信息
+  console.warn(`处理警告 (${errorCount})`);
+  console.warn('错误类型统计:');
+  
+  Object.keys(errorsByType).forEach(type => {
+    console.warn(`${type}: ${errorsByType[type].length}个文件`);
+  });
+  
+  console.warn('被跳过的文件:');
+  
+  // 限制显示的错误文件数量
+  const maxErrorsToShow = 100;
+  const filesToShow = errorFiles.slice(0, maxErrorsToShow);
+  
+  filesToShow.forEach(file => {
+    console.warn(`${file.name} - ${file.error.type}: ${file.error.message}`);
+  });
+  
+  if (errorFiles.length > maxErrorsToShow) {
+    console.warn(`...以及其他 ${errorFiles.length - maxErrorsToShow} 个文件`);
+  }
+}
+
+/**
+ * 显示预览图像
+ * @param {string} blobUrl - 图像的Blob URL
+ * @param {boolean} isGif - 是否为GIF图像
+ * @param {Object} options - 额外选项
+ */
+function displayPreviewImage(blobUrl, isGif = false, options = {}) {
+  const previewImage = document.getElementById('preview-image');
+  const noImageMessage = document.getElementById('no-image-message');
+  const gifBadge = document.getElementById('gif-badge');
+  
+  if (!previewImage) return;
+  
+  // 清除旧的图片
+  if (previewImage.src) {
+    try {
+      URL.revokeObjectURL(previewImage.src);
+    } catch (e) {
+      console.warn('撤销旧URL时出错:', e);
+    }
+  }
+  
+  // 设置加载状态
+  if (noImageMessage) {
+    noImageMessage.textContent = '正在加载图片...';
+    noImageMessage.style.display = 'block';
+  }
+  
+  // 清除旧的事件监听器
+  const oldImage = previewImage.cloneNode(false);
+  if (previewImage.parentNode) {
+    previewImage.parentNode.replaceChild(oldImage, previewImage);
+  }
+  
+  // 使用新的图像元素
+  const newImage = oldImage;
+  newImage.style.display = 'none';
+  
+  // 设置加载事件
+  newImage.onload = function() {
+    console.log('图片加载完成，显示预览');
+    newImage.style.display = 'block';
+    
+    if (noImageMessage) {
+      noImageMessage.style.display = 'none';
+    }
+    
+    // 如果是GIF，添加标识
+    if (isGif) {
+      newImage.classList.add('gif-image');
+      if (gifBadge) gifBadge.style.display = 'block';
+    } else {
+      newImage.classList.remove('gif-image');
+      if (gifBadge) gifBadge.style.display = 'none';
+    }
+    
+    // 更新水印位置
+    setTimeout(() => {
+      updateWatermark();
+      console.log('图片加载完成，更新水印位置');
+    }, 100);
+    
+    // 如果有回调函数，调用它
+    if (options.onSuccess) {
+      options.onSuccess();
+    }
+  };
+  
+  // 设置错误处理
+  newImage.onerror = function(error) {
+    console.error('加载预览图片失败:', error);
+    
+    // 如果是缓存的图片加载失败，尝试重新处理
+    if (options.isCached && options.fileName && options.currentFile) {
+      console.log('缓存的图片加载失败，尝试重新处理:', options.fileName);
+      
+      // 移除缓存
+      if (watermarkState.processed[options.fileName]) {
+        delete watermarkState.processed[options.fileName];
+      }
+      
+      // 显示正在重新处理的消息
+      if (noImageMessage) {
+        noImageMessage.textContent = '重新处理图片中...';
+        noImageMessage.style.display = 'block';
+      }
+      
+      // 重新处理图片
+      if (options.reprocess) {
+        options.reprocess();
+        return;
+      }
+    }
+    
+    // 创建一个备用静态图像
+    try {
+      // 创建一个临时Canvas
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 500;
+      tempCanvas.height = 500;
+      const ctx = tempCanvas.getContext('2d');
+      
+      // 绘制一个简单的背景
+      ctx.fillStyle = '#f0f0f0';
+      ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // 绘制错误信息
+      ctx.fillStyle = '#333333';
+      ctx.font = '16px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('图片加载失败', tempCanvas.width / 2, tempCanvas.height / 2 - 10);
+      ctx.fillText('但处理已完成，可以下载', tempCanvas.width / 2, tempCanvas.height / 2 + 20);
+      
+      // 转换为数据URL并设置为图片源
+      const dataUrl = tempCanvas.toDataURL('image/png');
+      newImage.src = dataUrl;
+      newImage.style.display = 'block';
+      
+      if (noImageMessage) {
+        noImageMessage.style.display = 'none';
+      }
+      
+      // 如果有错误回调函数，调用它
+      if (options.onError) {
+        options.onError(error);
+      }
+    } catch (canvasError) {
+      console.error('创建备用图像失败:', canvasError);
+      if (noImageMessage) {
+        noImageMessage.textContent = '加载图片失败';
+        noImageMessage.style.display = 'block';
+      }
+      
+      // 如果有错误回调函数，调用它
+      if (options.onError) {
+        options.onError(canvasError);
+      }
+    }
+  };
+  
+  // 设置图片源
+  newImage.src = blobUrl;
+}
+
+/**
+ * 显示预览图像 - 简化版
+ * @param {File} file - 图像文件
+ */
+function displaySimplePreview(file) {
+  const previewImage = document.getElementById('preview-image');
+  const noImageMessage = document.getElementById('no-image-message');
+  const gifBadge = document.getElementById('gif-badge');
+  
+  if (!previewImage) return;
+  
+  // 清除旧的图片
+  if (previewImage.src) {
+    try {
+      URL.revokeObjectURL(previewImage.src);
+    } catch (e) {
+      console.warn('撤销旧URL时出错:', e);
+    }
+  }
+  
+  // 显示加载状态
+  if (noImageMessage) {
+    noImageMessage.textContent = '正在加载图片...';
+    noImageMessage.style.display = 'block';
+  }
+  
+  previewImage.style.display = 'none';
+  
+  // 检查是否为GIF
+  const isGif = file.name.toLowerCase().endsWith('.gif');
+  
+  // 创建直接的文件URL
+  const fileUrl = URL.createObjectURL(file);
+  
+  // 先加载一个隐藏的图像以获取尺寸和设置originalImage
+  const hiddenImg = new Image();
+  hiddenImg.onload = function() {
+    // 保存原始图像对象到watermarkState，确保水印渲染可以使用
+    updateState({
+      originalImage: hiddenImg,
+      originalImageWidth: hiddenImg.width,
+      originalImageHeight: hiddenImg.height
+    });
+    
+    console.log(`保存原始图像对象: ${hiddenImg.width}x${hiddenImg.height}`);
+    
+    // 设置预览图像
+    previewImage.src = fileUrl;
+  };
+  hiddenImg.src = fileUrl;
+  
+  // 设置加载事件
+  previewImage.onload = function() {
+    console.log('图片加载完成，显示预览');
+    previewImage.style.display = 'block';
+    
+    if (noImageMessage) {
+      noImageMessage.style.display = 'none';
+    }
+    
+    // 如果是GIF，添加标识
+    if (isGif) {
+      previewImage.classList.add('gif-image');
+      if (gifBadge) gifBadge.style.display = 'block';
+    } else {
+      previewImage.classList.remove('gif-image');
+      if (gifBadge) gifBadge.style.display = 'none';
+    }
+    
+    // 确保originalImage已设置
+    if (!watermarkState.originalImage) {
+      const img = new Image();
+      img.onload = function() {
+        updateState({
+          originalImage: img,
+          originalImageWidth: img.width,
+          originalImageHeight: img.height
+        });
+        
+        console.log(`设置缺失的原始图像对象: ${img.width}x${img.height}`);
+        
+        // 更新水印位置
+        setTimeout(() => {
+          updateWatermark();
+          console.log('图片加载完成，更新水印位置');
+        }, 100);
+      };
+      img.src = fileUrl;
+    } else {
+      // 更新水印位置
+      setTimeout(() => {
+        updateWatermark();
+        console.log('图片加载完成，更新水印位置');
+      }, 100);
+    }
+  };
+  
+  // 设置错误处理
+  previewImage.onerror = function(error) {
+    console.error('加载预览图片失败:', error);
+    
+    // 创建一个备用静态图像
+    try {
+      // 创建一个临时Canvas
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 500;
+      tempCanvas.height = 500;
+      const ctx = tempCanvas.getContext('2d');
+      
+      // 绘制一个简单的背景
+      ctx.fillStyle = '#f0f0f0';
+      ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      // 绘制错误信息
+      ctx.fillStyle = '#333333';
+      ctx.font = '16px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('图片加载失败', tempCanvas.width / 2, tempCanvas.height / 2 - 10);
+      ctx.fillText(file.name, tempCanvas.width / 2, tempCanvas.height / 2 + 20);
+      
+      // 转换为数据URL并设置为图片源
+      const dataUrl = tempCanvas.toDataURL('image/png');
+      previewImage.src = dataUrl;
+      previewImage.style.display = 'block';
+      
+      if (noImageMessage) {
+        noImageMessage.style.display = 'none';
+      }
+    } catch (canvasError) {
+      console.error('创建备用图像失败:', canvasError);
+      if (noImageMessage) {
+        noImageMessage.textContent = '加载图片失败';
+        noImageMessage.style.display = 'block';
+      }
+    }
+  };
 } 

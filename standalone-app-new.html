@@ -28,6 +28,45 @@
       libgifjs: false
     };
     
+    // 全局处理状态标志
+    window.processingCancelled = false;
+    
+    // 紧急取消处理函数
+    window.emergencyCancel = function() {
+      console.log('紧急取消处理');
+      window.processingCancelled = true;
+      
+      // 隐藏模态框
+      const processingModal = document.getElementById('processing-modal');
+      if (processingModal) {
+        processingModal.style.display = 'none';
+      }
+      
+      // 显示取消消息
+      const statusMessage = document.getElementById('status-message');
+      if (statusMessage) {
+        statusMessage.textContent = '处理已取消';
+        statusMessage.style.display = 'block';
+        setTimeout(() => {
+          statusMessage.style.display = 'none';
+        }, 3000);
+      }
+      
+      // 尝试显示已加载的图片
+      if (window.watermarkState && window.watermarkState.files && window.watermarkState.files.length > 0) {
+        if (typeof window.showImage === 'function') {
+          window.showImage(0);
+        }
+        
+        // 更新缩略图
+        if (typeof window.updateThumbnails === 'function') {
+          window.updateThumbnails();
+        }
+      }
+      
+      return false; // 阻止默认行为
+    };
+    
     // 库加载函数
     function loadScript(localUrl, cdnUrl, id) {
       return new Promise((resolve, reject) => {
@@ -100,6 +139,26 @@
         gifContainer.style.top = '-9999px';
         document.body.appendChild(gifContainer);
         console.log('GIF容器创建成功');
+        
+        // 检查是否存在可能卡住的模态框
+        setTimeout(() => {
+          console.log('检查是否有卡住的模态框...');
+          const processingModal = document.getElementById('processing-modal');
+          if (processingModal && processingModal.style.display === 'flex') {
+            console.warn('检测到可能卡住的处理中模态框，强制关闭');
+            processingModal.style.display = 'none';
+            
+            // 显示提示信息
+            const statusMessage = document.getElementById('status-message');
+            if (statusMessage) {
+              statusMessage.textContent = '系统已自动恢复（处理模态框被重置）';
+              statusMessage.style.display = 'block';
+              setTimeout(() => {
+                statusMessage.style.display = 'none';
+              }, 3000);
+            }
+          }
+        }, 1500);
       } catch (error) {
         console.error('创建GIF容器失败:', error);
       }
@@ -381,6 +440,11 @@
       <div class="progress-container" style="display: block;">
         <div id="modal-progress-bar" class="progress-bar" style="width: 0%">0%</div>
       </div>
+      <!-- 添加取消按钮和倒计时 -->
+      <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+        <div id="modal-countdown" style="font-size: 12px; color: #666;">自动关闭: 10</div>
+        <button id="cancel-processing-btn" onclick="return window.emergencyCancel();" style="padding: 5px 15px; background-color: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">取消</button>
+      </div>
     </div>
   </div>
   
@@ -440,6 +504,80 @@
   
   <!-- 引入JavaScript模块 -->
   <script type="module" src="js/main.js"></script>
+  
+  <!-- 模态对话框自动关闭倒计时脚本 -->
+  <script>
+    // 模态对话框自动关闭倒计时
+    document.addEventListener('DOMContentLoaded', function() {
+      const processingModal = document.getElementById('processing-modal');
+      const modalCountdown = document.getElementById('modal-countdown');
+      
+      if (processingModal && modalCountdown) {
+        // 监听模态对话框显示
+        const observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.attributeName === 'style' && 
+                processingModal.style.display === 'flex') {
+              // 模态对话框显示时，启动倒计时
+              startModalCountdown();
+            }
+          });
+        });
+        
+        // 配置观察器
+        observer.observe(processingModal, { attributes: true });
+        
+        // 倒计时函数
+        function startModalCountdown() {
+          let countdownValue = 30; // 默认30秒
+          
+          // 如果已经有倒计时值，则使用它
+          const countdownText = modalCountdown.textContent;
+          const match = countdownText.match(/\d+/);
+          if (match) {
+            countdownValue = parseInt(match[0], 10);
+          }
+          
+          modalCountdown.textContent = `自动关闭: ${countdownValue}`;
+          
+          // 清除可能存在的旧定时器
+          if (window.modalCountdownTimer) {
+            clearInterval(window.modalCountdownTimer);
+          }
+          
+          // 启动新的定时器
+          window.modalCountdownTimer = setInterval(function() {
+            countdownValue--;
+            
+            // 更新倒计时显示
+            if (modalCountdown) {
+              modalCountdown.textContent = `自动关闭: ${countdownValue}`;
+            }
+            
+            // 倒计时结束时关闭模态框
+            if (countdownValue <= 0) {
+              clearInterval(window.modalCountdownTimer);
+              
+              if (processingModal.style.display === 'flex') {
+                console.log('倒计时结束，自动关闭模态框');
+                processingModal.style.display = 'none';
+                
+                // 显示状态消息
+                const statusMessage = document.getElementById('status-message');
+                if (statusMessage) {
+                  statusMessage.textContent = '处理已完成（自动关闭）';
+                  statusMessage.style.display = 'block';
+                  setTimeout(() => {
+                    statusMessage.style.display = 'none';
+                  }, 3000);
+                }
+              }
+            }
+          }, 1000);
+        }
+      }
+    });
+  </script>
   
   <!-- 模块加载失败时的备选方案 -->
   <script>
