@@ -9,7 +9,7 @@ import { initInputHandlers, initWatermarkControls } from './handlers/input-handl
 import { initDragAndDrop } from './utils/drag-drop.js';
 import { initWheelZoom } from './utils/wheel-zoom.js';
 import { watermarkState, updateState } from './core/state.js';
-import { initGifProcessor } from './utils/gif/gif-processor.js';
+import { initGifProcessor } from './utils/gifwrap/gif-processor.js';
 
 // 初始化标志
 let initialized = false;
@@ -30,8 +30,9 @@ function updateInitStatus(module, status, error = null) {
 // 检查依赖库
 function checkDependencies() {
   const dependencies = [
-    { name: 'GIF.js', global: 'GIF' },
-    { name: 'SuperGif', global: 'SuperGif' },
+    { name: 'gifwrap', global: 'gifwrap' },
+    { name: 'omggif', global: 'omggif' },
+    { name: 'image-q', global: 'imageQ' },
     { name: 'JSZip', global: 'JSZip' }
   ];
   

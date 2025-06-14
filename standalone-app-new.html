@@ -24,8 +24,9 @@
     // 库加载状态
     window.libraryStatus = {
       jszip: false,
-      gifjs: false,
-      libgifjs: false
+      gifwrap: false,
+      omggif: false,
+      imageq: false
     };
     
     // 全局处理状态标志
@@ -116,10 +117,17 @@
     // 加载所有必要的库
     Promise.all([
       loadScript('public/libs/jszip.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'jszip'),
-      loadScript('public/libs/gif.min.js', 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js', 'gifjs'),
-      loadScript('public/libs/libgif.js', 'https://cdn.jsdelivr.net/gh/buzzfeed/libgif-js@master/libgif.js', 'libgifjs')
+      loadScript('public/libs/gifwrap.min.js', 'https://cdn.jsdelivr.net/npm/gifwrap@0.10.1/umd/gifwrap.min.js', 'gifwrap'),
+      loadScript('public/libs/omggif.min.js', 'https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js', 'omggif'),
+      loadScript('public/libs/image-q.min.js', 'https://cdn.jsdelivr.net/npm/image-q@4.0.0/dist/umd/image-q.min.js', 'imageq')
     ]).then(() => {
       console.log('所有库加载成功');
+      
+      // 加载测试脚本
+      const testScript = document.createElement('script');
+      testScript.src = 'public/libs/gifwrap-test.js';
+      document.head.appendChild(testScript);
+      
     }).catch(error => {
       console.error('库加载失败:', error);
       const errorContainer = document.getElementById('error-container');
@@ -421,11 +429,11 @@
       </div>
       
       <div class="preview-container" id="preview-container">
-        <div id="no-image-message" style="text-align: center; padding: 20px;">请上传图片进行预览</div>
+        <div id="no-image-message" style="text-align: center; padding: 40px; font-size: 18px; color: #666; background-color: #f9f9f9; border-radius: 8px; border: 2px dashed #ddd; width: 80%; max-width: 400px; margin: 0 auto; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">请上传图片进行预览</div>
         <div id="gif-badge" class="gif-badge" style="display: none;">GIF</div>
         <img id="preview-image" class="preview-image" style="display: none;">
         <canvas id="preview-canvas" class="preview-image" style="display: none;"></canvas>
-        <div id="watermark-container" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; pointer-events: auto; z-index: 9999;"></div>
+        <div id="watermark-container" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; pointer-events: auto; z-index: 9999; display: flex; justify-content: center; align-items: center;"></div>
       </div>
       
       <div class="thumbnails-container" id="thumbnails-container" style="display: none;"></div>
@@ -609,11 +617,21 @@
             '<p>库加载状态：</p>' +
             '<ul>' +
             `<li>JSZip: ${libraryStatus.jszip ? '✅' : '❌'}</li>` +
-            `<li>GIF.js: ${libraryStatus.gifjs ? '✅' : '❌'}</li>` +
-            `<li>libgif.js: ${libraryStatus.libgifjs ? '✅' : '❌'}</li>` +
+            `<li>gifwrap: ${libraryStatus.gifwrap ? '✅' : '❌'}</li>` +
+            `<li>omggif: ${libraryStatus.omggif ? '✅' : '❌'}</li>` +
+            `<li>image-q: ${libraryStatus.imageq ? '✅' : '❌'}</li>` +
             '</ul>' +
             '</div>';
           errorMsg.innerHTML += statusHTML;
+          
+          // 检查是否有具体的模块导入错误
+          const importErrors = document.querySelectorAll('body > script[type="module"]');
+          if (importErrors.length > 0) {
+            errorMsg.innerHTML += '<div class="error-details">' +
+              '<p>检测到可能的模块导入错误。请检查控制台以获取更多信息。</p>' +
+              '<p>常见原因：模块路径错误、ES模块语法错误、跨域问题</p>' +
+              '</div>';
+          }
         }
       }
     }, 3000); // 增加超时时间到3秒
@@ -622,7 +640,7 @@
   <!-- 调试修复GIF白屏问题 -->
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      console.log('初始化GIF白屏问题修复脚本');
+      console.log('初始化GIF白屏问题修复脚本 - gifwrap版本');
       
       // 监听显示GIF时的错误
       document.addEventListener('previewUpdate', function(event) {
@@ -631,8 +649,42 @@
           
           // 获取预览图像
           const previewImage = document.getElementById('preview-image');
+          const gifBadge = document.getElementById('gif-badge');
+          
+          // 显示GIF标记
+          if (gifBadge) {
+            gifBadge.style.display = 'block';
+          }
           
           if (previewImage) {
+            // 检查是否有处理后的第一帧预览（带水印）
+            const processResult = event.detail.processResult;
+            if (processResult.previewUrl) {
+              console.log('使用处理后的第一帧预览（带水印）');
+              previewImage.src = processResult.previewUrl;
+              previewImage.style.display = 'block';
+              
+              // 显示水印状态
+              const noImageMessage = document.getElementById('no-image-message');
+              if (noImageMessage) {
+                if (processResult.watermarkApplied) {
+                  noImageMessage.style.display = 'none';
+                } else {
+                  // 如果只有预览带水印，但GIF本身没有水印，显示提示
+                  noImageMessage.textContent = 'GIF预览带水印，但下载的GIF可能不包含水印';
+                  noImageMessage.style.display = 'block';
+                  noImageMessage.style.backgroundColor = 'rgba(255, 165, 0, 0.8)'; // 橙色背景
+                  
+                  // 3秒后隐藏提示
+                  setTimeout(() => {
+                    noImageMessage.style.display = 'none';
+                  }, 5000);
+                }
+              }
+              
+              return; // 使用预览帧，不需要继续处理
+            }
+            
             // 添加额外的错误处理
             previewImage.onerror = function(error) {
               console.error('GIF预览加载错误:', error);
@@ -659,10 +711,6 @@
                     
                     // 显示图像
                     previewImage.style.display = 'block';
-                    
-                    // 标记为GIF
-                    const gifBadge = document.getElementById('gif-badge');
-                    if (gifBadge) gifBadge.style.display = 'block';
                   };
                 }, 500);
               }
@@ -697,6 +745,33 @@
           }
         }
       });
+      
+      // 添加诊断功能 - 检测gifwrap库是否正确加载
+      setTimeout(() => {
+        console.log('检查gifwrap库加载状态...');
+        if (window.gifwrap) {
+          console.log('gifwrap库已成功加载');
+        } else {
+          console.error('gifwrap库未加载成功');
+          const errorContainer = document.getElementById('error-container');
+          if (errorContainer) {
+            errorContainer.innerHTML += '<p>警告: gifwrap库未加载成功，GIF处理可能无法正常工作</p>';
+            errorContainer.classList.add('show');
+          }
+        }
+        
+        if (window.omggif) {
+          console.log('omggif库已成功加载');
+        } else {
+          console.error('omggif库未加载成功');
+        }
+        
+        if (window.imageQ) {
+          console.log('image-q库已成功加载');
+        } else {
+          console.error('image-q库未加载成功');
+        }
+      }, 2000);
     });
   </script>
 </body>
