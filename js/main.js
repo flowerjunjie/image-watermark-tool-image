@@ -212,7 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
  * 定期检查水印容器是否可见，如果不可见则重新显示
  */
 function initWatermarkProtection() {
-  console.log('初始化水印保护机制');
+  // 初始化水印保护机制
   
   // 创建一个检查水印容器的函数
   function checkWatermarkVisibility() {
@@ -223,26 +223,17 @@ function initWatermarkProtection() {
       const displayStyle = window.getComputedStyle(watermarkContainer).display;
       const zIndexStyle = parseInt(window.getComputedStyle(watermarkContainer).zIndex) || 0;
       
-      console.log('检查水印可见性:', {
-        display: displayStyle,
-        zIndex: zIndexStyle
-      });
-      
       // 如果水印容器不可见或z-index过低，强制设置正确的样式
       if (displayStyle === 'none' || zIndexStyle < 9999) {
-        console.log('水印可能不可见，强制更新样式');
         watermarkContainer.style.display = 'flex';
         watermarkContainer.style.zIndex = '99999';
         watermarkContainer.style.pointerEvents = 'auto';
         
         // 尝试更新水印
         if (typeof updateWatermark === 'function') {
-          console.log('强制重新应用水印');
           updateWatermark();
         }
       }
-    } else {
-      console.warn('水印容器不存在');
     }
   }
   
