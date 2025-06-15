@@ -9,127 +9,22 @@ import { watermarkState, updateState, saveCurrentImageSettings, WatermarkPositio
  * 更新水印
  */
 export function updateWatermark() {
-  // 获取预览图像和水印容器
-  const previewImage = document.getElementById('preview-image');
-  const previewCanvas = document.getElementById('preview-canvas');
-  const watermarkContainer = document.getElementById('watermark-container');
-  
-  // 如果没有水印容器，直接返回
-  if (!watermarkContainer) {
-    console.error('水印容器不存在');
-    return;
-  }
-  
-  // 确保水印容器可见并设置正确的z-index
-  watermarkContainer.style.display = 'flex';
-  watermarkContainer.style.zIndex = '999999'; // 更新为最高层级
-  watermarkContainer.style.pointerEvents = 'auto';
-  
-  // 检查预览图像是否存在并可见
-  const previewImageAvailable = previewImage && 
-    (previewImage.style.display !== 'none') && 
-    previewImage.complete;
-
-  // 检查预览画布是否存在并可见
-  const previewCanvasAvailable = previewCanvas && 
-    (previewCanvas.style.display !== 'none') && 
-    previewCanvas.width > 0 && previewCanvas.height > 0;
-  
-  // 如果没有预览图像和画布，不要清空水印容器，保持当前水印显示
-  if (!previewImageAvailable && !previewCanvasAvailable) {
-    console.warn('预览图像和画布都不可用，保持当前水印');
-    return;
-  }
-  
-  console.log('更新水印，预览图像状态:', {
-    previewImageAvailable: previewImageAvailable,
-    previewCanvasAvailable: previewCanvasAvailable,
-    imageDisplay: previewImage ? previewImage.style.display : 'element不存在',
-    imageComplete: previewImage ? previewImage.complete : 'element不存在',
-    imageWidth: previewImage ? previewImage.width : 0,
-    imageHeight: previewImage ? previewImage.height : 0
-  });
-  
-  // 清空水印容器
-  watermarkContainer.innerHTML = '';
-  
-  // 创建水印元素
-  const watermarkElement = createWatermarkElement();
-  
-  if (!watermarkElement) {
-    console.error('无法创建水印元素');
-    return;
-  }
-  
-  // 调整水印元素大小
-  updateWatermarkSize(watermarkElement);
-  
-  // 将水印元素添加到水印容器
-  watermarkContainer.appendChild(watermarkElement);
-  
-  // 调整水印位置
-  updateWatermarkPosition();
-  
-  // 额外确保水印容器显示在最顶层
-  setTimeout(() => {
-    if (watermarkContainer) {
-      watermarkContainer.style.display = 'flex';
-      watermarkContainer.style.zIndex = '999999';
-      watermarkContainer.style.pointerEvents = 'auto';
-    }
-    
-    // 同样确保水印元素在最顶层
-    const watermarkElem = document.getElementById('watermark-element');
-    if (watermarkElem) {
-      watermarkElem.style.zIndex = '999999';
-    }
-  }, 50);
-  
-  // 保存当前水印设置到当前图片
-  saveCurrentImageSettings();
-}
-
-/**
- * 更新水印位置
- */
-export function updateWatermarkPosition() {
   try {
+    // 获取预览图像和水印容器
     const previewImage = document.getElementById('preview-image');
     const previewCanvas = document.getElementById('preview-canvas');
     const watermarkContainer = document.getElementById('watermark-container');
-    const previewContainer = document.getElementById('preview-container');
     
-    // 检查元素是否存在
+    // 如果没有水印容器，直接返回
     if (!watermarkContainer) {
-      console.error('水印容器不存在，无法更新水印位置');
+      console.error('水印容器不存在');
       return;
     }
     
-    // 获取水印元素
-    const watermarkElement = document.getElementById('watermark-element') || watermarkContainer.firstChild;
-    
-    // 如果水印元素不存在，尝试重新创建
-    if (!watermarkElement) {
-      console.log('水印元素不存在，尝试重新创建...');
-      const newWatermarkElement = createWatermarkElement();
-      if (newWatermarkElement) {
-        updateWatermarkSize(newWatermarkElement);
-        watermarkContainer.appendChild(newWatermarkElement);
-      } else {
-        console.error('无法创建水印元素');
-        return;
-      }
-    }
-    
-    // 确保水印容器始终可见
+    // 确保水印容器可见并设置正确的z-index
     watermarkContainer.style.display = 'flex';
-    watermarkContainer.style.zIndex = '999999';
+    watermarkContainer.style.zIndex = '999999'; // 更新为最高层级
     watermarkContainer.style.pointerEvents = 'auto';
-    
-    // 确定预览区域尺寸和位置
-    let previewWidth, previewHeight;
-    let previewLeft = 0, previewTop = 0;
-    let isGif = false;
     
     // 检查预览图像是否存在并可见
     const previewImageAvailable = previewImage && 
@@ -141,100 +36,133 @@ export function updateWatermarkPosition() {
       (previewCanvas.style.display !== 'none') && 
       previewCanvas.width > 0 && previewCanvas.height > 0;
     
-    // 确定参考元素 - 优先使用显示的图像或画布
-    let referenceElement = null;
+    // 如果没有预览图像和画布，不要清空水印容器，保持当前水印显示
+    if (!previewImageAvailable && !previewCanvasAvailable) {
+      console.warn('预览图像和画布都不可用，保持当前水印');
+      return;
+    }
     
+    console.log('更新水印，预览图像状态:', {
+      previewImageAvailable: previewImageAvailable,
+      previewCanvasAvailable: previewCanvasAvailable,
+      imageDisplay: previewImage ? previewImage.style.display : 'element不存在',
+      imageComplete: previewImage ? previewImage.complete : 'element不存在',
+      imageWidth: previewImage ? previewImage.width : 0,
+      imageHeight: previewImage ? previewImage.height : 0
+    });
+    
+    // 设置水印容器尺寸与预览区域一致
     if (previewImageAvailable) {
-      // 使用预览图像作为参考
-      referenceElement = previewImage;
-      
-      // 获取图像的实际尺寸
-      previewWidth = previewImage.naturalWidth || previewImage.offsetWidth || previewImage.clientWidth;
-      previewHeight = previewImage.naturalHeight || previewImage.offsetHeight || previewImage.clientHeight;
-      
-      // 获取图像的位置
-      const rect = previewImage.getBoundingClientRect();
-      previewLeft = rect.left;
-      previewTop = rect.top;
-      
-      isGif = previewImage.src.endsWith('.gif') || watermarkState.isGif === true;
-      
-      console.log('使用预览图像作为水印参考:', { 
-        width: previewWidth, 
-        height: previewHeight,
-        display: previewImage.style.display,
-        isComplete: previewImage.complete,
-        isGif: isGif
-      });
+      watermarkContainer.style.width = `${previewImage.offsetWidth}px`;
+      watermarkContainer.style.height = `${previewImage.offsetHeight}px`;
     } else if (previewCanvasAvailable) {
-      // 使用画布作为参考
-      referenceElement = previewCanvas;
-      
-      previewWidth = previewCanvas.width || previewCanvas.offsetWidth;
-      previewHeight = previewCanvas.height || previewCanvas.offsetHeight;
-      
-      // 获取画布的位置
-      const rect = previewCanvas.getBoundingClientRect();
-      previewLeft = rect.left;
-      previewTop = rect.top;
-      
-      console.log('使用预览画布作为水印参考:', { width: previewWidth, height: previewHeight });
-    } else if (previewContainer) {
-      // 使用容器作为参考
-      referenceElement = previewContainer;
-      
-      previewWidth = previewContainer.clientWidth;
-      previewHeight = previewContainer.clientHeight;
-      
-      // 获取容器的位置
-      const rect = previewContainer.getBoundingClientRect();
-      previewLeft = rect.left;
-      previewTop = rect.top;
-      
-      console.log('使用预览容器作为水印参考:', { width: previewWidth, height: previewHeight });
+      watermarkContainer.style.width = `${previewCanvas.offsetWidth}px`;
+      watermarkContainer.style.height = `${previewCanvas.offsetHeight}px`;
     }
     
-    // 双重检查尺寸有效性
-    if (!previewWidth || !previewHeight || previewWidth < 10 || previewHeight < 10) {
-      console.warn('无法获取有效的预览区域尺寸，使用默认值');
-      previewWidth = 500;
-      previewHeight = 500;
+    // 清空水印容器
+    watermarkContainer.innerHTML = '';
+    
+    // 创建水印元素
+    const watermarkElement = createWatermarkElement();
+    
+    if (!watermarkElement) {
+      console.error('无法创建水印元素');
+      return;
     }
     
-    // 调整水印容器尺寸和位置，使其与参考元素完全重合
-    if (referenceElement && previewContainer) {
-      const rect = referenceElement.getBoundingClientRect();
+    // 给水印元素添加ID以便于查找
+    watermarkElement.id = 'watermark-element';
+    
+    // 调整水印元素大小
+    updateWatermarkSize(watermarkElement);
+    
+    // 将水印元素添加到水印容器
+    watermarkContainer.appendChild(watermarkElement);
+    
+    // 调整水印位置
+    updateWatermarkPosition();
+    
+    // 额外确保水印容器显示在最顶层
+    setTimeout(() => {
+      if (watermarkContainer) {
+        watermarkContainer.style.display = 'flex';
+        watermarkContainer.style.zIndex = '999999';
+        watermarkContainer.style.pointerEvents = 'auto';
+      }
       
-      // 获取参考元素相对于视口的位置
-      const containerRect = previewContainer.getBoundingClientRect();
-      
-      // 设置水印容器的位置和尺寸
-      watermarkContainer.style.position = 'absolute';
-      watermarkContainer.style.top = `${rect.top - containerRect.top}px`;
-      watermarkContainer.style.left = `${rect.left - containerRect.left}px`;
-      watermarkContainer.style.width = `${rect.width}px`;
-      watermarkContainer.style.height = `${rect.height}px`;
-      watermarkContainer.style.transform = 'none'; // 移除默认的transform
-      
-      console.log('水印容器已调整为与参考元素重合:', {
-        top: rect.top - containerRect.top,
-        left: rect.left - containerRect.left,
-        width: rect.width,
-        height: rect.height,
-        referenceElement: referenceElement.id || 'unknown'
-      });
-    } else {
-      // 如果没有参考元素，使用默认的居中定位
-      watermarkContainer.style.position = 'absolute';
-      watermarkContainer.style.top = '50%';
-      watermarkContainer.style.left = '50%';
-      watermarkContainer.style.transform = 'translate(-50%, -50%)';
-      watermarkContainer.style.width = `${previewWidth}px`;
-      watermarkContainer.style.height = `${previewHeight}px`;
+      // 同样确保水印元素在最顶层
+      const watermarkElem = document.getElementById('watermark-element');
+      if (watermarkElem) {
+        watermarkElem.style.zIndex = '999999';
+        watermarkElem.style.display = 'block';
+      }
+    }, 50);
+    
+    // 保存当前水印设置到当前图片
+    saveCurrentImageSettings();
+  } catch (error) {
+    console.error('更新水印时出错:', error);
+    
+    // 错误恢复：尝试重置水印容器
+    try {
+      const watermarkContainer = document.getElementById('watermark-container');
+      if (watermarkContainer) {
+        watermarkContainer.innerHTML = '';
+        watermarkContainer.style.display = 'flex';
+      }
+    } catch (e) {
+      console.error('尝试恢复水印容器失败:', e);
+    }
+  }
+}
+
+/**
+ * 更新水印位置
+ */
+export function updateWatermarkPosition() {
+  try {
+    // 获取预览图像和水印容器
+    const previewImage = document.getElementById('preview-image');
+    const previewCanvas = document.getElementById('preview-canvas');
+    const watermarkContainer = document.getElementById('watermark-container');
+    
+    // 如果没有水印容器，直接返回
+    if (!watermarkContainer) {
+      console.error('水印容器不存在');
+      return;
     }
     
     // 获取水印类型
     const watermarkType = watermarkState.type || 'text';
+    
+    // 检查是否是GIF
+    const isGif = watermarkState.isGif || false;
+    
+    // 获取预览区域尺寸
+    let previewWidth = 0;
+    let previewHeight = 0;
+    
+    if (previewImage && previewImage.style.display !== 'none') {
+      previewWidth = previewImage.offsetWidth;
+      previewHeight = previewImage.offsetHeight;
+    } else if (previewCanvas && previewCanvas.style.display !== 'none') {
+      previewWidth = previewCanvas.offsetWidth;
+      previewHeight = previewCanvas.offsetHeight;
+    } else {
+      console.warn('无法获取预览区域尺寸');
+      return;
+    }
+    
+    // 确保尺寸有效
+    if (previewWidth <= 0 || previewHeight <= 0) {
+      console.warn('预览区域尺寸无效:', { width: previewWidth, height: previewHeight });
+      return;
+    }
+    
+    // 设置水印容器尺寸与预览区域一致
+    watermarkContainer.style.width = `${previewWidth}px`;
+    watermarkContainer.style.height = `${previewHeight}px`;
     
     if (watermarkType === 'tile') {
       // 平铺水印，填充整个容器
@@ -244,7 +172,7 @@ export function updateWatermarkPosition() {
     }
     
     // 获取水印元素 (可能是刚创建的)
-    const currentWatermarkElement = watermarkContainer.firstChild;
+    const currentWatermarkElement = watermarkContainer.querySelector('#watermark-element') || watermarkContainer.firstChild;
     if (!currentWatermarkElement) {
       console.error('无法获取水印元素');
       return;
@@ -274,6 +202,15 @@ export function updateWatermarkPosition() {
     
     // 根据选择的位置设置水印坐标
     let x, y;
+    
+    // 如果水印正在被拖动，不要改变它的位置，否则会导致跳跃
+    if (currentWatermarkElement.classList.contains('dragging')) {
+      console.log('水印正在拖动中，保持当前位置');
+      return;
+    }
+    
+    // 设置水印位置 - 使用绝对定位
+    currentWatermarkElement.style.position = 'absolute';
     
     switch (positionChoice) {
       case 'top-left':
@@ -320,55 +257,64 @@ export function updateWatermarkPosition() {
         break;
     }
     
-    // 设置水印位置
-    currentWatermarkElement.style.position = 'absolute';
+    // 保存当前的transform，以便提取旋转部分
+    const currentTransform = currentWatermarkElement.style.transform || '';
     
-    // 如果水印正在被拖动，不要改变它的位置，否则会导致跳跃
-    if (!currentWatermarkElement.classList.contains('dragging')) {
-      // 保存当前的transform，以便提取旋转部分
-      const currentTransform = currentWatermarkElement.style.transform || '';
-      
-      // 设置新位置
-      currentWatermarkElement.style.top = `${y}px`;
-      currentWatermarkElement.style.left = `${x}px`;
-      
-      // 基本变换
-      let transform = 'translate(-50%, -50%)';
-      
-      // 如果有旋转，应用旋转
-      if (watermarkState.rotation) {
-        transform += ` rotate(${watermarkState.rotation}deg)`;
-      } 
-      // 如果当前transform中已有旋转，保留它
-      else if (currentTransform.includes('rotate')) {
-        const rotateMatch = currentTransform.match(/rotate\([^)]+\)/);
-        if (rotateMatch) {
-          transform += ` ${rotateMatch[0]}`;
-        }
+    // 设置新位置
+    currentWatermarkElement.style.top = `${y}px`;
+    currentWatermarkElement.style.left = `${x}px`;
+    
+    // 基本变换
+    let transform = 'translate(-50%, -50%)';
+    
+    // 如果有旋转，应用旋转
+    if (watermarkState.rotation) {
+      transform += ` rotate(${watermarkState.rotation}deg)`;
+    } 
+    // 如果当前transform中已有旋转，保留它
+    else if (currentTransform.includes('rotate')) {
+      const rotateMatch = currentTransform.match(/rotate\([^)]+\)/);
+      if (rotateMatch) {
+        transform += ` ${rotateMatch[0]}`;
       }
-      
-      currentWatermarkElement.style.transform = transform;
-      
-      console.log('水印元素位置已设置:', { 
-        x, 
-        y, 
-        transform,
-        previousTransform: currentTransform
-      });
-    } else {
-      console.log('水印正在拖动中，保持当前位置');
     }
     
-    console.log('水印位置已更新:', { 
+    // 应用缩放
+    if (watermarkState.scale && watermarkState.scale !== 1.0) {
+      transform += ` scale(${watermarkState.scale})`;
+    }
+    
+    currentWatermarkElement.style.transform = transform;
+    
+    console.log('水印元素位置已设置:', { 
       x, 
       y, 
-      width: previewWidth, 
-      height: previewHeight,
-      relativeX: watermarkState.relativePosition?.x,
-      relativeY: watermarkState.relativePosition?.y
+      transform,
+      previousTransform: currentTransform
     });
+    
+    // 确保水印容器可见
+    watermarkContainer.style.display = 'flex';
+    watermarkContainer.style.zIndex = '999999';
+    watermarkContainer.style.pointerEvents = 'auto';
+    
+    // 确保水印元素可见
+    currentWatermarkElement.style.display = 'block';
+    currentWatermarkElement.style.zIndex = '999999';
+    
   } catch (error) {
     console.error('更新水印位置时出错:', error);
+    
+    // 错误恢复：确保水印容器可见
+    try {
+      const watermarkContainer = document.getElementById('watermark-container');
+      if (watermarkContainer) {
+        watermarkContainer.style.display = 'flex';
+        watermarkContainer.style.zIndex = '999999';
+      }
+    } catch (e) {
+      console.error('尝试恢复水印容器失败:', e);
+    }
   }
 }
 

@@ -1,0 +1,163 @@
+/* 缩略图相关样式 */
+.thumbnail {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 5px;
+  border: 2px solid #ccc;
+  border-radius: 5px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: #f0f0f0;
+}
+
+.thumbnail:hover {
+  border-color: #0078d7;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+}
+
+.thumbnail.active, .thumbnail.selected {
+  border-color: #0078d7;
+  box-shadow: 0 0 0 2px rgba(0, 120, 215, 0.5);
+}
+
+.thumbnail.processing::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.6);
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid"><circle cx="50" cy="50" fill="none" stroke="%230078d7" stroke-width="10" r="35" stroke-dasharray="164.93361431346415 56.97787143782138"><animateTransform attributeName="transform" type="rotate" repeatCount="indefinite" dur="1s" values="0 50 50;360 50 50" keyTimes="0;1"></animateTransform></circle></svg>');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 40px;
+  z-index: 5;
+}
+
+.thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbnail .file-name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 2px 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thumbnail-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+.thumbnail-loading .spinner {
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top: 3px solid #0078d7;
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+}
+
+.thumbnail-loading .error-icon {
+  width: 24px;
+  height: 24px;
+  background-color: #d83b01;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  font-family: Arial, sans-serif;
+}
+
+/* 文件类型标签样式 */
+.thumbnail-gif-badge,
+.thumbnail-png-badge,
+.thumbnail-jpg-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: bold;
+  color: white;
+  z-index: 10;
+}
+
+.thumbnail-gif-badge {
+  background-color: #9c27b0; /* 紫色 */
+}
+
+.thumbnail-png-badge {
+  background-color: #ed6c02; /* 橙色 */
+}
+
+.thumbnail-jpg-badge {
+  background-color: #2e7d32; /* 绿色 */
+}
+
+/* 单独的GIF标识 */
+#gif-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: #9c27b0;
+  color: white;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 1000;
+  display: none;
+}
+
+/* 缩略图容器 */
+#thumbnails-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* 文件统计容器 */
+.file-stats-container {
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #f0f8ff;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+} 
