@@ -11,7 +11,7 @@ import { showError, showMessage, showStatus } from '../ui/messages.js';
 /**
  * 初始化拖放功能
  */
-export function initDragAndDrop() {
+function initDragAndDrop() {
   console.log('初始化拖放功能');
   
   // 获取拖放区域
@@ -252,7 +252,7 @@ function handleWatermarkImageClick() {
  * @param {number} originalTotal - 原始总文件数，如果与totalFiles不同则显示过滤率
  * @param {Object} errorStats - 错误统计信息 {total: 数量, types: {错误类型: 数量}}
  */
-export function displayFileStatistics(extensionCount, totalFiles, originalTotal, errorStats) {
+function displayFileStatistics(extensionCount, totalFiles, originalTotal, errorStats) {
   // 创建或获取文件统计信息区域
   let fileStatsContainer = document.getElementById('file-stats-container');
   
@@ -392,7 +392,7 @@ if (typeof window !== 'undefined') {
  * @param {FileList} files - 上传的文件列表
  * @returns {Promise} - 返回一个Promise，在处理完成时resolve
  */
-export function handleImageFiles(files) {
+function handleImageFiles(files) {
   return new Promise((resolve, reject) => {
     try {
       // 常见图片文件扩展名列表
@@ -1144,7 +1144,7 @@ function loadWatermarkImage(file) {
  * 处理文件拖放
  * @param {Event} event - 拖放事件
  */
-export function handleFileDrop(event) {
+function handleFileDrop(event) {
   // 阻止默认行为
   event.preventDefault();
   event.stopPropagation();
@@ -1166,7 +1166,7 @@ export function handleFileDrop(event) {
  * 处理选择的文件
  * @param {FileList} files - 文件列表
  */
-export function processFiles(files) {
+function processFiles(files) {
   console.log(`处理 ${files.length} 个文件`);
   
   // 显示加载指示器
@@ -2185,4 +2185,126 @@ function processGif(gifFile, savedWatermarkState = null) {
         updateWatermark();
       }, 100);
     });
-} 
+}
+
+/**
+ * 初始化水印拖拽功能
+ */
+function initWatermarkDragging() {
+  const watermarkContainer = document.getElementById('watermark-container');
+  if (!watermarkContainer) return;
+  
+  // 监听水印容器中的元素
+  watermarkContainer.addEventListener('mousedown', function(e) {
+    const watermarkElement = e.target.closest('#watermark-element') || e.target;
+    
+    // 如果点击的不是水印元素或其子元素，直接返回
+    if (!watermarkElement || !watermarkContainer.contains(watermarkElement)) {
+      return;
+    }
+    
+    // 标记水印正在拖动
+    watermarkElement.classList.add('dragging');
+    updateState({ isDragging: true });
+    
+    // 获取预览图像尺寸
+    const previewImage = document.getElementById('preview-image');
+    const previewCanvas = document.getElementById('preview-canvas');
+    
+    let previewWidth, previewHeight;
+    
+    if (previewImage && previewImage.style.display !== 'none') {
+      previewWidth = previewImage.naturalWidth || previewImage.offsetWidth;
+      previewHeight = previewImage.naturalHeight || previewImage.offsetHeight;
+    } else if (previewCanvas && previewCanvas.style.display !== 'none') {
+      previewWidth = previewCanvas.width || previewCanvas.offsetWidth;
+      previewHeight = previewCanvas.height || previewCanvas.offsetHeight;
+    } else {
+      console.warn('无法获取预览区域尺寸，使用容器尺寸');
+      previewWidth = watermarkContainer.offsetWidth;
+      previewHeight = watermarkContainer.offsetHeight;
+    }
+    
+    // 记录初始位置
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startLeft = watermarkElement.offsetLeft;
+    const startTop = watermarkElement.offsetTop;
+    
+    // 计算容器的边界
+    const containerRect = watermarkContainer.getBoundingClientRect();
+    
+    // 鼠标移动处理函数
+    function handleMouseMove(e) {
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      
+      // 计算新位置
+      let newLeft = startLeft + dx;
+      let newTop = startTop + dy;
+      
+      // 限制在容器内
+      newLeft = Math.max(0, Math.min(newLeft, containerRect.width));
+      newTop = Math.max(0, Math.min(newTop, containerRect.height));
+      
+      // 更新位置
+      watermarkElement.style.left = `${newLeft}px`;
+      watermarkElement.style.top = `${newTop}px`;
+      
+      // 计算并更新相对位置（百分比）
+      const relativeX = (newLeft / previewWidth) * 100;
+      const relativeY = (newTop / previewHeight) * 100;
+      
+      // 更新状态
+      watermarkState.relativePosition = {
+        x: relativeX,
+        y: relativeY
+      };
+      
+      // 防止选中文本
+      e.preventDefault();
+    }
+    
+    // 鼠标释放处理函数
+    function handleMouseUp() {
+      // 移除拖动标记
+      watermarkElement.classList.remove('dragging');
+      updateState({ isDragging: false });
+      
+      // 移除事件监听
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      
+      // 保存当前设置
+      saveCurrentImageSettings();
+      
+      console.log('水印拖拽结束，新位置:', watermarkState.relativePosition);
+    }
+    
+    // 添加事件监听
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
+    // 防止事件冒泡
+    e.stopPropagation();
+    e.preventDefault();
+  });
+}
+
+// 初始化拖拽功能
+initDragAndDrop();
+
+// 初始化水印拖拽功能
+initWatermarkDragging();
+
+// 导出函数
+export { 
+  initDragAndDrop,
+  displayFileStatistics,
+  handleImageFiles,
+  handleImageFiles as handleDrop,
+  handleFileDrop,
+  processFiles,
+  createThumbnail, 
+  processCurrentImage 
+};

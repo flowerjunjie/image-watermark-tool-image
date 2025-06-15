@@ -144,11 +144,12 @@ export function updateWatermarkPosition() {
     let previewHeight = 0;
     
     if (previewImage && previewImage.style.display !== 'none') {
-      previewWidth = previewImage.offsetWidth;
-      previewHeight = previewImage.offsetHeight;
+      // 使用图片的实际尺寸，而不是容器尺寸
+      previewWidth = previewImage.naturalWidth || previewImage.offsetWidth;
+      previewHeight = previewImage.naturalHeight || previewImage.offsetHeight;
     } else if (previewCanvas && previewCanvas.style.display !== 'none') {
-      previewWidth = previewCanvas.offsetWidth;
-      previewHeight = previewCanvas.offsetHeight;
+      previewWidth = previewCanvas.width || previewCanvas.offsetWidth;
+      previewHeight = previewCanvas.height || previewCanvas.offsetHeight;
     } else {
       console.warn('无法获取预览区域尺寸');
       return;
@@ -163,6 +164,31 @@ export function updateWatermarkPosition() {
     // 设置水印容器尺寸与预览区域一致
     watermarkContainer.style.width = `${previewWidth}px`;
     watermarkContainer.style.height = `${previewHeight}px`;
+    
+    // 确保水印容器与图片精确对齐
+    if (previewImage && previewImage.style.display !== 'none') {
+      // 获取图片的实际显示尺寸和位置
+      const imgRect = previewImage.getBoundingClientRect();
+      const containerRect = watermarkContainer.parentElement.getBoundingClientRect();
+      
+      // 计算相对位置
+      const relativeTop = imgRect.top - containerRect.top;
+      const relativeLeft = imgRect.left - containerRect.left;
+      
+      // 设置水印容器位置
+      watermarkContainer.style.position = 'absolute';
+      watermarkContainer.style.top = `${relativeTop}px`;
+      watermarkContainer.style.left = `${relativeLeft}px`;
+      watermarkContainer.style.width = `${imgRect.width}px`;
+      watermarkContainer.style.height = `${imgRect.height}px`;
+      
+      console.log('水印容器已与图片对齐:', {
+        top: relativeTop,
+        left: relativeLeft,
+        width: imgRect.width,
+        height: imgRect.height
+      });
+    }
     
     if (watermarkType === 'tile') {
       // 平铺水印，填充整个容器
@@ -216,26 +242,51 @@ export function updateWatermarkPosition() {
       case 'top-left':
         x = watermarkWidth / 2 + (watermarkState.marginX || 20);
         y = watermarkHeight / 2 + (watermarkState.marginY || 20);
+        // 保存相对位置
+        watermarkState.relativePosition = {
+          x: (x / previewWidth) * 100,
+          y: (y / previewHeight) * 100
+        };
         break;
         
       case 'top-right':
         x = previewWidth - watermarkWidth / 2 - (watermarkState.marginX || 20);
         y = watermarkHeight / 2 + (watermarkState.marginY || 20);
+        // 保存相对位置
+        watermarkState.relativePosition = {
+          x: (x / previewWidth) * 100,
+          y: (y / previewHeight) * 100
+        };
         break;
         
       case 'bottom-left':
         x = watermarkWidth / 2 + (watermarkState.marginX || 20);
         y = previewHeight - watermarkHeight / 2 - (watermarkState.marginY || 20);
+        // 保存相对位置
+        watermarkState.relativePosition = {
+          x: (x / previewWidth) * 100,
+          y: (y / previewHeight) * 100
+        };
         break;
         
       case 'bottom-right':
         x = previewWidth - watermarkWidth / 2 - (watermarkState.marginX || 20);
         y = previewHeight - watermarkHeight / 2 - (watermarkState.marginY || 20);
+        // 保存相对位置
+        watermarkState.relativePosition = {
+          x: (x / previewWidth) * 100,
+          y: (y / previewHeight) * 100
+        };
         break;
         
       case 'center':
         x = previewWidth / 2;
         y = previewHeight / 2;
+        // 保存相对位置
+        watermarkState.relativePosition = {
+          x: 50,
+          y: 50
+        };
         break;
         
       case 'custom':
@@ -250,9 +301,7 @@ export function updateWatermarkPosition() {
           y = previewHeight / 2;
           
           // 更新状态
-          updateState({
-            relativePosition: { x: 50, y: 50 }
-          });
+          watermarkState.relativePosition = { x: 50, y: 50 };
         }
         break;
     }
@@ -290,7 +339,8 @@ export function updateWatermarkPosition() {
       x, 
       y, 
       transform,
-      previousTransform: currentTransform
+      previousTransform: currentTransform,
+      relativePosition: watermarkState.relativePosition
     });
     
     // 确保水印容器可见
