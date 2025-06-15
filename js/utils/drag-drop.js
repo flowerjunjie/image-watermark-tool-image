@@ -759,6 +759,28 @@ function handleThumbnailClick(event, thumbnail, index, file) {
     noImageMessage.style.display = 'block';
   }
   
+  // 保存当前水印位置状态 - 深拷贝确保不受后续操作影响
+  const savedRelativePosition = watermarkState.relativePosition ? 
+    { 
+      x: Math.max(0, Math.min(100, watermarkState.relativePosition.x)), 
+      y: Math.max(0, Math.min(100, watermarkState.relativePosition.y)) 
+    } : { x: 50, y: 50 };
+  
+  // 保存当前图像尺寸，用于计算相对位置
+  const currentImageWidth = watermarkState.imageWidth || 0;
+  const currentImageHeight = watermarkState.imageHeight || 0;
+  
+  // 保存当前水印类型和其他设置
+  const currentWatermarkType = watermarkState.type || 'text';
+  const currentWatermarkImage = watermarkState.watermarkImage;
+  
+  console.log('保存当前水印设置:', {
+    type: currentWatermarkType,
+    relativePosition: savedRelativePosition,
+    currentImageSize: { width: currentImageWidth, height: currentImageHeight },
+    hasWatermarkImage: !!currentWatermarkImage
+  });
+  
   // 清理旧图像
   if (previewImage) {
     previewImage.onload = null;
@@ -778,9 +800,8 @@ function handleThumbnailClick(event, thumbnail, index, file) {
     if (ctx) ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
   }
   
-  // 清除水印容器
+  // 暂时隐藏水印容器，但不清除内容
   if (watermarkContainer) {
-    watermarkContainer.innerHTML = '';
     watermarkContainer.style.display = 'none';
   }
   
@@ -788,11 +809,16 @@ function handleThumbnailClick(event, thumbnail, index, file) {
   updateState({
     currentIndex: index,
     originalImage: null,
-    // 重置水印位置相关状态
+    // 重置水印位置相关状态，但保留相对位置
     sizeAdjusted: false,
     isDragging: false,
     isProcessing: false
   });
+  
+  // 手动保存相对位置和水印类型，确保不被updateState覆盖
+  watermarkState.relativePosition = savedRelativePosition;
+  watermarkState.type = currentWatermarkType;
+  watermarkState.watermarkImage = currentWatermarkImage;
   
   // 更新全局变量
   window.currentFile = file;
@@ -800,6 +826,11 @@ function handleThumbnailClick(event, thumbnail, index, file) {
   // 判断是否为GIF
   const isGif = file.name.toLowerCase().endsWith('.gif') || file.type === 'image/gif';
   updateState({ isGif: isGif });
+  
+  // 再次确保相对位置和水印设置被保留
+  watermarkState.relativePosition = savedRelativePosition;
+  watermarkState.type = currentWatermarkType;
+  watermarkState.watermarkImage = currentWatermarkImage;
   
   if (gifBadge) {
     gifBadge.style.display = isGif ? 'block' : 'none';
@@ -846,12 +877,26 @@ function handleThumbnailClick(event, thumbnail, index, file) {
       // 显示图像
       previewImage.style.display = 'block';
       
+      // 获取新图像的尺寸
+      const newImageWidth = previewImage.naturalWidth;
+      const newImageHeight = previewImage.naturalHeight;
+      
       // 更新原始图像状态
       updateState({
         originalImage: previewImage,
-        originalImageWidth: previewImage.naturalWidth,
-        originalImageHeight: previewImage.naturalHeight
+        originalImageWidth: newImageWidth,
+        originalImageHeight: newImageHeight,
+        // 更新图像尺寸
+        imageWidth: newImageWidth,
+        imageHeight: newImageHeight
       });
+      
+      console.log('新图像尺寸:', { width: newImageWidth, height: newImageHeight });
+      
+      // 再次确保水印设置被保留
+      watermarkState.relativePosition = savedRelativePosition;
+      watermarkState.type = currentWatermarkType;
+      watermarkState.watermarkImage = currentWatermarkImage;
       
       // 延迟更新水印，确保DOM已完全更新
       setTimeout(() => {
@@ -863,14 +908,69 @@ function handleThumbnailClick(event, thumbnail, index, file) {
           return;
         }
         
-        // 确保水印容器可见
+        // 确保水印容器可见并设置正确的z-index
         if (watermarkContainer) {
           watermarkContainer.style.display = 'flex';
+          watermarkContainer.style.zIndex = '999999';
+          watermarkContainer.style.pointerEvents = 'auto';
         }
         
         // 更新水印
         try {
+          // 先检查是否有此图片的保存设置
+          const fileName = file.name;
+          if (watermarkState.processedSettings && watermarkState.processedSettings[fileName]) {
+            console.log('应用此图片的保存设置:', fileName);
+            // 临时存储当前相对位置和水印类型
+            const tempPosition = { ...savedRelativePosition };
+            const tempType = currentWatermarkType;
+            const tempWatermarkImage = currentWatermarkImage;
+            
+            // 应用图片特定设置，但不覆盖相对位置和水印类型
+            const savedSettings = watermarkState.processedSettings[fileName];
+            for (const key in savedSettings) {
+              if (key !== 'relativePosition' && key !== 'type' && key !== 'watermarkImage') {
+                watermarkState[key] = savedSettings[key];
+              }
+            }
+            
+            // 恢复相对位置和水印类型
+            watermarkState.relativePosition = tempPosition;
+            watermarkState.type = tempType;
+            watermarkState.watermarkImage = tempWatermarkImage;
+            
+            console.log('应用设置后，确保水印设置:', {
+              position: watermarkState.relativePosition,
+              type: watermarkState.type,
+              hasWatermarkImage: !!watermarkState.watermarkImage
+            });
+          }
+          
+          // 最后一次确保相对位置和水印类型正确
+          watermarkState.relativePosition = savedRelativePosition;
+          watermarkState.type = currentWatermarkType;
+          watermarkState.watermarkImage = currentWatermarkImage;
+          
+          // 更新水印
           updateWatermark();
+          
+          // 确保水印元素在最顶层
+          setTimeout(() => {
+            const watermarkElement = document.getElementById('watermark-element');
+            if (watermarkElement) {
+              watermarkElement.style.zIndex = '999999';
+              watermarkElement.style.display = 'block';
+              
+              // 如果是图片水印，确保图片元素也可见
+              if (currentWatermarkType === 'image') {
+                const imgElement = watermarkElement.querySelector('img');
+                if (imgElement) {
+                  imgElement.style.display = 'block';
+                  imgElement.style.zIndex = '999999';
+                }
+              }
+            }
+          }, 50);
           
           // 移除处理中状态
           clearTimeout(processingTimeout);
@@ -1092,9 +1192,16 @@ function loadWatermarkImage(file) {
     const img = new Image();
     
     img.onload = function() {
-      // 更新状态
+      console.log('水印图片加载成功:', {
+        width: img.width,
+        height: img.height,
+        src: img.src.substring(0, 50) + '...' // 只记录前50个字符以避免日志过长
+      });
+      
+      // 更新状态 - 保存图片对象和URL
+      const imageUrl = e.target.result;
       updateState({
-        watermarkImage: img,
+        watermarkImage: imageUrl, // 保存为URL字符串而不是Image对象
         type: 'image'
       });
       
@@ -1112,7 +1219,7 @@ function loadWatermarkImage(file) {
       const watermarkImageThumbnail = document.getElementById('watermark-image-thumbnail');
       
       if (watermarkImagePreview && watermarkImageThumbnail) {
-        watermarkImageThumbnail.src = e.target.result;
+        watermarkImageThumbnail.src = imageUrl;
         watermarkImagePreview.style.display = 'block';
       }
       
@@ -1127,6 +1234,7 @@ function loadWatermarkImage(file) {
     };
     
     img.onerror = function() {
+      console.error('加载水印图片失败:', file.name);
       showError('加载水印图片失败');
     };
     
@@ -1134,6 +1242,7 @@ function loadWatermarkImage(file) {
   };
   
   reader.onerror = function() {
+    console.error('读取水印图片文件失败:', file.name);
     showError('读取水印图片文件失败');
   };
   
@@ -2213,16 +2322,35 @@ function initWatermarkDragging() {
     
     let previewWidth, previewHeight;
     
-    if (previewImage && previewImage.style.display !== 'none') {
+    // 首先尝试从状态获取图像尺寸（这是最准确的，因为它是原始图像的尺寸）
+    if (watermarkState.imageWidth > 0 && watermarkState.imageHeight > 0) {
+      previewWidth = watermarkState.imageWidth;
+      previewHeight = watermarkState.imageHeight;
+      console.log('使用状态中的图像尺寸:', previewWidth, previewHeight);
+    }
+    // 如果状态中没有尺寸，则从DOM元素获取
+    else if (previewImage && previewImage.style.display !== 'none') {
       previewWidth = previewImage.naturalWidth || previewImage.offsetWidth;
       previewHeight = previewImage.naturalHeight || previewImage.offsetHeight;
+      console.log('使用预览图像的尺寸:', previewWidth, previewHeight);
     } else if (previewCanvas && previewCanvas.style.display !== 'none') {
       previewWidth = previewCanvas.width || previewCanvas.offsetWidth;
       previewHeight = previewCanvas.height || previewCanvas.offsetHeight;
+      console.log('使用预览画布的尺寸:', previewWidth, previewHeight);
     } else {
       console.warn('无法获取预览区域尺寸，使用容器尺寸');
       previewWidth = watermarkContainer.offsetWidth;
       previewHeight = watermarkContainer.offsetHeight;
+    }
+    
+    // 确保尺寸有效
+    if (previewWidth <= 0) previewWidth = watermarkContainer.offsetWidth;
+    if (previewHeight <= 0) previewHeight = watermarkContainer.offsetHeight;
+    
+    // 更新状态中的图像尺寸（如果之前没有设置）
+    if (watermarkState.imageWidth <= 0 || watermarkState.imageHeight <= 0) {
+      watermarkState.imageWidth = previewWidth;
+      watermarkState.imageHeight = previewHeight;
     }
     
     // 记录初始位置
@@ -2231,11 +2359,22 @@ function initWatermarkDragging() {
     const startLeft = watermarkElement.offsetLeft;
     const startTop = watermarkElement.offsetTop;
     
+    // 记录初始相对位置
+    const startRelativeX = watermarkState.relativePosition ? watermarkState.relativePosition.x : 50;
+    const startRelativeY = watermarkState.relativePosition ? watermarkState.relativePosition.y : 50;
+    
     // 计算容器的边界
     const containerRect = watermarkContainer.getBoundingClientRect();
     
+    console.log('开始拖动水印:', {
+      startPosition: { x: startLeft, y: startTop },
+      relativePosition: { x: startRelativeX, y: startRelativeY },
+      imageSize: { width: previewWidth, height: previewHeight }
+    });
+    
     // 鼠标移动处理函数
     function handleMouseMove(e) {
+      // 计算鼠标移动的距离
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       
@@ -2251,15 +2390,29 @@ function initWatermarkDragging() {
       watermarkElement.style.left = `${newLeft}px`;
       watermarkElement.style.top = `${newTop}px`;
       
-      // 计算并更新相对位置（百分比）
+      // 计算并更新相对位置（百分比）- 使用更稳定的计算方法
+      // 这里使用图像的实际尺寸而不是容器尺寸
       const relativeX = (newLeft / previewWidth) * 100;
       const relativeY = (newTop / previewHeight) * 100;
       
-      // 更新状态
+      // 限制相对位置在0-100范围内
+      const boundedRelativeX = Math.max(0, Math.min(100, relativeX));
+      const boundedRelativeY = Math.max(0, Math.min(100, relativeY));
+      
+      // 更新状态 - 使用深拷贝确保引用更新
       watermarkState.relativePosition = {
-        x: relativeX,
-        y: relativeY
+        x: boundedRelativeX,
+        y: boundedRelativeY
       };
+      
+      // 记录拖动状态
+      console.log('水印拖动中:', {
+        dx, dy,
+        newLeft, newTop,
+        relativeX: boundedRelativeX, 
+        relativeY: boundedRelativeY,
+        imageSize: { width: previewWidth, height: previewHeight }
+      });
       
       // 防止选中文本
       e.preventDefault();
@@ -2269,7 +2422,20 @@ function initWatermarkDragging() {
     function handleMouseUp() {
       // 移除拖动标记
       watermarkElement.classList.remove('dragging');
-      updateState({ isDragging: false });
+      
+      // 确保相对位置在有效范围内
+      if (watermarkState.relativePosition) {
+        watermarkState.relativePosition.x = Math.max(0, Math.min(100, watermarkState.relativePosition.x));
+        watermarkState.relativePosition.y = Math.max(0, Math.min(100, watermarkState.relativePosition.y));
+      } else {
+        watermarkState.relativePosition = { x: 50, y: 50 };
+      }
+      
+      // 更新状态
+      updateState({ 
+        isDragging: false,
+        relativePosition: { ...watermarkState.relativePosition }
+      });
       
       // 移除事件监听
       document.removeEventListener('mousemove', handleMouseMove);
@@ -2278,7 +2444,10 @@ function initWatermarkDragging() {
       // 保存当前设置
       saveCurrentImageSettings();
       
-      console.log('水印拖拽结束，新位置:', watermarkState.relativePosition);
+      console.log('水印拖拽结束，新位置:', {
+        relativePosition: watermarkState.relativePosition,
+        imageSize: { width: previewWidth, height: previewHeight }
+      });
     }
     
     // 添加事件监听

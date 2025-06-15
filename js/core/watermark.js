@@ -48,7 +48,9 @@ export function updateWatermark() {
       imageDisplay: previewImage ? previewImage.style.display : 'element不存在',
       imageComplete: previewImage ? previewImage.complete : 'element不存在',
       imageWidth: previewImage ? previewImage.width : 0,
-      imageHeight: previewImage ? previewImage.height : 0
+      imageHeight: previewImage ? previewImage.height : 0,
+      watermarkType: watermarkState.type,
+      hasWatermarkImage: !!watermarkState.watermarkImage
     });
     
     // 设置水印容器尺寸与预览区域一致
@@ -74,6 +76,11 @@ export function updateWatermark() {
     // 给水印元素添加ID以便于查找
     watermarkElement.id = 'watermark-element';
     
+    // 确保水印元素可见
+    watermarkElement.style.display = 'block';
+    watermarkElement.style.zIndex = '999999';
+    watermarkElement.style.position = 'absolute';
+    
     // 调整水印元素大小
     updateWatermarkSize(watermarkElement);
     
@@ -96,6 +103,17 @@ export function updateWatermark() {
       if (watermarkElem) {
         watermarkElem.style.zIndex = '999999';
         watermarkElem.style.display = 'block';
+        
+        // 如果是图片水印，确保图片元素也可见
+        if (watermarkState.type === 'image') {
+          const imgElement = watermarkElem.querySelector('img');
+          if (imgElement) {
+            imgElement.style.display = 'block';
+            imgElement.style.zIndex = '999999';
+            imgElement.style.maxWidth = '100%';
+            imgElement.style.maxHeight = '100%';
+          }
+        }
       }
     }, 50);
     
@@ -147,9 +165,17 @@ export function updateWatermarkPosition() {
       // 使用图片的实际尺寸，而不是容器尺寸
       previewWidth = previewImage.naturalWidth || previewImage.offsetWidth;
       previewHeight = previewImage.naturalHeight || previewImage.offsetHeight;
+      
+      // 更新状态中的图像尺寸
+      watermarkState.imageWidth = previewWidth;
+      watermarkState.imageHeight = previewHeight;
     } else if (previewCanvas && previewCanvas.style.display !== 'none') {
       previewWidth = previewCanvas.width || previewCanvas.offsetWidth;
       previewHeight = previewCanvas.height || previewCanvas.offsetHeight;
+      
+      // 更新状态中的图像尺寸
+      watermarkState.imageWidth = previewWidth;
+      watermarkState.imageHeight = previewHeight;
     } else {
       console.warn('无法获取预览区域尺寸');
       return;
@@ -230,13 +256,25 @@ export function updateWatermarkPosition() {
     let x, y;
     
     // 如果水印正在被拖动，不要改变它的位置，否则会导致跳跃
-    if (currentWatermarkElement.classList.contains('dragging')) {
+    if (currentWatermarkElement.classList.contains('dragging') || watermarkState.isDragging) {
       console.log('水印正在拖动中，保持当前位置');
       return;
     }
     
     // 设置水印位置 - 使用绝对定位
     currentWatermarkElement.style.position = 'absolute';
+    
+    // 确保relativePosition存在且有效
+    if (!watermarkState.relativePosition || 
+        typeof watermarkState.relativePosition.x !== 'number' || 
+        typeof watermarkState.relativePosition.y !== 'number') {
+      console.warn('水印相对位置无效，重置为默认值');
+      watermarkState.relativePosition = { x: 50, y: 50 };
+    }
+    
+    // 确保相对位置在有效范围内 (0-100)
+    watermarkState.relativePosition.x = Math.max(0, Math.min(100, watermarkState.relativePosition.x));
+    watermarkState.relativePosition.y = Math.max(0, Math.min(100, watermarkState.relativePosition.y));
     
     switch (positionChoice) {
       case 'top-left':
@@ -293,6 +331,7 @@ export function updateWatermarkPosition() {
       default:
         // 使用相对位置
         if (watermarkState.relativePosition) {
+          // 计算基于图片尺寸的绝对位置
           x = (watermarkState.relativePosition.x / 100) * previewWidth;
           y = (watermarkState.relativePosition.y / 100) * previewHeight;
         } else {
@@ -340,7 +379,8 @@ export function updateWatermarkPosition() {
       y, 
       transform,
       previousTransform: currentTransform,
-      relativePosition: watermarkState.relativePosition
+      relativePosition: watermarkState.relativePosition,
+      imageSize: { width: previewWidth, height: previewHeight }
     });
     
     // 确保水印容器可见
@@ -989,7 +1029,7 @@ function createWatermarkElement() {
       watermarkElement.textContent = watermarkText;
       watermarkElement.style.color = watermarkState.color || 'rgba(0, 0, 0, 0.5)';
       watermarkElement.style.fontSize = `${watermarkState.fontSize || 24}px`;
-      watermarkElement.style.opacity = watermarkState.opacity || 0.5;
+      watermarkElement.style.opacity = watermarkState.opacity / 100 || 0.5;
       watermarkElement.style.transform = `translate(-50%, -50%) rotate(${watermarkState.rotation || 0}deg)`;
       watermarkElement.style.zIndex = '999999'; // 确保z-index非常高
       
@@ -1005,16 +1045,41 @@ function createWatermarkElement() {
         return null;
       }
       
+      console.log('创建图片水印，图片对象:', watermarkImg);
+      
       watermarkElement = document.createElement('div');
       watermarkElement.id = 'watermark-element';
       watermarkElement.className = 'draggable-watermark';
-      watermarkElement.style.opacity = watermarkState.opacity || 0.5;
+      watermarkElement.style.opacity = watermarkState.opacity / 100 || 0.5;
       watermarkElement.style.transform = `translate(-50%, -50%) rotate(${watermarkState.rotation || 0}deg)`;
       watermarkElement.style.zIndex = '999999'; // 确保z-index非常高
+      watermarkElement.style.position = 'absolute';
+      watermarkElement.style.display = 'block';
       
       // 创建图片元素
       const imgElement = document.createElement('img');
-      imgElement.src = watermarkImg;
+      
+      // 检查水印图片的类型
+      if (typeof watermarkImg === 'string') {
+        // 如果是字符串（URL或DataURL），直接设置
+        imgElement.src = watermarkImg;
+        console.log('使用字符串URL作为水印图片源');
+      } else if (watermarkImg instanceof HTMLImageElement) {
+        // 如果是Image对象，使用其src
+        imgElement.src = watermarkImg.src;
+        console.log('使用Image对象的src作为水印图片源');
+      } else if (watermarkImg instanceof File) {
+        // 如果是File对象，创建一个临时URL
+        const tempUrl = URL.createObjectURL(watermarkImg);
+        imgElement.src = tempUrl;
+        console.log('使用File对象创建临时URL作为水印图片源');
+        // 在图片加载完成后释放URL
+        imgElement.onload = () => URL.revokeObjectURL(tempUrl);
+      } else {
+        console.error('不支持的水印图片类型:', typeof watermarkImg);
+        return null;
+      }
+      
       imgElement.style.maxWidth = '100%';
       imgElement.style.maxHeight = '100%';
       imgElement.style.display = 'block';
@@ -1057,37 +1122,96 @@ function updateWatermarkSize(watermarkElement) {
     
     let previewWidth, previewHeight;
     
-    if (previewImage && previewImage.style.display !== 'none') {
+    // 优先使用状态中存储的图像尺寸
+    if (watermarkState.imageWidth > 0 && watermarkState.imageHeight > 0) {
+      previewWidth = watermarkState.imageWidth;
+      previewHeight = watermarkState.imageHeight;
+      console.log('使用状态中的图像尺寸进行水印大小计算:', previewWidth, previewHeight);
+    }
+    // 如果状态中没有，则从DOM元素获取
+    else if (previewImage && previewImage.style.display !== 'none') {
       previewWidth = previewImage.offsetWidth;
       previewHeight = previewImage.offsetHeight;
+      console.log('使用DOM中的图像尺寸进行水印大小计算:', previewWidth, previewHeight);
     } else if (previewCanvas && previewCanvas.style.display !== 'none') {
       previewWidth = previewCanvas.offsetWidth;
       previewHeight = previewCanvas.offsetHeight;
+      console.log('使用Canvas尺寸进行水印大小计算:', previewWidth, previewHeight);
     } else {
+      console.warn('无法获取预览区域尺寸，无法调整水印大小');
+      return;
+    }
+    
+    // 确保尺寸有效
+    if (previewWidth <= 0 || previewHeight <= 0) {
+      console.warn('预览区域尺寸无效，无法调整水印大小');
       return;
     }
     
     // 获取水印类型
     const watermarkType = watermarkState.type || 'text';
     
-    if (watermarkType === 'image' && watermarkState.watermarkImage) {
+    if (watermarkType === 'image') {
       // 调整图片水印大小
       const imageSize = watermarkState.watermarkImageSize || 40; // 默认40%
       const maxDimension = Math.min(previewWidth, previewHeight);
       const size = (maxDimension * imageSize) / 100;
       
-      // 获取图片宽高比
-      const aspectRatio = watermarkState.watermarkImage.width / watermarkState.watermarkImage.height;
+      console.log('调整图片水印大小:', {
+        imageSize: imageSize + '%',
+        maxDimension,
+        calculatedSize: size
+      });
       
-      // 设置水印元素大小
-      if (aspectRatio >= 1) {
-        // 宽度大于高度
-        watermarkElement.style.width = `${size}px`;
-        watermarkElement.style.height = `${size / aspectRatio}px`;
-      } else {
-        // 高度大于宽度
-        watermarkElement.style.width = `${size * aspectRatio}px`;
-        watermarkElement.style.height = `${size}px`;
+      // 查找图片元素
+      const imgElement = watermarkElement.querySelector('img');
+      if (!imgElement) {
+        console.error('找不到水印图片元素');
+        return;
+      }
+      
+      // 监听图片加载完成事件，以获取正确的宽高比
+      imgElement.onload = function() {
+        const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight;
+        console.log('水印图片加载完成，宽高比:', aspectRatio);
+        
+        // 设置水印元素大小
+        if (aspectRatio >= 1) {
+          // 宽度大于高度
+          watermarkElement.style.width = `${size}px`;
+          watermarkElement.style.height = `${size / aspectRatio}px`;
+        } else {
+          // 高度大于宽度
+          watermarkElement.style.width = `${size * aspectRatio}px`;
+          watermarkElement.style.height = `${size}px`;
+        }
+        
+        console.log('水印元素大小已设置:', {
+          width: watermarkElement.style.width,
+          height: watermarkElement.style.height
+        });
+      };
+      
+      // 如果图片已经加载完成，立即设置大小
+      if (imgElement.complete) {
+        const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight || 1;
+        console.log('水印图片已加载，直接使用宽高比:', aspectRatio);
+        
+        // 设置水印元素大小
+        if (aspectRatio >= 1) {
+          // 宽度大于高度
+          watermarkElement.style.width = `${size}px`;
+          watermarkElement.style.height = `${size / aspectRatio}px`;
+        } else {
+          // 高度大于宽度
+          watermarkElement.style.width = `${size * aspectRatio}px`;
+          watermarkElement.style.height = `${size}px`;
+        }
+        
+        console.log('水印元素大小已设置:', {
+          width: watermarkElement.style.width,
+          height: watermarkElement.style.height
+        });
       }
     }
     // 文本水印不需要调整大小，它由字体大小决定
