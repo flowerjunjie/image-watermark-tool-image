@@ -367,9 +367,22 @@ export function updateWatermarkPosition() {
       }
     }
     
+    // 应用缩放 - 确保使用当前的缩放值
+    const currentScale = watermarkState.scale !== undefined ? watermarkState.scale : 1.0;
+    
+    // 如果当前transform中已有缩放，提取它
+    let scaleValue = currentScale;
+    if (currentTransform.includes('scale')) {
+      const scaleMatch = currentTransform.match(/scale\(([^)]+)\)/);
+      if (scaleMatch && scaleMatch[1]) {
+        // 使用当前的缩放值，避免在拖动时改变缩放
+        scaleValue = watermarkState.isDragging ? parseFloat(scaleMatch[1]) || currentScale : currentScale;
+      }
+    }
+    
     // 应用缩放
-    if (watermarkState.scale && watermarkState.scale !== 1.0) {
-      transform += ` scale(${watermarkState.scale})`;
+    if (scaleValue && scaleValue !== 1.0) {
+      transform += ` scale(${scaleValue})`;
     }
     
     currentWatermarkElement.style.transform = transform;
@@ -607,22 +620,32 @@ function makeDraggable(element) {
     
     // 确保元素已经有正确的transform属性
     if (!currentTransform.includes('translate(-50%, -50%)')) {
-      // 提取旋转部分
+      // 提取旋转和缩放部分
       let rotation = '';
+      let scale = '';
+      
       if (currentTransform.includes('rotate')) {
         const rotateMatch = currentTransform.match(/rotate\([^)]+\)/);
         rotation = rotateMatch ? rotateMatch[0] : '';
       }
       
-      // 设置正确的transform
-      if (rotation) {
-        element.style.transform = `translate(-50%, -50%) ${rotation}`;
-      } else {
-        element.style.transform = 'translate(-50%, -50%)';
+      if (currentTransform.includes('scale')) {
+        const scaleMatch = currentTransform.match(/scale\([^)]+\)/);
+        scale = scaleMatch ? scaleMatch[0] : '';
       }
+      
+      // 构建完整的transform属性
+      let newTransform = 'translate(-50%, -50%)';
+      if (rotation) newTransform += ` ${rotation}`;
+      if (scale) newTransform += ` ${scale}`;
+      
+      element.style.transform = newTransform;
     }
     
     isDragging = true;
+    
+    // 设置全局拖动状态
+    watermarkState.isDragging = true;
     
     // 添加事件监听器
     document.addEventListener('mousemove', drag);
@@ -660,25 +683,31 @@ function makeDraggable(element) {
     // 更新元素位置 - 使用transform来移动元素，这样不会与translate(-50%, -50%)冲突
     // 保留元素的translate(-50%, -50%)变换，这样元素的中心点才会对齐到鼠标位置
     const transform = element.style.transform || '';
-    const hasRotation = transform.includes('rotate');
     
-    // 提取旋转部分
+    // 提取旋转和缩放部分
     let rotation = '';
-    if (hasRotation) {
+    let scale = '';
+    
+    if (transform.includes('rotate')) {
       const rotateMatch = transform.match(/rotate\([^)]+\)/);
       rotation = rotateMatch ? rotateMatch[0] : '';
     }
     
-    // 设置新的变换，保留translate(-50%, -50%)和旋转
+    if (transform.includes('scale')) {
+      const scaleMatch = transform.match(/scale\([^)]+\)/);
+      scale = scaleMatch ? scaleMatch[0] : '';
+    }
+    
+    // 设置新的变换，保留translate(-50%, -50%)、旋转和缩放
     element.style.left = `${newX}px`;
     element.style.top = `${newY}px`;
     
-    // 确保transform属性保持translate(-50%, -50%)，这样元素中心点才会对齐
-    if (rotation) {
-      element.style.transform = `translate(-50%, -50%) ${rotation}`;
-    } else {
-      element.style.transform = 'translate(-50%, -50%)';
-    }
+    // 构建完整的transform属性
+    let newTransform = 'translate(-50%, -50%)';
+    if (rotation) newTransform += ` ${rotation}`;
+    if (scale) newTransform += ` ${scale}`;
+    
+    element.style.transform = newTransform;
     
     console.log('拖动水印 - 新位置:', {
       x: newX,
@@ -736,6 +765,9 @@ function makeDraggable(element) {
   // 结束拖动
   function dragEnd() {
     isDragging = false;
+    
+    // 重置全局拖动状态
+    watermarkState.isDragging = false;
     
     // 移除事件监听器
     document.removeEventListener('mousemove', drag);

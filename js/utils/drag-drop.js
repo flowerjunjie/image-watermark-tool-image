@@ -2400,10 +2400,14 @@ function initWatermarkDragging() {
       const boundedRelativeY = Math.max(0, Math.min(100, relativeY));
       
       // 更新状态 - 使用深拷贝确保引用更新
+      // 只更新相对位置，不更新缩放比例
       watermarkState.relativePosition = {
         x: boundedRelativeX,
         y: boundedRelativeY
       };
+      
+      // 保存当前的transform，以便保留旋转和缩放部分
+      const currentTransform = watermarkElement.style.transform || '';
       
       // 记录拖动状态
       console.log('水印拖动中:', {
@@ -2411,7 +2415,8 @@ function initWatermarkDragging() {
         newLeft, newTop,
         relativeX: boundedRelativeX, 
         relativeY: boundedRelativeY,
-        imageSize: { width: previewWidth, height: previewHeight }
+        imageSize: { width: previewWidth, height: previewHeight },
+        transform: currentTransform
       });
       
       // 防止选中文本
@@ -2431,10 +2436,23 @@ function initWatermarkDragging() {
         watermarkState.relativePosition = { x: 50, y: 50 };
       }
       
+      // 保存当前的transform，以便保留缩放值
+      const currentTransform = watermarkElement.style.transform || '';
+      let currentScale = watermarkState.scale;
+      
+      // 如果当前transform中有缩放，提取它
+      if (currentTransform.includes('scale')) {
+        const scaleMatch = currentTransform.match(/scale\(([^)]+)\)/);
+        if (scaleMatch && scaleMatch[1]) {
+          currentScale = parseFloat(scaleMatch[1]) || currentScale;
+        }
+      }
+      
       // 更新状态
       updateState({ 
         isDragging: false,
-        relativePosition: { ...watermarkState.relativePosition }
+        relativePosition: { ...watermarkState.relativePosition },
+        scale: currentScale // 确保保留当前的缩放值
       });
       
       // 移除事件监听
@@ -2446,7 +2464,8 @@ function initWatermarkDragging() {
       
       console.log('水印拖拽结束，新位置:', {
         relativePosition: watermarkState.relativePosition,
-        imageSize: { width: previewWidth, height: previewHeight }
+        imageSize: { width: previewWidth, height: previewHeight },
+        scale: currentScale
       });
     }
     
