@@ -927,6 +927,14 @@ function finalizeThumbnailClick(thumbnail) {
     thumbnail.classList.remove('processing');
   }
   
+  // 确保水印容器可见
+  const watermarkContainer = document.getElementById('watermark-container');
+  if (watermarkContainer) {
+    watermarkContainer.style.display = 'flex';
+    watermarkContainer.style.zIndex = '999999';
+    watermarkContainer.style.pointerEvents = 'auto';
+  }
+  
   // 保存当前图片设置
   try {
     saveCurrentImageSettings();
@@ -934,10 +942,22 @@ function finalizeThumbnailClick(thumbnail) {
     console.error('保存图片设置失败:', e);
   }
   
+  // 强制再次更新水印
+  setTimeout(() => {
+    updateWatermark();
+    
+    // 再次确保水印容器可见
+    if (watermarkContainer) {
+      watermarkContainer.style.display = 'flex';
+      watermarkContainer.style.zIndex = '999999';
+      watermarkContainer.style.pointerEvents = 'auto';
+    }
+  }, 100);
+  
   // 释放全局锁
   setTimeout(() => {
     window.thumbnailClickLock = false;
-  }, 100);
+  }, 150);
 }
 
 /**
