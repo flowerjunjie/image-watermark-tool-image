@@ -4,7 +4,7 @@
  */
 
 import { watermarkState, updateState } from '../core/state.js';
-import { renderWatermarkOnCanvas } from '../core/watermark.js';
+import { renderWatermarkOnCanvas, updateWatermark } from '../core/watermark.js';
 // 使用gifwrap方式处理GIF
 import { isGif, processGif } from './gifwrap/gif-processor.js';
 import { displayFileStatistics } from './drag-drop.js';
@@ -109,99 +109,100 @@ function sendToWorker(message, transfer) {
 }
 
 /**
- * 处理图片，添加水印或其他效果
- * @param {File} file - 图片文件
- * @param {boolean} shouldApplyWatermark - 是否应用水印
- * @param {Object} options - 处理选项
- * @returns {Promise} - 处理完成的Promise
+ * 处理图像，添加水印或准备下载
+ * @param {File|Blob} imageFile - 图像文件
+ * @param {boolean|Object} applyWatermarkOrOptions - 是否应用水印或处理选项对象
+ * @param {Object} [optionsArg] - 处理选项（如果第二个参数是布尔值）
+ * @returns {Promise} - 处理结果Promise
  */
-export function processImage(file, shouldApplyWatermark = false, options = {}) {
+export function processImage(imageFile, applyWatermarkOrOptions = {}, optionsArg = {}) {
   return new Promise(async (resolve, reject) => {
     try {
-      console.log('处理图片:', file.name, '应用水印:', shouldApplyWatermark, '选项:', Object.keys(options).join(','));
-      
-      // 判断是否为GIF
-      const isGifImage = isGif(file);
-      
-      if (isGifImage) {
-        console.log('识别为GIF文件，使用GIF处理器');
-        
-        // 优化：检测是否应该保留动画效果
-        const preserveAnimation = options.preserveAnimation || 
-                                  options.isPreview || 
-                                  !shouldApplyWatermark;
-        
-        // 使用专门的GIF处理函数
-        const result = await processGifImage(file, shouldApplyWatermark, {
-          ...options, 
-          preserveAnimation // 传递是否保留动画的标记
-        });
-        
-        resolve(result);
+      // 检查文件是否有效
+      if (!imageFile) {
+        reject(new Error('未提供有效的图像文件'));
         return;
       }
+
+      // 兼容旧的调用方式和新的调用方式
+      let options = {};
+      if (typeof applyWatermarkOrOptions === 'boolean') {
+        console.log('使用旧的API调用方式 processImage(file, boolean, options)');
+        options = { ...optionsArg, applyWatermark: applyWatermarkOrOptions };
+      } else {
+        options = applyWatermarkOrOptions || {};
+      }
+
+      // 获取文件类型
+      const fileType = imageFile.type || '';
+      const fileName = imageFile.name || 'image';
+      const isGif = fileType.includes('gif') || fileName.toLowerCase().endsWith('.gif');
       
-      // 非GIF图片处理
-      console.log('非GIF文件，使用标准图像处理');
+      // 确保选项中有 applyWatermark 字段，除非明确设置为 false，否则默认为 true
+      if (options.applyWatermark !== false) {
+        options.applyWatermark = true;
+      }
       
-      // 使用FileReader读取文件
-      const reader = new FileReader();
-      
-      reader.onload = async function(e) {
+      // 记录处理信息
+      console.log('处理图像:', fileName, '类型:', fileType, '是否为GIF:', isGif);
+      console.log('处理选项:', JSON.stringify({
+        isPreview: options.isPreview,
+        isDownload: options.isDownload,
+        applyWatermark: options.applyWatermark,
+        position: options.position ? { x: options.position.x, y: options.position.y } : null,
+        text: options.text
+      }));
+
+      // 处理GIF图像
+      if (isGif) {
+        console.log('检测到GIF图像，使用GIF处理器');
         try {
-          const dataUrl = e.target.result;
-          
-          // 根据选项确定如何处理图像
-          let result;
-          
-          // 为了确保稳定性，在批量处理模式下直接使用主线程处理
-          if (options.isBatchProcessing) {
-            console.log('批量处理模式：在主线程处理图像');
-            result = await processImageInMainThread(dataUrl, shouldApplyWatermark, options);
-          } else {
-            // 尝试使用Worker处理
-            const canUseWorker = options.useWorker !== false && typeof Worker !== 'undefined' && imageWorker;
+          // 如果只是预览模式，创建一个特殊预览
+          if (options.isPreview) {
+            console.log('GIF预览模式，创建特殊预览并标记为GIF');
             
-            if (canUseWorker) {
-              try {
-                // 使用Web Worker处理图像
-                console.log('使用Web Worker处理图像');
-                result = await processImageWithWorker(dataUrl, {
-                  ...options,
-                  applyWatermark: shouldApplyWatermark
-                });
-              } catch (workerError) {
-                console.warn('Worker处理失败，回退到主线程处理:', workerError);
-                result = await processImageInMainThread(dataUrl, shouldApplyWatermark, options);
-              }
-            } else {
-              console.log('在主线程处理图像');
-              result = await processImageInMainThread(dataUrl, shouldApplyWatermark, options);
-            }
+            // 更新全局状态，标记当前处理的是GIF
+            updateState({
+              isGif: true
+            });
+            
+            // 创建预览结果
+            const previewResult = {
+              isGif: true,
+              file: imageFile,
+              blobUrl: URL.createObjectURL(imageFile),
+              previewUrl: URL.createObjectURL(imageFile),
+              watermarkApplied: false // GIF预览模式不在图像上应用水印，而是使用浮动水印
+            };
+            
+            // 确保水印会在预览后显示
+            setTimeout(() => {
+              console.log('GIF预览模式：强制更新水印');
+              updateWatermark();
+            }, 50);
+            
+            resolve(previewResult);
+            return;
           }
           
-          // 设置文件名
-          result.fileName = file.name;
-          
-          // 添加原始文件引用
-          result.originalBlob = file;
-                  
-                  // 返回处理结果
+          // 使用GIF处理器处理GIF图像
+          const result = await processGifImage(imageFile, options, options.onProgress, options.isPreview);
           resolve(result);
-            } catch (error) {
-          console.error('处理图像数据时出错:', error);
-          reject(error);
+        } catch (gifError) {
+          console.error('GIF处理失败:', gifError);
+          // GIF处理失败时尝试作为普通图像处理
+          console.log('尝试作为普通图像处理GIF');
+          const result = await processRegularImage(imageFile, options);
+          resolve(result);
         }
-      };
-      
-      reader.onerror = function() {
-        console.error('读取文件失败');
-        reject(new Error('读取文件失败'));
-      };
-      
-      reader.readAsDataURL(file);
+        return;
+      }
+
+      // 处理普通图像
+      const result = await processRegularImage(imageFile, options);
+      resolve(result);
     } catch (error) {
-      console.error('处理图片时出错:', error);
+      console.error('图像处理失败:', error);
       reject(error);
     }
   });
@@ -209,485 +210,297 @@ export function processImage(file, shouldApplyWatermark = false, options = {}) {
 
 /**
  * 处理GIF图片
- * @param {File} file - GIF文件
- * @param {boolean} shouldApplyWatermark - 是否应用水印
- * @param {Object} options - 处理选项
- * @returns {Promise} - 处理完成的Promise
+ * @param {File} gifFile - GIF文件
+ * @param {Object} watermarkOptions - 水印选项
+ * @param {Function} onProgress - 进度回调函数
+ * @param {boolean} isPreview - 是否为预览模式
+ * @returns {Promise} - 处理结果Promise
  */
-async function processGifImage(file, shouldApplyWatermark = false, options = {}) {
-  console.log('执行processGifImage函数, 文件:', file.name, '应用水印:', shouldApplyWatermark, 
-              '保留动画:', options.preserveAnimation, 
-              '批量处理:', options.isBatchProcessing);
-  
-  try {
-    // 预检查文件
-    if (!file || !isGif(file)) {
-      console.error('无效的GIF文件:', file);
-      throw new Error('无效的GIF文件');
-    }
-    
-    // 准备水印选项
-    const watermarkOptions = shouldApplyWatermark ? {
-      ...options,
-      type: watermarkState.type,
-      text: watermarkState.text,
-      position: watermarkState.position,
-      fontSize: watermarkState.fontSize,
-      color: watermarkState.color,
-      opacity: watermarkState.opacity,
-      rotation: watermarkState.rotation,
-      image: watermarkState.image,
-      imageSize: watermarkState.imageSize,
-      // GIF特有选项
-      gifOptions: {
-        ...options.gifOptions,
-        quality: document.getElementById('gif-quality') ? 
-          parseInt(document.getElementById('gif-quality').value, 10) : 10
-      },
-      fileName: file.name
-    } : { isPreview: options.isPreview };
-    
-    // GIF进度条更新函数
-    function updateGifProgressBar(progress) {
-      const progressContainer = document.getElementById('gif-progress-container');
-      const progressBar = document.getElementById('gif-progress-bar');
+async function processGifImage(gifFile, watermarkOptions, onProgress = null, isPreview = false) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // 检查是否为下载模式
+      const isDownloadMode = watermarkOptions.isDownload === true;
       
-      if (progressContainer && progressBar) {
-        progressContainer.style.display = 'block';
-        progressBar.style.width = `${progress}%`;
-        
-        // 如果进度为100%，稍后隐藏进度条
-        if (progress >= 100) {
-          setTimeout(() => {
-            progressContainer.style.display = 'none';
-          }, 1000);
-        }
-      }
-    }
-    
-    // 获取图片尺寸工具函数
-    async function getImageDimensions(url) {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-          resolve({ 
-            width: img.naturalWidth || img.width, 
-            height: img.naturalHeight || img.height 
-          });
-        };
-        img.onerror = reject;
-        img.src = url;
-      });
-    }
-    
-    // 预览模式特殊处理
-    if (options.isPreview) {
-      // 针对预览使用特殊的快速处理方式
-      console.log('GIF预览模式');
-      watermarkOptions.isPreview = true;
-      
-      // 使用直接的Blob URL渲染预览
-      const processStartTime = performance.now();
-      
-      // 使用新的gifwrap处理器
-      const processedGif = await processGif(file, watermarkOptions, (progress) => {
-        // 处理进度回调
-        if (options.onProgress) {
-          options.onProgress(progress);
-        }
-        
-        // 更新GIF进度条
-        updateGifProgressBar(progress);
-      });
-      
-      const processEndTime = performance.now();
-      console.log(`GIF处理完成，耗时: ${(processEndTime - processStartTime) / 1000}秒`);
-      
-      // 检查processedGif是否是对象（新格式）或Blob（旧格式）
-      let blobUrl, previewUrl, gifBlob;
-      
-      if (processedGif instanceof Blob || processedGif instanceof File) {
-        // 旧格式，直接使用Blob
-        gifBlob = processedGif;
-        blobUrl = URL.createObjectURL(gifBlob);
-        // 检查watermarkOptions中是否有预览
-        previewUrl = watermarkOptions.previewDataUrl || blobUrl;
-      } else {
-        // 新格式，包含blob和预览
-        gifBlob = processedGif.blob;
-        blobUrl = URL.createObjectURL(gifBlob);
-        previewUrl = processedGif.previewDataUrl || blobUrl;
-      }
-      
-      // 测量尺寸
-      const dimensions = await getImageDimensions(blobUrl).catch(() => ({
-        width: 0,
-        height: 0
+      console.log('处理GIF图片:', gifFile.name, '水印选项:', JSON.stringify({
+        isDownload: watermarkOptions.isDownload,
+        isPreview: isPreview,
+        applyWatermark: watermarkOptions.applyWatermark,
+        position: watermarkOptions.position,
+        text: watermarkOptions.text,
+        fontSize: watermarkOptions.fontSize
       }));
       
-      // 返回处理结果
-      const result = {
-        isGif: true,
-        blobUrl,
-        previewUrl: previewUrl || blobUrl, // 使用预览图或blobUrl
-        blob: gifBlob,
-        width: dimensions.width,
-        height: dimensions.height,
-        originalFile: file,
-        watermarkApplied: previewUrl ? true : false // 如果有预览图，则认为水印已应用
-      };
-      
-      console.log('GIF处理结果准备完成:', result);
-      return result;
-    } 
-    // 下载模式 - 根据情况选择是否应用水印
-    else {
-      console.log('GIF下载模式，检查是否需要应用水印');
-      
-      // 如果不需要应用水印，直接返回原文件
-      if (!shouldApplyWatermark) {
-        console.log('不需要应用水印，返回原始GIF文件');
-        const fileUrl = URL.createObjectURL(file);
-        return {
-          blobUrl: fileUrl,
-          previewUrl: fileUrl, // 添加预览URL
-          blob: file,
+      // 在预览模式下，显示动态GIF
+      if (isPreview) {
+        console.log('GIF预览模式，显示动态GIF');
+        
+        // 创建Blob URL来预览原始GIF
+        const blobUrl = URL.createObjectURL(gifFile);
+        
+        // 返回预览结果
+        resolve({
+          previewUrl: blobUrl,
+          blobUrl: blobUrl, 
           isGif: true,
-          originalBlob: file, // 保留原始文件引用
-          fileName: file.name,
+          blob: gifFile,
           watermarkApplied: false
-        };
-      }
-      
-      // 需要应用水印并处理GIF
-      console.log('开始处理GIF并应用水印到每一帧，使用gifwrap方式');
-      
-      // 使用gifwrap处理，直接使用上面创建的watermarkOptions
-      const processedGif = await processGif(file, watermarkOptions, (progress) => {
-        // 更新进度条
-        if (options.onProgress) {
-          options.onProgress(progress);
-        }
-        
-        // 更新GIF进度条
-        updateGifProgressBar(progress);
-        
-        // 记录日志
-        if (progress % 10 === 0) {
-          console.log(`GIF处理进度: ${progress}%`);
-        }
-      });
-      
-      if (!processedGif) {
-        console.error('GIF处理失败，返回结果为空');
-        throw new Error('GIF处理失败，返回结果为空');
-      }
-      
-      // 检查processedGif是否是对象（新格式）或Blob（旧格式）
-      let gifBlob, previewDataUrl, watermarkApplied;
-      
-      if (processedGif instanceof Blob || processedGif instanceof File) {
-        // 旧格式，直接使用Blob
-        console.log('GIF处理结果为Blob格式，大小:', Math.round(processedGif.size / 1024), 'KB');
-        gifBlob = processedGif;
-        // 检查watermarkOptions中是否有预览
-        previewDataUrl = watermarkOptions.previewDataUrl ? watermarkOptions.previewDataUrl : null;
-        // 检查是否为静态GIF备用
-        watermarkApplied = previewDataUrl ? true : false; // 如果有预览，则认为水印已应用
-        
-        // 额外检查：如果gifBlob与window.staticGifWithWatermark相同，则认为水印已应用
-        if (window.staticGifWithWatermark instanceof Blob && 
-            gifBlob.size === window.staticGifWithWatermark.size) {
-          console.log('检测到使用了静态GIF备用，标记水印为已应用');
-          watermarkApplied = true;
-        }
-      } else {
-        // 新格式，包含blob和预览
-        console.log('GIF处理结果为对象格式，包含blob和预览');
-        gifBlob = processedGif.blob;
-        previewDataUrl = processedGif.previewDataUrl;
-        watermarkApplied = processedGif.watermarkApplied || false;
-        
-        if (!gifBlob) {
-          console.error('GIF处理结果中缺少blob属性');
-          throw new Error('GIF处理结果格式错误');
-        }
-        
-        console.log('GIF处理完成，大小:', Math.round(gifBlob.size / 1024), 'KB');
-      }
-      
-      // 确保水印状态正确
-      if (previewDataUrl && !watermarkApplied) {
-        console.log('检测到预览图但水印状态为false，修正为true');
-        watermarkApplied = true;
-      }
-      
-      // 额外检查：如果是静态GIF备用，确保水印状态为true
-      if (window.staticGifWithWatermark instanceof Blob && 
-          gifBlob instanceof Blob &&
-          Math.abs(gifBlob.size - window.staticGifWithWatermark.size) < 100) {
-        console.log('检测到使用了静态GIF备用（大小相近），标记水印为已应用');
-        watermarkApplied = true;
-      }
-      
-      console.log('是否成功应用水印到所有帧:', watermarkApplied ? '是' : '否 (使用原始GIF)');
-      
-      // 创建BlobURL
-      let blobUrl;
-      try {
-        // 确保我们有一个有效的Blob，并且保留GIF的MIME类型
-        const validBlob = new Blob([gifBlob], { type: 'image/gif' });
-        blobUrl = URL.createObjectURL(validBlob);
-        console.log('成功创建GIF的BlobURL，MIME类型为image/gif');
-      } catch (blobError) {
-        console.error('创建BlobURL失败:', blobError);
-        // 尝试直接使用gifBlob创建URL
-        try {
-          blobUrl = URL.createObjectURL(gifBlob);
-          console.log('使用原始gifBlob创建BlobURL成功');
-        } catch (directError) {
-          console.error('直接创建BlobURL也失败:', directError);
-          // 创建一个静态备用图像
-          const backupCanvas = document.createElement('canvas');
-          backupCanvas.width = 500;
-          backupCanvas.height = 500;
-          const backupCtx = backupCanvas.getContext('2d');
-          backupCtx.fillStyle = '#f0f0f0';
-          backupCtx.fillRect(0, 0, 500, 500);
-          backupCtx.fillStyle = '#333333';
-          backupCtx.font = '16px Arial';
-          backupCtx.textAlign = 'center';
-          backupCtx.fillText('GIF处理完成但无法显示', 250, 240);
-          backupCtx.fillText(file.name, 250, 260);
-          
-          // 创建备用BlobURL
-          const backupDataUrl = backupCanvas.toDataURL('image/png');
-          blobUrl = backupDataUrl;
-          console.log('使用备用静态图像替代GIF');
-        }
-      }
-      
-      // 创建图片对象以获取尺寸
-      const img = new Image();
-      let width = 0;
-      let height = 0;
-      
-      try {
-        // 尝试获取处理后GIF的尺寸
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            console.warn('获取GIF尺寸超时，使用默认值');
-            resolve();
-          }, 3000);
-          
-          img.onload = function() {
-            clearTimeout(timeout);
-            width = img.width;
-            height = img.height;
-            resolve();
-          };
-          
-          img.onerror = function(error) {
-            clearTimeout(timeout);
-            console.warn('无法获取处理后GIF尺寸:', error);
-            resolve();
-          };
-          
-          img.src = blobUrl;
         });
-      } catch (error) {
-        console.warn('获取GIF尺寸出错:', error);
+        return;
       }
       
-      // 如果无法获取尺寸，尝试使用原始文件
-      if (width === 0 || height === 0) {
-        const originalImg = new Image();
-        const originalUrl = URL.createObjectURL(file);
+      // 下载或批量处理模式，使用GIF处理器
+      console.log('使用GIF处理器处理GIF文件');
+      
+      // 确保应用水印，除非明确设置为false
+      if (watermarkOptions.applyWatermark !== false) {
+        watermarkOptions.applyWatermark = true;
+      }
+      
+      // 添加进度回调
+      const optionsWithProgress = {
+        ...watermarkOptions,
+        onProgress: onProgress
+      };
+      
+      // 调用GIF处理器
+      try {
+        const result = await processGif(gifFile, optionsWithProgress);
+        if (!result) {
+          throw new Error('GIF处理结果为空');
+        }
         
-        try {
-          await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              console.warn('获取原始GIF尺寸超时，使用默认值');
-              resolve();
-            }, 2000);
-            
-            originalImg.onload = function() {
-              clearTimeout(timeout);
-              width = originalImg.width || 200;
-              height = originalImg.height || 200;
-              console.log('成功获取原始GIF尺寸:', width, 'x', height);
-              resolve();
-            };
-            
-            originalImg.onerror = function(error) {
-              clearTimeout(timeout);
-              console.warn('获取原始GIF尺寸出错:', error);
-              resolve();
-            };
-            
-            originalImg.src = originalUrl;
-          });
-          
-          // 清理原始URL
-          URL.revokeObjectURL(originalUrl);
-        } catch (error) {
-          console.warn('获取原始GIF尺寸出错:', error);
-        }
+        console.log('GIF处理成功，应用水印:', result.watermarkApplied);
+        resolve(result);
+      } catch (error) {
+        console.error('GIF处理失败：', error);
+        reject(error);
       }
-      
-      // 如果仍然无法获取尺寸，使用默认值
-      if (width === 0 || height === 0) {
-        console.warn('无法获取GIF尺寸，使用默认值');
-        width = 200;
-        height = 200;
-      }
-      
-      // 返回处理结果
-      const result = {
-        blobUrl,
-        previewUrl: previewDataUrl || blobUrl, // 使用预览图或blobUrl
-        blob: gifBlob,
-        isGif: true,
-        width,
-        height,
-        fileName: file.name,
-        originalFile: file,
-        watermarkApplied: previewDataUrl ? true : false // 如果有预览图，则认为水印已应用
-      };
-      
-      console.log('GIF处理结果准备完成:', result);
-      return result;
-    }
-  } catch (error) {
-    console.error('处理GIF时出错:', error);
-    
-    // 创建一个错误结果，使用原始文件
-    const fileUrl = URL.createObjectURL(file);
-    return {
-      blobUrl: fileUrl,
-      previewUrl: fileUrl,
-      blob: file,
-      isGif: true,
-      width: 200,
-      height: 200,
-      fileName: file.name,
-      originalFile: file,
-      watermarkApplied: false,
-      error: error.message
-    };
-  }
-}
-
-/**
- * 在主线程中处理图片
- * @param {string} dataUrl - 图片的dataURL
- * @param {boolean} shouldApplyWatermark - 是否应用水印
- * @param {Object} options - 处理选项
- * @returns {Promise<string>} - 返回处理后的blobURL
- */
-function processImageInMainThread(dataUrl, shouldApplyWatermark, options) {
-  return new Promise((resolve, reject) => {
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
-      img.onload = function() {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          
-          // 绘制原始图片
-          ctx.drawImage(img, 0, 0);
-          
-          // 保存原始图像对象和尺寸，用于Canvas渲染
-          updateState({
-            originalImage: img,
-            originalImageWidth: img.width,
-            originalImageHeight: img.height
-          });
-          
-          console.log('已保存原始图像对象:', img.width, 'x', img.height);
-          
-          // 如果需要应用水印
-          if (shouldApplyWatermark) {
-            // 创建完整的水印选项对象，确保包含所有必要的属性
-            const watermarkOptions = {
-              type: watermarkState.type || 'text',
-              text: watermarkState.text || '仅供验证使用',
-              color: watermarkState.color || '#ff0000',
-              fontSize: watermarkState.fontSize,
-              opacity: watermarkState.opacity || 50,
-              rotation: watermarkState.rotation || 0,
-              position: watermarkState.relativePosition || { x: 50, y: 50 }, // 使用relativePosition
-              tileSpacing: watermarkState.tileSpacing || 150,
-              watermarkImage: watermarkState.watermarkImage
-            };
-            
-            console.log('应用水印，选项:', JSON.stringify({
-              type: watermarkOptions.type,
-              position: watermarkOptions.position
-            }));
-            
-            applyWatermarkToCanvas(ctx, canvas.width, canvas.height, watermarkOptions);
-          }
-          
-          // 转换为Blob
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                reject(new Error('创建Blob失败'));
-                return;
-              }
-              
-              const blobUrl = URL.createObjectURL(blob);
-              // 返回一个对象，而不仅仅是blobUrl
-              resolve({
-                blobUrl: blobUrl,
-                blob: blob,
-                width: img.width,
-                height: img.height
-              });
-            },
-            options.format,
-            options.quality
-          );
-        } catch (error) {
-          console.error('处理图片时出错:', error);
-          reject(error);
-        }
-      };
-      
-      img.onerror = function() {
-        console.error('加载图片失败');
-        reject(new Error('加载图片失败'));
-      };
-      
-      img.src = dataUrl;
     } catch (error) {
-      console.error('主线程处理图片时出错:', error);
+      console.error('处理GIF图片时出错:', error);
       reject(error);
     }
   });
 }
 
 /**
- * 使用Worker处理图片
- * @param {string} dataUrl - 图片数据URL
+ * 在主线程中处理图像
+ * @param {string} dataUrl - 图像数据URL
  * @param {Object} options - 处理选项
- * @returns {Promise} - 处理完成的Promise
+ * @returns {Promise} - 处理结果Promise
+ */
+async function processImageInMainThread(dataUrl, options = {}) {
+  return new Promise((resolve, reject) => {
+    try {
+      console.log('主线程处理图像，选项:', JSON.stringify({
+        isPreview: options.isPreview,
+        isDownload: options.isDownload,
+        applyWatermark: options.applyWatermark
+      }));
+      
+      // 创建图像元素
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = function() {
+        try {
+          // 创建Canvas
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // 设置Canvas尺寸
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          // 绘制原始图像
+          ctx.drawImage(img, 0, 0);
+          
+          // 如果需要应用水印 - 包括预览模式
+          if (options.applyWatermark !== false) {
+            console.log('应用水印到图像，预览模式:', options.isPreview ? '是' : '否');
+            
+            // 临时保存当前的watermarkState
+            const originalWatermarkState = { ...window.watermarkState };
+            
+            try {
+              // 确保水印选项中有位置信息
+              if (!options.position && window.watermarkState && window.watermarkState.relativePosition) {
+                options.position = { ...window.watermarkState.relativePosition };
+                console.log('从watermarkState复制水印位置:', options.position);
+              }
+              
+              // 如果还是没有位置信息，设置默认值
+              if (!options.position) {
+                options.position = { x: 50, y: 50 };
+                console.log('设置默认水印位置:', options.position);
+              }
+              
+              // 将水印选项应用到全局watermarkState
+              window.watermarkState = {
+                ...window.watermarkState,
+                text: options.text || window.watermarkState?.text || '仅供验证使用',
+                color: options.color || window.watermarkState?.color || '#ff0000',
+                fontSize: options.fontSize || window.watermarkState?.fontSize || 24,
+                opacity: options.opacity || window.watermarkState?.opacity || 50,
+                rotation: options.rotation || window.watermarkState?.rotation || 0,
+                relativePosition: options.position,
+                type: options.type || window.watermarkState?.type || 'text',
+                scale: options.scale || window.watermarkState?.scale || 1.0
+              };
+              
+              // 应用水印
+              renderWatermarkOnCanvas(canvas, ctx);
+            } finally {
+              // 恢复原始的watermarkState
+              window.watermarkState = originalWatermarkState;
+            }
+          }
+          
+          // 获取处理后的图像数据
+          const processedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          
+          // 创建Blob
+          const processedBlob = dataURLToBlob(processedDataUrl);
+          
+          // 创建BlobURL
+          const blobUrl = URL.createObjectURL(processedBlob);
+          
+          // 返回处理结果
+          resolve({
+            previewUrl: processedDataUrl,
+            blobUrl: blobUrl,
+            blob: processedBlob,
+            width: img.width,
+            height: img.height,
+            watermarkApplied: options.applyWatermark !== false
+          });
+        } catch (error) {
+          console.error('处理图像时出错:', error);
+          reject(error);
+        }
+      };
+      
+      img.onerror = function() {
+        console.error('加载图像失败');
+        reject(new Error('加载图像失败'));
+      };
+      
+      img.src = dataUrl;
+    } catch (error) {
+      console.error('主线程处理图像时出错:', error);
+      reject(error);
+    }
+  });
+}
+
+/**
+ * 使用Web Worker处理图像
+ * @param {string} dataUrl - 图像数据URL
+ * @param {Object} options - 处理选项
+ * @returns {Promise} - 处理结果Promise
  */
 function processImageWithWorker(dataUrl, options = {}) {
-  return initWorker().then(() => {
-    return sendToWorker({
-      type: 'processImage',
-      data: {
-        imageData: dataUrl,
-        quality: options.quality,
-        format: options.format
+  return new Promise((resolve, reject) => {
+    try {
+      console.log('使用Worker处理图像，选项:', JSON.stringify({
+        isPreview: options.isPreview,
+        isDownload: options.isDownload,
+        applyWatermark: options.applyWatermark
+      }));
+      
+      // 检查Worker是否可用
+      if (!imageWorker) {
+        reject(new Error('Worker未初始化'));
+        return;
       }
-    });
+      
+      // 准备水印选项
+      let watermarkOptions = null;
+      if (options.applyWatermark !== false) {
+        // 确保水印选项中有位置信息
+        let position = options.position;
+        if (!position && window.watermarkState && window.watermarkState.relativePosition) {
+          position = { ...window.watermarkState.relativePosition };
+        }
+        if (!position) {
+          position = { x: 50, y: 50 };
+        }
+        
+        // 创建水印选项对象
+        watermarkOptions = {
+          type: options.type || window.watermarkState?.type || 'text',
+          text: options.text || window.watermarkState?.text || '仅供验证使用',
+          color: options.color || window.watermarkState?.color || '#ff0000',
+          fontSize: options.fontSize || window.watermarkState?.fontSize || 24,
+          opacity: options.opacity || window.watermarkState?.opacity || 50,
+          rotation: options.rotation || window.watermarkState?.rotation || 0,
+          position: position,
+          scale: options.scale || window.watermarkState?.scale || 1.0
+        };
+      }
+      
+      // 设置消息处理函数
+      const messageHandler = function(e) {
+        try {
+          // 移除事件监听器
+          imageWorker.removeEventListener('message', messageHandler);
+          imageWorker.removeEventListener('error', errorHandler);
+          
+          // 处理结果
+          const result = e.data;
+          
+          // 检查是否有错误
+          if (result.error) {
+            console.error('Worker处理图像出错:', result.error);
+            reject(new Error(result.error));
+            return;
+          }
+          
+          // 创建Blob
+          const processedBlob = dataURLToBlob(result.processedDataUrl);
+          
+          // 创建BlobURL
+          const blobUrl = URL.createObjectURL(processedBlob);
+          
+          // 返回处理结果
+          resolve({
+            previewUrl: result.processedDataUrl,
+            blobUrl: blobUrl,
+            blob: processedBlob,
+            width: result.width,
+            height: result.height,
+            watermarkApplied: options.applyWatermark !== false
+          });
+        } catch (error) {
+          console.error('处理Worker返回的数据时出错:', error);
+          reject(error);
+        }
+      };
+      
+      // 设置错误处理函数
+      const errorHandler = function(error) {
+        console.error('Worker处理图像时出错:', error);
+        imageWorker.removeEventListener('message', messageHandler);
+        imageWorker.removeEventListener('error', errorHandler);
+        reject(error);
+      };
+      
+      // 添加事件监听器
+      imageWorker.addEventListener('message', messageHandler);
+      imageWorker.addEventListener('error', errorHandler);
+      
+      // 发送消息到Worker
+      imageWorker.postMessage({
+        action: 'processImage',
+        dataUrl: dataUrl,
+        watermarkOptions: watermarkOptions,
+        format: options.format || 'image/jpeg',
+        quality: options.quality || 0.92
+      });
+    } catch (error) {
+      console.error('使用Worker处理图像时出错:', error);
+      reject(error);
+    }
   });
 }
 
@@ -729,92 +542,117 @@ function applyWatermarkWithWorker(dataUrl, options = {}) {
 }
 
 /**
- * 在预览区域显示图片
- * @param {string} blobUrl - 图片的BlobURL
+ * 显示图像
+ * @param {string} blobUrl - 图像的Blob URL
+ * @param {Object} options - 显示选项
  */
 export function displayImage(blobUrl, options = {}) {
-  try {
-    if (!blobUrl) {
-      console.error('无效的图片URL');
-      return;
-    }
-    
-    const previewImage = document.getElementById('preview-image');
-    const noImageMessage = document.getElementById('no-image-message');
-    const previewCanvas = document.getElementById('preview-canvas');
-    const gifBadge = document.getElementById('gif-badge');
-    
-    if (noImageMessage) {
-      noImageMessage.style.display = 'none';
-    }
-    
-    if (previewCanvas) {
-      previewCanvas.style.display = 'none';
-    }
-    
-    // 显示GIF标记（如果适用）
-    if (gifBadge) {
-      if (options.isGif) {
-        gifBadge.style.display = 'block';
-      } else {
-        gifBadge.style.display = 'none';
-      }
-    }
-    
-    // 检查是否有处理后的GIF预览帧
-    const usePreviewUrl = options.previewUrl && options.isGif;
-    const displayUrl = usePreviewUrl ? options.previewUrl : blobUrl;
-    
-    if (usePreviewUrl) {
-      console.log('使用处理后的GIF第一帧作为预览（带水印）');
-    }
-    
+  const previewImage = document.getElementById('preview-image');
+  const previewCanvas = document.getElementById('preview-canvas');
+  const watermarkContainer = document.getElementById('watermark-container');
+  const noImageMessage = document.getElementById('no-image-message');
+  const gifBadge = document.getElementById('gif-badge');
+  
+  // 隐藏"无图片"消息
+  if (noImageMessage) {
+    noImageMessage.style.display = 'none';
+  }
+  
+  // 是否为GIF
+  const isGif = options.isGif || false;
+  
+  // 显示/隐藏GIF标记
+  if (gifBadge) {
+    gifBadge.style.display = isGif ? 'block' : 'none';
+  }
+
+  if (isGif) {
+    // 对于GIF，使用img标签显示，这样可以保持动画效果
     if (previewImage) {
-      // 先清除旧的src以避免内存泄漏
-      if (previewImage.src && previewImage.src.startsWith('blob:')) {
-        URL.revokeObjectURL(previewImage.src);
+      previewImage.style.display = 'block';
+      previewImage.src = blobUrl;
+      
+      if (previewCanvas) {
+        previewCanvas.style.display = 'none';
       }
       
-      // 预加载图片，确保完全加载后再显示
-      const img = new Image();
-      img.onload = function() {
-        // 保存原始图像对象和尺寸，用于水印渲染
-        updateState({
-          originalImage: img,
-          originalImageWidth: img.naturalWidth,
-          originalImageHeight: img.naturalHeight
-        });
+      // 等待图片加载完成，然后调整水印容器大小
+      previewImage.onload = function() {
+        console.log('GIF加载完成，尺寸：', previewImage.naturalWidth, 'x', previewImage.naturalHeight);
         
-        console.log('displayImage: 已保存原始图像对象:', img.naturalWidth, 'x', img.naturalHeight);
-        
-        // 图片加载完成后，更新预览图
-        previewImage.src = displayUrl;
-        previewImage.style.display = 'block';
-        
-        // 更新水印位置
-        updateWatermarkPosition();
-      };
-      
-      img.onerror = function() {
-        console.error('加载图片失败:', displayUrl);
-        
-        // 如果预览URL加载失败，尝试使用原始URL
-        if (usePreviewUrl) {
-          console.log('预览图加载失败，尝试使用原始GIF');
-          previewImage.src = blobUrl;
-        } else {
-          if (noImageMessage) {
-            noImageMessage.textContent = '图片加载失败';
-            noImageMessage.style.display = 'block';
+        // 调整水印容器大小
+        if (watermarkContainer) {
+          watermarkContainer.style.width = previewImage.offsetWidth + 'px';
+          watermarkContainer.style.height = previewImage.offsetHeight + 'px';
+          
+          // 更新水印，如果需要
+          if (typeof updateWatermark === 'function' && options.updateWatermark !== false) {
+            updateWatermark();
           }
         }
       };
-      
-      img.src = displayUrl;
     }
-  } catch (error) {
-    console.error('显示图片时出错:', error);
+  } else {
+    // 对于非GIF图像，使用Canvas显示
+    if (previewCanvas && options.imageData) {
+      const ctx = previewCanvas.getContext('2d');
+      
+      // 设置Canvas大小
+      previewCanvas.width = options.imageData.width;
+      previewCanvas.height = options.imageData.height;
+      
+      // 绘制图像
+      ctx.putImageData(options.imageData, 0, 0);
+      
+      // 显示Canvas并隐藏img
+      previewCanvas.style.display = 'block';
+      if (previewImage) {
+        previewImage.style.display = 'none';
+      }
+      
+      // 调整水印容器大小
+      if (watermarkContainer) {
+        watermarkContainer.style.width = previewCanvas.offsetWidth + 'px';
+        watermarkContainer.style.height = previewCanvas.offsetHeight + 'px';
+        
+        // 更新水印，如果需要
+        if (typeof updateWatermark === 'function' && options.updateWatermark !== false) {
+          updateWatermark();
+        }
+      }
+    } else if (previewImage && blobUrl) {
+      // 如果没有imageData，回退到使用img显示
+      previewImage.style.display = 'block';
+      previewImage.src = blobUrl;
+      
+      if (previewCanvas) {
+        previewCanvas.style.display = 'none';
+      }
+      
+      // 等待图片加载完成，然后调整水印容器大小
+      previewImage.onload = function() {
+        // 调整水印容器大小
+        if (watermarkContainer) {
+          watermarkContainer.style.width = previewImage.offsetWidth + 'px';
+          watermarkContainer.style.height = previewImage.offsetHeight + 'px';
+          
+          // 更新水印，如果需要
+          if (typeof updateWatermark === 'function' && options.updateWatermark !== false) {
+            updateWatermark();
+          }
+        }
+      };
+    }
   }
+  
+  // 触发预览更新事件
+  const previewUpdateEvent = new CustomEvent('previewUpdate', {
+    detail: {
+      blobUrl,
+      ...options
+    }
+  });
+  document.dispatchEvent(previewUpdateEvent);
 }
 
 /**
@@ -885,11 +723,20 @@ export function batchProcessImages(files, progressCallback, options = {}) {
             applyWatermark: true, // 明确指定应用水印，确保GIF也会应用水印
             isDownload: true,
             // 添加明确的标志，表示这是批量处理模式
-            isBatchProcessing: true
+            isBatchProcessing: true,
+            // 确保传递当前水印设置
+            text: options.text || watermarkState.text,
+            color: options.color || watermarkState.color,
+            fontSize: options.fontSize || watermarkState.fontSize,
+            opacity: options.opacity || watermarkState.opacity,
+            rotation: options.rotation || watermarkState.rotation,
+            position: options.position || watermarkState.relativePosition,
+            tileSpacing: options.tileSpacing || watermarkState.tileSpacing,
+            type: options.type || watermarkState.type
           };
           
           // 处理图片
-          processImage(file, true, fileOptions)
+          processImage(file, fileOptions)
             .then(result => {
               if (result) {
                 // 添加到结果数组
@@ -898,7 +745,8 @@ export function batchProcessImages(files, progressCallback, options = {}) {
                   fileName: file.name,
                   originalFile: file,
                   width: result.width,
-                  height: result.height
+                  height: result.height,
+                  watermarkApplied: true // 标记已应用水印
                 };
                 
                 console.log(`文件 ${file.name} 处理成功`);
@@ -1007,9 +855,9 @@ export function generateAndDownloadZip(processedImages, zipFileName = 'watermark
       // 检查是否有图片
       if (!processedImages || processedImages.length === 0) {
         reject(new Error('没有提供图片'));
-      return;
-    }
-    
+        return;
+      }
+      
       console.log(`开始生成ZIP: ${zipFileName}, 包含 ${processedImages.length} 张图片`);
       
       // 加载JSZip库
@@ -1022,195 +870,251 @@ export function generateAndDownloadZip(processedImages, zipFileName = 'watermark
       // 创建新的ZIP实例
       const zip = new JSZip();
       
-      // 创建images文件夹
-      const imagesFolder = zip.folder('images');
+      // 创建根文件夹
+      const rootFolder = zip.folder('watermarked_images');
       
-      // 记录已添加的文件名，避免重名
-      const addedFileNames = new Set();
+      // 保存文件路径结构
+      const filePathMap = new Map();
+      let hasPathStructure = false;
       
-      // 添加的图片数量
+      // 确定是否需要保留文件夹结构
+      processedImages.forEach(img => {
+        if (img && img.originalFile && img.originalFile.webkitRelativePath) {
+          const path = img.originalFile.webkitRelativePath;
+          if (path && path.includes('/')) {
+            hasPathStructure = true;
+            // 获取路径中的文件夹部分
+            const folderPath = path.substring(0, path.lastIndexOf('/'));
+            filePathMap.set(img, folderPath);
+          }
+        }
+      });
+      
+      console.log(`是否保留文件夹结构: ${hasPathStructure}`);
+      
+      // 错误日志
+      const errorLog = [];
+      
+      // 总图片数
+      const totalImages = processedImages.filter(img => img).length;
       let addedCount = 0;
       
-      // 错误计数
-      let errorCount = 0;
-      const errorFiles = [];
+      // 创建错误日志更新函数
+      const updateErrorLog = () => {
+        if (errorLog.length > 0) {
+          console.log('生成错误日志文件...');
+          // 创建错误日志内容
+          let logContent = '水印处理错误日志\n';
+          logContent += '====================\n\n';
+          logContent += `总文件数: ${totalImages}\n`;
+          logContent += `处理失败: ${errorLog.length}\n\n`;
+          logContent += '详细错误信息:\n';
+          
+          errorLog.forEach((error, index) => {
+            logContent += `${index + 1}. 文件: ${error.file}\n`;
+            logContent += `   错误: ${error.error}\n\n`;
+          });
+          
+          // 添加到ZIP文件
+          rootFolder.file('error_log.txt', logContent);
+        }
+      };
       
-      // 更新错误日志的函数
-    const updateErrorLog = () => {
-        if (errorFiles.length === 0) return;
-        
-        // 创建错误日志文本
-        let errorLog = '处理错误日志\n';
-        errorLog += '=================\n';
-        errorLog += `生成时间: ${new Date().toLocaleString()}\n`;
-        errorLog += `总图片数: ${processedImages.length}\n`;
-        errorLog += `错误数量: ${errorFiles.length}\n\n`;
-        errorLog += '错误详情:\n';
-        
-        // 添加每个错误的详情
-        errorFiles.forEach((error, index) => {
-          errorLog += `${index + 1}. 文件: ${error.fileName}\n`;
-          errorLog += `   错误: ${error.error}\n\n`;
-        });
-        
-        // 添加错误日志到ZIP
-        zip.file('error_log.txt', errorLog);
-    };
-    
-    // 更新进度的函数
-    const updateZipProgress = (status) => {
-      if (progressCallback) {
-          const progress = addedCount / processedImages.length;
+      // ZIP进度更新函数
+      const updateZipProgress = (status) => {
+        if (progressCallback) {
+          const progress = addedCount / totalImages;
           progressCallback({
-            status: status || `添加到ZIP: ${addedCount}/${processedImages.length}`,
-            progress: progress,
-            addedCount: addedCount,
-            totalCount: processedImages.length,
-            errorCount: errorCount
-        });
-      }
-    };
-    
-      // 开始处理
-      updateZipProgress('开始创建ZIP文件...');
+            status: status || `已添加 ${addedCount}/${totalImages} 张图片到ZIP文件`,
+            progress: progress
+          });
+        }
+      };
       
       // 递归添加图片到ZIP
-      const addImageToZip = (index) => {
-        if (index >= processedImages.length) {
-          // 所有图片添加完成
-          updateErrorLog();
-          
-          // 生成ZIP文件
-          updateZipProgress('正在生成ZIP文件...');
-          
-          zip.generateAsync({
-            type: 'blob',
-            compression: 'DEFLATE',
-            compressionOptions: {
-              level: 6
-            }
-          }, (metadata) => {
-            const percent = metadata.percent.toFixed(0);
-            updateZipProgress(`正在压缩: ${percent}%`);
-          })
-          .then(blob => {
-            console.log(`ZIP文件生成完成，大小: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
-            updateZipProgress('ZIP文件生成完成，准备下载');
+      const addImageToZip = async (index) => {
+        try {
+          // 所有图片都已添加
+          if (index >= processedImages.length) {
+            // 添加错误日志
+            updateErrorLog();
+            
+            // 更新状态
+            updateZipProgress('生成ZIP文件中...');
+            
+            // 生成ZIP文件内容
+            const zipContent = await zip.generateAsync({
+              type: 'blob',
+              compression: 'DEFLATE',
+              compressionOptions: {
+                level: 6
+              }
+            }, (metadata) => {
+              // 更新ZIP生成进度
+              const zipGenProgress = metadata.percent / 100;
+              progressCallback({
+                status: `生成ZIP文件中... ${Math.round(metadata.percent)}%`,
+                progress: zipGenProgress
+              });
+            });
             
             // 创建下载链接
+            const zipUrl = URL.createObjectURL(zipContent);
             const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
+            link.href = zipUrl;
             link.download = zipFileName;
             
-            // 触发下载
+            // 模拟点击下载
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             
-            // 释放对象URL
+            // 清理URL
             setTimeout(() => {
-              URL.revokeObjectURL(link.href);
+              URL.revokeObjectURL(zipUrl);
             }, 100);
-            
-            // 确保关闭处理模态框
-            const processingModal = document.getElementById('processing-modal');
-            if (processingModal && processingModal.style.display === 'flex') {
-              console.log('ZIP生成完成，关闭处理模态框');
-              processingModal.style.display = 'none';
-            }
             
             // 返回结果
             resolve({
               success: true,
-              zipSize: blob.size,
-              imageCount: addedCount,
-              errorCount: errorCount
+              totalFiles: processedImages.length,
+              addedFiles: addedCount,
+              errors: errorLog.length
             });
-          })
-          .catch(error => {
-            console.error('生成ZIP文件时出错:', error);
             
-            // 确保关闭处理模态框
-            const processingModal = document.getElementById('processing-modal');
-            if (processingModal && processingModal.style.display === 'flex') {
-              console.log('由于ZIP生成错误，关闭处理模态框');
-              processingModal.style.display = 'none';
-            }
-            
-            reject(error);
-          });
+            return;
+          }
           
-          return;
-        }
-        
-        // 获取当前图片
-        const image = processedImages[index];
-        
-        // 跳过完全无效的图片
-        if (!image) {
-          console.warn(`跳过无效图片，索引: ${index}`);
-          setTimeout(() => addImageToZip(index + 1), 0);
-          return;
-        }
-        
-        // 如果没有blob，但有originalFile，使用原始文件
-        if (!image.blob && image.originalFile) {
-          console.log(`使用原始文件作为备用: ${image.fileName || `image_${index + 1}`}`);
-          image.blob = image.originalFile;
-        }
-        
-        // 如果仍然没有可用的blob，跳过
-        if (!image.blob) {
-          console.warn(`无法找到有效的blob数据，跳过图片: ${index}`);
-          setTimeout(() => addImageToZip(index + 1), 0);
-          return;
-        }
-        
-        try {
-          // 获取文件名
-          let fileName = image.fileName || `image_${index + 1}.jpg`;
+          const img = processedImages[index];
           
-          // 确保文件名唯一
-          if (addedFileNames.has(fileName)) {
-            // 添加唯一标识符
-            const dotIndex = fileName.lastIndexOf('.');
-            if (dotIndex > 0) {
-              const name = fileName.substring(0, dotIndex);
-              const ext = fileName.substring(dotIndex);
-              fileName = `${name}_${Date.now() % 10000}${ext}`;
-            } else {
-              fileName = `${fileName}_${Date.now() % 10000}`;
+          // 跳过空值
+          if (!img) {
+            addImageToZip(index + 1);
+            return;
+          }
+          
+          // 获取文件名和blob
+          const fileName = img.fileName || `image_${index}.jpg`;
+          let blob = img.blob;
+          
+          // 更新进度
+          updateZipProgress(`正在处理: ${fileName}`);
+          
+          // 检查是否为GIF文件
+          const isGifFile = fileName.toLowerCase().endsWith('.gif') || 
+                          (blob && blob.type === 'image/gif') ||
+                          (img.originalFile && img.originalFile.type === 'image/gif');
+          
+          // 检查是否需要处理GIF（处理错误或尚未应用水印的GIF）
+          if (isGifFile && (!img.watermarkApplied || img.processingError)) {
+            try {
+              console.log(`处理ZIP中的GIF文件: ${fileName}`);
+              
+              // 特殊处理GIF文件
+              const processGifForZip = async () => {
+                // 更新状态
+                updateZipProgress(`正在应用水印到GIF: ${fileName}`);
+                
+                // 使用原始文件
+                const originalFile = img.originalFile || img.blob;
+                
+                // 创建GIF处理选项
+                const gifOptions = {
+                  fileName: fileName,
+                  applyWatermark: true, // 明确指定应用水印
+                  preserveAnimation: true, // 保留GIF动画
+                  isDownload: true,
+                  text: watermarkState.text,
+                  color: watermarkState.color,
+                  fontSize: watermarkState.fontSize,
+                  opacity: watermarkState.opacity,
+                  rotation: watermarkState.rotation,
+                  position: watermarkState.relativePosition,
+                  tileSpacing: watermarkState.tileSpacing,
+                  type: watermarkState.type
+                };
+                
+                // 再次尝试处理GIF
+                try {
+                  const result = await processImage(originalFile, gifOptions);
+                  
+                  if (result && (result.blob || result)) {
+                    console.log(`GIF文件 ${fileName} 处理成功`);
+                    return result.blob || result;
+                  } else {
+                    throw new Error('GIF处理结果为空');
+                  }
+                } catch (gifError) {
+                  console.error(`ZIP中GIF处理失败: ${fileName}`, gifError);
+                  throw gifError;
+                }
+              };
+              
+              // 处理GIF文件
+              try {
+                // 尝试处理GIF
+                blob = await processGifForZip();
+                console.log(`ZIP中的GIF处理完成: ${fileName}`);
+              } catch (gifError) {
+                console.warn(`无法处理ZIP中的GIF: ${fileName}，使用原始文件`, gifError);
+                errorLog.push({
+                  file: fileName,
+                  error: `GIF处理失败: ${gifError.message || '未知错误'}`
+                });
+                blob = img.originalFile || img.blob; // 使用原始文件作为回退
+              }
+            } catch (gifError) {
+              console.error(`ZIP中的GIF处理出错: ${fileName}`, gifError);
+              // 记录错误但继续使用原始blob
             }
           }
           
-          // 记录文件名
-          addedFileNames.add(fileName);
+          // 确保blob有效
+          if (!blob) {
+            console.error(`文件 ${fileName} 的blob为空`);
+            errorLog.push({
+              file: fileName,
+              error: 'Blob为空'
+            });
+            // 继续处理下一个
+            setTimeout(() => addImageToZip(index + 1), 0);
+            return;
+          }
           
-          // 确保文件扩展名与MIME类型匹配
-          const blob = image.blob;
-          
-          // 使用统一的扩展名处理函数
-          fileName = ensureCorrectExtension(blob, fileName);
-        
-        // 添加到ZIP
-          imagesFolder.file(fileName, blob);
-          
-          // 更新计数
-          addedCount++;
-          
-          // 更新进度
-          updateZipProgress();
-          
-          // 添加延迟，避免UI阻塞
-          setTimeout(() => addImageToZip(index + 1), 0);
-      } catch (error) {
-          console.error(`添加图片 ${index} 到ZIP时出错:`, error);
-          
-          // 记录错误
-          errorCount++;
-          errorFiles.push({
-            fileName: image.fileName || `image_${index + 1}`,
-            error: error.message || '添加到ZIP时出错'
+          try {
+            // 确定文件路径
+            let filePath = fileName;
+            
+            // 如果有文件夹结构，保留它
+            if (hasPathStructure && filePathMap.has(img)) {
+              const folderPath = filePathMap.get(img);
+              filePath = `${folderPath}/${fileName}`;
+            }
+            
+            // 添加到ZIP
+            rootFolder.file(filePath, blob);
+            addedCount++;
+            
+            // 更新进度
+            updateZipProgress(`已添加 ${addedCount}/${totalImages} 张图片到ZIP文件`);
+            
+            // 处理下一张图片（使用定时器避免阻塞UI）
+            setTimeout(() => addImageToZip(index + 1), 0);
+          } catch (error) {
+            console.error(`添加文件 ${fileName} 到ZIP时出错:`, error);
+            errorLog.push({
+              file: fileName,
+              error: error.message || '未知错误'
+            });
+            
+            // 继续处理下一个
+            setTimeout(() => addImageToZip(index + 1), 0);
+          }
+        } catch (error) {
+          console.error('添加图片到ZIP时出错:', error);
+          errorLog.push({
+            file: `索引 ${index}`,
+            error: error.message || '未知错误'
           });
           
           // 继续处理下一个
@@ -1222,14 +1126,6 @@ export function generateAndDownloadZip(processedImages, zipFileName = 'watermark
       addImageToZip(0);
     } catch (error) {
       console.error('生成ZIP文件时出错:', error);
-      
-      // 确保关闭处理模态框
-      const processingModal = document.getElementById('processing-modal');
-      if (processingModal && processingModal.style.display === 'flex') {
-        console.log('由于ZIP生成错误，关闭处理模态框');
-        processingModal.style.display = 'none';
-      }
-      
       reject(error);
     }
   });
@@ -1639,4 +1535,263 @@ function ensureCorrectExtension(blob, fileName) {
   
   // 扩展名正确，保留原始文件名
   return fileName;
+}
+
+/**
+ * 处理普通图像（非GIF）
+ * @param {File|Blob} imageFile - 图像文件
+ * @param {Object} options - 处理选项
+ * @returns {Promise} - 处理结果Promise
+ */
+async function processRegularImage(imageFile, options = {}) {
+  return new Promise((resolve, reject) => {
+    try {
+      console.log('处理普通图像:', imageFile.name);
+      
+      // 使用FileReader读取文件
+      const reader = new FileReader();
+      
+      reader.onload = async function(e) {
+        try {
+          const dataUrl = e.target.result;
+          
+          // 根据选项确定如何处理图像
+          let result;
+          
+          // 为了确保稳定性，在批量处理模式下直接使用主线程处理
+          if (options.isBatchProcessing) {
+            console.log('批量处理模式：在主线程处理图像');
+            result = await processImageInMainThread(dataUrl, options);
+          } else {
+            // 尝试使用Worker处理
+            const canUseWorker = options.useWorker !== false && typeof Worker !== 'undefined' && imageWorker;
+            
+            if (canUseWorker) {
+              try {
+                // 使用Web Worker处理图像
+                console.log('使用Web Worker处理图像');
+                result = await processImageWithWorker(dataUrl, options);
+              } catch (workerError) {
+                console.warn('Worker处理失败，回退到主线程处理:', workerError);
+                result = await processImageInMainThread(dataUrl, options);
+              }
+            } else {
+              console.log('在主线程处理图像');
+              result = await processImageInMainThread(dataUrl, options);
+            }
+          }
+          
+          // 设置文件名
+          result.fileName = imageFile.name;
+          
+          // 添加原始文件引用
+          result.originalBlob = imageFile;
+          
+          // 返回处理结果
+          resolve(result);
+        } catch (error) {
+          console.error('处理图像数据时出错:', error);
+          reject(error);
+        }
+      };
+      
+      reader.onerror = function() {
+        console.error('读取文件失败');
+        reject(new Error('读取文件失败'));
+      };
+      
+      reader.readAsDataURL(imageFile);
+    } catch (error) {
+      console.error('处理普通图像时出错:', error);
+      reject(error);
+    }
+  });
+}
+
+/**
+ * 将数据URL转换为Blob
+ * @param {string} dataURL - 数据URL
+ * @returns {Blob} - 转换后的Blob
+ */
+function dataURLToBlob(dataURL) {
+  // 提取MIME类型和base64数据
+  const parts = dataURL.split(';base64,');
+  const contentType = parts[0].split(':')[1];
+  const raw = window.atob(parts[1]);
+  const rawLength = raw.length;
+  
+  // 创建ArrayBuffer
+  const uInt8Array = new Uint8Array(rawLength);
+  
+  // 填充ArrayBuffer
+  for (let i = 0; i < rawLength; ++i) {
+    uInt8Array[i] = raw.charCodeAt(i);
+  }
+  
+  // 创建Blob
+  return new Blob([uInt8Array], { type: contentType });
+}
+
+/**
+ * 添加图像到ZIP文件
+ * @param {JSZip} zip - JSZip实例
+ * @param {Object} imageData - 图像数据
+ * @param {string} folderName - 文件夹名称
+ * @returns {Promise} - 处理结果Promise
+ */
+export async function addImageToZip(zip, imageData, folderName = '') {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // 检查参数
+      if (!zip || !imageData) {
+        reject(new Error('无效的参数'));
+        return;
+      }
+      
+      // 获取文件名
+      const fileName = imageData.fileName || generateFileName(imageData);
+      
+      // 创建文件路径
+      const filePath = folderName ? `${folderName}/${fileName}` : fileName;
+      
+      // 检查是否为GIF
+      const isGif = fileName.toLowerCase().endsWith('.gif') || 
+                   (imageData.blob && imageData.blob.type && imageData.blob.type.includes('gif')) ||
+                   imageData.isGif === true;
+      
+      console.log(`添加图像到ZIP: ${filePath}, 是否为GIF: ${isGif}`);
+      
+      // 处理GIF文件
+      if (isGif) {
+        try {
+          console.log('处理GIF文件:', fileName);
+          
+          // 尝试多种方法获取GIF数据
+          let gifData = null;
+          
+          // 方法1: 直接使用blob
+          if (imageData.blob instanceof Blob) {
+            try {
+              console.log('使用blob添加GIF到ZIP');
+              zip.file(filePath, imageData.blob);
+              console.log('成功添加GIF到ZIP (使用blob)');
+              resolve();
+              return;
+            } catch (blobError) {
+              console.warn('使用blob添加GIF失败:', blobError);
+            }
+          }
+          
+          // 方法2: 使用blobUrl
+          if (imageData.blobUrl) {
+            try {
+              console.log('使用blobUrl获取GIF数据');
+              const response = await fetch(imageData.blobUrl);
+              if (response.ok) {
+                const blob = await response.blob();
+                zip.file(filePath, blob);
+                console.log('成功添加GIF到ZIP (使用blobUrl)');
+                resolve();
+                return;
+              }
+            } catch (urlError) {
+              console.warn('使用blobUrl获取GIF数据失败:', urlError);
+            }
+          }
+          
+          // 方法3: 使用原始文件
+          if (imageData.originalBlob instanceof Blob) {
+            try {
+              console.log('使用originalBlob添加GIF到ZIP');
+              zip.file(filePath, imageData.originalBlob);
+              console.log('成功添加GIF到ZIP (使用originalBlob)');
+              resolve();
+              return;
+            } catch (originalError) {
+              console.warn('使用originalBlob添加GIF失败:', originalError);
+            }
+          }
+          
+          // 方法4: 使用静态备份
+          if (window.staticGifWithWatermark instanceof Blob) {
+            try {
+              console.log('使用静态GIF备份添加到ZIP');
+              zip.file(filePath, window.staticGifWithWatermark);
+              console.log('成功添加GIF到ZIP (使用静态备份)');
+              resolve();
+              return;
+            } catch (staticError) {
+              console.warn('使用静态GIF备份添加失败:', staticError);
+            }
+          }
+          
+          // 如果所有方法都失败，尝试使用最小备份
+          if (window.backupGifData) {
+            try {
+              console.log('使用最小GIF备份添加到ZIP');
+              const minimalBlob = new Blob([window.backupGifData], { type: 'image/gif' });
+              zip.file(filePath, minimalBlob);
+              console.log('成功添加GIF到ZIP (使用最小备份)');
+              resolve();
+              return;
+            } catch (minimalError) {
+              console.warn('使用最小GIF备份添加失败:', minimalError);
+            }
+          }
+          
+          // 如果所有方法都失败，返回错误
+          console.error('无法添加GIF到ZIP，所有方法都失败');
+          reject(new Error('无法添加GIF到ZIP，所有方法都失败'));
+        } catch (gifError) {
+          console.error('处理GIF文件时出错:', gifError);
+          reject(gifError);
+        }
+        return;
+      }
+      
+      // 处理普通图像
+      try {
+        console.log('处理普通图像:', fileName);
+        
+        // 获取Blob数据
+        let imageBlob = null;
+        
+        // 尝试使用blob
+        if (imageData.blob instanceof Blob) {
+          imageBlob = imageData.blob;
+        }
+        // 尝试使用blobUrl
+        else if (imageData.blobUrl) {
+          const response = await fetch(imageData.blobUrl);
+          if (response.ok) {
+            imageBlob = await response.blob();
+          }
+        }
+        // 尝试使用原始文件
+        else if (imageData.originalBlob instanceof Blob) {
+          imageBlob = imageData.originalBlob;
+        }
+        // 尝试使用previewUrl
+        else if (imageData.previewUrl) {
+          imageBlob = dataURLToBlob(imageData.previewUrl);
+        }
+        
+        // 检查是否获取到Blob
+        if (!imageBlob) {
+          throw new Error('无法获取图像数据');
+        }
+        
+        // 添加到ZIP
+        zip.file(filePath, imageBlob);
+        console.log('成功添加图像到ZIP');
+        resolve();
+      } catch (error) {
+        console.error('添加图像到ZIP时出错:', error);
+        reject(error);
+      }
+    } catch (error) {
+      console.error('添加图像到ZIP时出错:', error);
+      reject(error);
+    }
+  });
 } 

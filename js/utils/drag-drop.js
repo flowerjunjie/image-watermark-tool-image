@@ -6,6 +6,7 @@
 import { processImage } from './image-processor.js';
 import { watermarkState, updateState, applyFirstImageSettings, saveFirstImageSettings, saveCurrentImageSettings, applyImageSettings } from '../core/state.js';
 import { updateWatermark } from '../core/watermark.js';
+import { showError, showMessage, showStatus } from '../ui/messages.js';
 
 /**
  * 初始化拖放功能
@@ -276,6 +277,19 @@ export function handleImageFiles(files) {
       // 常见图片文件扩展名列表
       const validImageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.tif', '.ico', '.heic', '.heif', '.raw', '.psd', '.cr2', '.nef', '.arw'];
       
+      // 检查是否为文件夹上传
+      let hasFolderStructure = false;
+      for (let i = 0; i < files.length; i++) {
+        if (files[i].webkitRelativePath) {
+          hasFolderStructure = true;
+          break;
+        }
+      }
+      
+      if (hasFolderStructure) {
+        console.log('检测到文件夹上传，保留目录结构');
+      }
+      
       // 过滤出图片文件 - 同时检查MIME类型和文件扩展名
       const imageFiles = Array.from(files).filter(file => {
         // 通过MIME类型判断
@@ -362,13 +376,20 @@ export function handleImageFiles(files) {
       // 在UI中显示文件统计信息
       displayFileStatistics(extensionCount, imageFiles.length, files.length, { total: 0, types: {} });
       
-      // 如果图片数量较多，显示处理模态框
+      // 如果图片数量较多或存在文件夹结构，显示处理模态框
       const totalFiles = imageFiles.length;
-      if (totalFiles > 10) {
+      if (totalFiles > 10 || hasFolderStructure) {
         if (processingModal) {
           const modalTitle = processingModal.querySelector('.modal-title');
-          if (modalTitle) modalTitle.textContent = '处理中...';
-          if (processingStatus) processingStatus.textContent = `正在加载 0/${totalFiles} 图片文件...`;
+          if (modalTitle) {
+            modalTitle.textContent = hasFolderStructure ? 
+              '处理文件夹中...' : '处理中...';
+          }
+          if (processingStatus) {
+            processingStatus.textContent = hasFolderStructure ?
+              `正在处理文件夹内容... 0/${totalFiles}` : 
+              `正在加载 0/${totalFiles} 图片文件...`;
+          }
           
           // 重置进度条
           if (modalProgressBar) {
@@ -382,7 +403,7 @@ export function handleImageFiles(files) {
       }
       
       // 检查是否是首次加载图片
-      const isFirstLoad = watermarkState.files.length === 0;
+      const isFirstLoad = !watermarkState.files || watermarkState.files.length === 0;
       
       // 更新状态
       updateState({
@@ -416,11 +437,13 @@ export function handleImageFiles(files) {
           processedCount++;
           
           // 更新进度
-          if (totalFiles > 10 && processingModal && modalProgressBar && processingStatus) {
+          if ((totalFiles > 10 || hasFolderStructure) && processingModal && modalProgressBar && processingStatus) {
             const progress = Math.round((processedCount / totalFiles) * 100);
             modalProgressBar.style.width = `${progress}%`;
             modalProgressBar.textContent = `${progress}%`;
-            processingStatus.textContent = `正在加载 ${processedCount}/${totalFiles} 图片文件...`;
+            processingStatus.textContent = hasFolderStructure ?
+              `正在处理文件夹内容... ${processedCount}/${totalFiles}` :
+              `正在加载 ${processedCount}/${totalFiles} 图片文件...`;
           }
         }
         
@@ -429,7 +452,7 @@ export function handleImageFiles(files) {
           setTimeout(() => processThumbnails(endIndex), 10);
         } else {
           // 所有图片都已处理完成
-          if (totalFiles > 10 && processingModal) {
+          if ((totalFiles > 10 || hasFolderStructure) && processingModal) {
             processingModal.style.display = 'none';
           }
           
@@ -451,6 +474,9 @@ export function handleImageFiles(files) {
       if (processingModal && processingModal.style.display === 'flex') {
         processingModal.style.display = 'none';
       }
+      
+      // 显示错误消息
+      showError(`处理图片文件时出错: ${error.message}`);
       
       // 拒绝Promise
       reject(error);
@@ -538,30 +564,42 @@ function createThumbnail(file, index) {
       currentIndex: index
     });
     
-    // 直接显示预览图像，不进行复杂处理
-    displaySimplePreview(targetFile);
+    // 设置一个全局标志来追踪当前切换状态
+    window.currentlySwitchingImage = true;
     
-    // 应用设置
-    if (watermarkState.processedSettings[targetFile.name]) {
-      applyImageSettings(targetFile.name);
-    } else if (watermarkState.firstImageSettings) {
-      applyFirstImageSettings();
+    // 添加互斥锁，防止快速切换导致的问题
+    if (window.thumbnailClickTimeout) {
+      clearTimeout(window.thumbnailClickTimeout);
     }
     
-    // 保存当前图片的设置
-    try {
-      saveCurrentImageSettings();
-      console.log('已保存当前图片设置:', targetFile.name);
-    } catch (error) {
-      console.error('保存当前图片设置时出错:', error);
-    }
-    
-    // 移除处理中标记和加载指示器
-    setTimeout(() => {
-      thumbnail.classList.remove('processing');
-      const loadingEl = thumbnail.querySelector('.switch-loading');
-      if (loadingEl) loadingEl.remove();
-    }, 500);
+    // 使用setTimeout来确保UI有时间响应
+    window.thumbnailClickTimeout = setTimeout(() => {
+      // 直接显示预览图像，不进行复杂处理
+      displaySimplePreview(targetFile);
+      
+      // 应用设置
+      if (watermarkState.processedSettings[targetFile.name]) {
+        applyImageSettings(targetFile.name);
+      } else if (watermarkState.firstImageSettings) {
+        applyFirstImageSettings();
+      }
+      
+      // 保存当前图片的设置
+      try {
+        saveCurrentImageSettings();
+        console.log('已保存当前图片设置:', targetFile.name);
+      } catch (error) {
+        console.error('保存当前图片设置时出错:', error);
+      }
+      
+      // 移除处理中标记和加载指示器
+      setTimeout(() => {
+        thumbnail.classList.remove('processing');
+        const loadingEl = thumbnail.querySelector('.switch-loading');
+        if (loadingEl) loadingEl.remove();
+        window.currentlySwitchingImage = false;
+      }, 500);
+    }, 100);
   });
   
   // 添加到容器
@@ -598,77 +636,127 @@ function createThumbnail(file, index) {
  * 处理当前选中的图片
  */
 function processCurrentImage() {
-  const currentFile = watermarkState.files[watermarkState.currentIndex];
-  
-  if (!currentFile) {
-    showError('无法加载选中的图片');
-    return;
-  }
-  
-  // 确保预览容器和预览图像元素可见
-  const previewContainer = document.getElementById('preview-container');
-  const previewImage = document.getElementById('preview-image');
-  const previewCanvas = document.getElementById('preview-canvas');
-  const noImageMessage = document.getElementById('no-image-message');
-  const gifBadge = document.getElementById('gif-badge');
-  
-  // 显示加载状态
-  if (noImageMessage) {
-    noImageMessage.textContent = '正在加载图片...';
-    noImageMessage.style.display = 'block';
-  }
-  
-  if (previewContainer) {
-    previewContainer.style.backgroundColor = 'transparent';
-  }
-  
-  // 重置预览图像和Canvas的显示状态
-  if (previewImage) {
-    previewImage.style.display = 'none';
-    // 确保图片没有旧的src导致缓存问题
-    if (previewImage.src) {
-      try {
-        URL.revokeObjectURL(previewImage.src);
-      } catch (e) {
-        console.warn('撤销旧URL时出错:', e);
-      }
-      previewImage.src = '';
-    }
-  }
-  if (previewCanvas) previewCanvas.style.display = 'none';
-  if (gifBadge) gifBadge.style.display = 'none';
-  
-  // 检查是否应用设置
-  let settingsApplied = false;
-  
-  // 如果有这个图片的保存设置，应用它
-  if (watermarkState.processedSettings[currentFile.name]) {
-    console.log(`应用图片 ${currentFile.name} 的保存设置`);
-    settingsApplied = applyImageSettings(currentFile.name);
-    console.log('设置应用状态:', settingsApplied);
-  }
-  
-  // 如果没有应用这个图片的设置，但有第一张图片的设置，应用第一张图片的设置
-  if (!settingsApplied && watermarkState.currentIndex > 0 && watermarkState.firstImageSettings) {
-    console.log('应用第一张图片的设置');
-    applyFirstImageSettings();
-    settingsApplied = true;
-  }
-  
-  // 直接显示预览图像，不进行复杂处理
-  displaySimplePreview(currentFile);
-  
-  // 保存当前图片设置
-  setTimeout(() => {
-    saveCurrentImageSettings();
-    console.log('已保存当前图片设置:', currentFile.name);
+  if (window.currentFile) {
+    // 保存当前水印状态用于后续恢复
+    const savedWatermarkState = { ...watermarkState };
     
-    // 如果是第一张图片，保存设置作为默认
-    if (watermarkState.currentIndex === 0 && !watermarkState.firstImageSettings) {
-      saveFirstImageSettings();
-      console.log('已保存第一张图片设置作为默认');
+    try {
+      // 清除当前canvas (因为可能切换了模式)
+      const previewCanvas = document.getElementById('preview-canvas');
+      if (previewCanvas) {
+        const ctx = previewCanvas.getContext('2d');
+        ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        previewCanvas.style.display = 'none';
+      }
+      
+      const previewImage = document.getElementById('preview-image');
+      if (previewImage) {
+        previewImage.style.display = 'none';
+      }
+      
+      // 确保水印容器可见
+      const watermarkContainer = document.getElementById('watermark-container');
+      if (watermarkContainer) {
+        watermarkContainer.style.display = 'flex';
+        watermarkContainer.style.zIndex = '99999';
+      }
+      
+      // 获取文件扩展名（转小写）
+      const fileName = window.currentFile.name.toLowerCase();
+      
+      // 检查是否是动图文件
+      const isAnimated = /\.gif$/i.test(fileName);
+      
+      // 更新状态
+      updateState({
+        isGif: isAnimated
+      });
+      
+      // 如果是GIF，使用GIF处理逻辑
+      if (isAnimated) {
+        console.log('处理动态GIF图像');
+        
+        // 检测是否存在已处理的缓存
+        const cachedResult = watermarkState.processed[fileName];
+        
+        if (cachedResult) {
+          console.log('使用缓存的GIF处理结果:', fileName);
+          
+          // 根据缓存类型显示预览
+          if (cachedResult.dataUrl) {
+            displayPreviewImage(cachedResult.dataUrl, true, {
+              fileName: fileName,
+              currentFile: window.currentFile,
+              isCached: true,
+              originalSource: window.currentFile,
+              reprocess: () => processGif(window.currentFile, savedWatermarkState)
+            });
+          } else if (cachedResult.blobUrl) {
+            displayPreviewImage(cachedResult.blobUrl, true, {
+              fileName: fileName,
+              currentFile: window.currentFile,
+              isCached: true,
+              originalSource: window.currentFile,
+              reprocess: () => processGif(window.currentFile, savedWatermarkState)
+            });
+          } else {
+            console.warn('缓存的GIF结果无效，重新处理');
+            processGif(window.currentFile, savedWatermarkState);
+          }
+        } else {
+          // 直接处理GIF
+          processGif(window.currentFile, savedWatermarkState);
+        }
+      } else {
+        // 处理普通图像，使用传统显示方法
+        console.log('处理静态图像预览');
+        
+        // 检测是否存在缓存
+        const cachedResult = watermarkState.processed[fileName];
+        
+        if (cachedResult && cachedResult.blobUrl) {
+          console.log('使用缓存的图像处理结果:', fileName);
+          displayPreviewImage(cachedResult.blobUrl, false, {
+            fileName: fileName,
+            currentFile: window.currentFile,
+            isCached: true,
+            reprocess: () => displaySimplePreview(window.currentFile)
+          });
+        } else {
+          // 直接显示图像
+          displaySimplePreview(window.currentFile);
+        }
+      }
+      
+      // 短暂延迟后恢复水印状态并重新应用水印
+      setTimeout(() => {
+        restoreWatermarkState(savedWatermarkState);
+        updateWatermark();
+      }, 150);
+
+    } catch (error) {
+      console.error('处理当前图像出错:', error);
+      
+      // 出错时仍然尝试恢复水印状态
+      restoreWatermarkState(savedWatermarkState);
+      
+      // 显示错误消息
+      const noImageMessage = document.getElementById('no-image-message');
+      if (noImageMessage) {
+        noImageMessage.textContent = `图像处理错误: ${error.message || '未知错误'}`;
+        noImageMessage.style.display = 'block';
+      }
     }
-  }, 500);
+  } else {
+    console.warn('没有选中图像');
+    
+    // 显示无图像消息
+    const noImageMessage = document.getElementById('no-image-message');
+    if (noImageMessage) {
+      noImageMessage.textContent = '请上传或选择图像';
+      noImageMessage.style.display = 'block';
+    }
+  }
 }
 
 /**
@@ -728,26 +816,6 @@ function loadWatermarkImage(file) {
   };
   
   reader.readAsDataURL(file);
-}
-
-/**
- * 显示错误信息
- * @param {string} message - 错误信息
- */
-function showError(message) {
-  const errorContainer = document.getElementById('error-container');
-  
-  if (errorContainer) {
-    errorContainer.textContent = message;
-    errorContainer.classList.add('show');
-    
-    // 3秒后自动隐藏
-    setTimeout(() => {
-      errorContainer.classList.remove('show');
-    }, 3000);
-  } else {
-    console.error(message);
-  }
 }
 
 /**
@@ -1121,27 +1189,84 @@ function createProcessedThumbnail(file, processResult) {
  * @param {HTMLElement} thumbnail - 缩略图元素
  */
 function selectThumbnail(thumbnail) {
-  // 移除所有选中状态
-  const allThumbnails = document.querySelectorAll('.thumbnail');
-  allThumbnails.forEach(thumb => {
-    thumb.classList.remove('selected');
-  });
-  
-  // 添加选中状态
-  thumbnail.classList.add('selected');
-  
-  // 更新当前选中的文件
-  const index = parseInt(thumbnail.dataset.index, 10);
-  if (!isNaN(index) && watermarkState.files && index < watermarkState.files.length) {
-    // 更新全局currentFile变量
-    window.currentFile = watermarkState.files[index];
-    
-    // 更新watermarkState中的当前索引
-    updateState({
-      currentIndex: index
+  try {
+    // 移除所有选中状态
+    const allThumbnails = document.querySelectorAll('.thumbnail');
+    allThumbnails.forEach(thumb => {
+      thumb.classList.remove('selected');
     });
     
-    console.log(`已选择缩略图 ${index}, 文件: ${watermarkState.files[index].name}`);
+    // 添加选中状态
+    thumbnail.classList.add('selected');
+    
+    // 更新当前选中的文件
+    const index = parseInt(thumbnail.dataset.index, 10);
+    if (!isNaN(index) && watermarkState.files && index < watermarkState.files.length) {
+      // 获取当前水印容器状态
+      const watermarkContainer = document.getElementById('watermark-container');
+      const originalDisplay = watermarkContainer ? watermarkContainer.style.display : 'flex';
+      
+      // 确保水印容器可见
+      if (watermarkContainer) {
+        watermarkContainer.style.zIndex = '99999'; // 确保在最顶层
+        watermarkContainer.style.display = 'flex'; // 强制显示
+        watermarkContainer.style.pointerEvents = 'auto'; // 启用交互
+      }
+      
+      // 更新全局currentFile变量
+      window.currentFile = watermarkState.files[index];
+      
+      // 更新watermarkState中的当前索引
+      updateState({
+        currentIndex: index
+      });
+      
+      console.log(`已选择缩略图 ${index}, 文件: ${watermarkState.files[index].name}`);
+      
+      // 保存水印状态以防止图片加载时覆盖
+      const savedWatermarkState = { ...watermarkState };
+      
+      // 立即触发一次水印更新（即使图像还未加载完成）
+      setTimeout(() => {
+        console.log('选择缩略图后立即更新水印');
+        updateWatermark();
+      }, 0);
+      
+      // 处理当前图片，确保加载新图像
+      processCurrentImage();
+      
+      // 在短暂延迟后确保水印容器和水印元素仍然可见
+      setTimeout(() => {
+        if (watermarkContainer) {
+          // 恢复原始状态或确保可见
+          watermarkContainer.style.display = originalDisplay || 'flex';
+          watermarkContainer.style.zIndex = '99999';
+        }
+        
+        // 强制重新应用水印状态，防止图片加载过程中覆盖
+        Object.keys(savedWatermarkState).forEach(key => {
+          // 只恢复水印相关的设置，而不是所有状态
+          if (['type', 'text', 'fontSize', 'opacity', 'rotation', 'color', 
+               'relativePosition', 'watermarkImage', 'tileSpacing'].includes(key)) {
+            watermarkState[key] = savedWatermarkState[key];
+          }
+        });
+        
+        console.log('缩略图切换后延迟再次更新水印');
+        updateWatermark();
+        
+        // 保存该图片的水印设置
+        saveCurrentImageSettings();
+      }, 100);
+      
+      // 确保在图片完全加载后(200ms)水印仍然可见
+      setTimeout(() => {
+        console.log('最终确认水印可见性');
+        updateWatermark();
+      }, 200);
+    }
+  } catch (error) {
+    console.error('选择缩略图时出错:', error);
   }
 }
 
@@ -1213,8 +1338,19 @@ function displayPreviewImage(blobUrl, isGif = false, options = {}) {
   const previewImage = document.getElementById('preview-image');
   const noImageMessage = document.getElementById('no-image-message');
   const gifBadge = document.getElementById('gif-badge');
+  const watermarkContainer = document.getElementById('watermark-container');
   
   if (!previewImage) return;
+  
+  // 保存当前水印状态以便恢复
+  const savedWatermarkState = { ...watermarkState };
+  
+  // 确保水印容器可见
+  if (watermarkContainer) {
+    watermarkContainer.style.zIndex = '99999';
+    watermarkContainer.style.display = 'flex';
+    watermarkContainer.style.pointerEvents = 'auto';
+  }
   
   // 清除旧的图片
   if (previewImage.src) {
@@ -1241,32 +1377,63 @@ function displayPreviewImage(blobUrl, isGif = false, options = {}) {
   const newImage = oldImage;
   newImage.style.display = 'none';
   
+  // 如果是GIF，确保状态正确设置
+  if (isGif) {
+    updateState({
+      isGif: true
+    });
+  } else {
+    updateState({
+      isGif: false
+    });
+  }
+  
   // 设置加载事件
   newImage.onload = function() {
     console.log('图片加载完成，显示预览');
     // 检查图片是否成功加载并有内容
     if (newImage.naturalWidth > 0 && newImage.naturalHeight > 0) {
       console.log(`预览图片尺寸: ${newImage.naturalWidth}x${newImage.naturalHeight}`);
-    newImage.style.display = 'block';
-    
-    if (noImageMessage) {
-      noImageMessage.style.display = 'none';
-    }
-    
-    // 如果是GIF，添加标识
-    if (isGif) {
-      newImage.classList.add('gif-image');
-      if (gifBadge) gifBadge.style.display = 'block';
-    } else {
-      newImage.classList.remove('gif-image');
-      if (gifBadge) gifBadge.style.display = 'none';
-    }
-    
-    // 更新水印位置
-    setTimeout(() => {
+      newImage.style.display = 'block';
+      
+      if (noImageMessage) {
+        noImageMessage.style.display = 'none';
+      }
+      
+      // 如果是GIF，添加标识
+      if (isGif) {
+        newImage.classList.add('gif-image');
+        if (gifBadge) gifBadge.style.display = 'block';
+      } else {
+        newImage.classList.remove('gif-image');
+        if (gifBadge) gifBadge.style.display = 'none';
+      }
+      
+      // 立即更新水印
+      console.log('图片加载完成，立即更新水印');
+      
+      // 恢复水印状态
+      restoreWatermarkState(savedWatermarkState);
+      
+      // 立即更新水印位置
       updateWatermark();
-      console.log('图片加载完成，更新水印位置');
-    }, 100);
+      
+      // 在短暂延迟后再次更新水印，确保DOM完全更新
+      setTimeout(() => {
+        console.log('图片加载后延迟更新水印');
+        
+        // 再次恢复水印状态
+        restoreWatermarkState(savedWatermarkState);
+        
+        // 更新水印位置
+        updateWatermark();
+      }, 100);
+      
+      // 如果有回调函数，调用它
+      if (options.onSuccess) {
+        options.onSuccess();
+      }
+      
     } else {
       console.error('预览图片加载完成但尺寸为0，可能是白屏问题');
       // 显示错误信息
@@ -1274,6 +1441,15 @@ function displayPreviewImage(blobUrl, isGif = false, options = {}) {
         noImageMessage.textContent = 'GIF处理可能出错，尝试重新加载...';
         noImageMessage.style.display = 'block';
       }
+      
+      // 仍然尝试显示水印
+      setTimeout(() => {
+        // 恢复水印状态
+        restoreWatermarkState(savedWatermarkState);
+        
+        updateWatermark();
+      }, 100);
+      
       // 如果是GIF白屏，尝试使用原始GIF
       if (isGif && options.originalSource) {
         console.log('尝试使用原始GIF作为备用');
@@ -1282,11 +1458,18 @@ function displayPreviewImage(blobUrl, isGif = false, options = {}) {
           newImage.src = originalUrl;
         }, 500);
       }
-    }
-    
-    // 如果有回调函数，调用它
-    if (options.onSuccess) {
-      options.onSuccess();
+      
+      // 显示正在重新处理的消息
+      if (noImageMessage) {
+        noImageMessage.textContent = '重新处理图片中...';
+        noImageMessage.style.display = 'block';
+      }
+      
+      // 重新处理图片
+      if (options.reprocess) {
+        options.reprocess();
+        return;
+      }
     }
   };
   
@@ -1344,6 +1527,13 @@ function displayPreviewImage(blobUrl, isGif = false, options = {}) {
         noImageMessage.style.display = 'none';
       }
       
+      // 仍然尝试显示水印
+      setTimeout(() => {
+        // 恢复水印状态
+        restoreWatermarkState(savedWatermarkState);
+        updateWatermark();
+      }, 100);
+      
       // 如果有错误回调函数，调用它
       if (options.onError) {
         options.onError(error);
@@ -1371,11 +1561,34 @@ function displayPreviewImage(blobUrl, isGif = false, options = {}) {
  * @param {File} file - 图像文件
  */
 function displaySimplePreview(file) {
+  // 验证文件参数
+  if (!file || !(file instanceof File)) {
+    console.error('displaySimplePreview 调用无效: 缺少有效文件对象', file);
+    return;
+  }
+  
+  console.log(`显示预览图像: ${file.name} (${file.type}), 大小: ${Math.round(file.size / 1024)}KB`);
+  
   const previewImage = document.getElementById('preview-image');
   const noImageMessage = document.getElementById('no-image-message');
   const gifBadge = document.getElementById('gif-badge');
+  const watermarkContainer = document.getElementById('watermark-container');
   
   if (!previewImage) return;
+  
+  // 生成唯一的显示ID，用于跟踪当前显示操作
+  const displayId = Date.now().toString();
+  window.currentDisplayId = displayId;
+  
+  // 保存当前水印状态以便可能的恢复
+  const savedWatermarkState = { ...watermarkState };
+  
+  // 确保水印容器始终可见
+  if (watermarkContainer) {
+    watermarkContainer.style.zIndex = '99999';
+    watermarkContainer.style.display = 'flex';
+    watermarkContainer.style.pointerEvents = 'auto';
+  }
   
   // 清除旧的图片
   if (previewImage.src) {
@@ -1395,111 +1608,321 @@ function displaySimplePreview(file) {
   previewImage.style.display = 'none';
   
   // 检查是否为GIF
-  const isGif = file.name.toLowerCase().endsWith('.gif');
+  const isGif = file.name.toLowerCase().endsWith('.gif') || file.type === 'image/gif';
   
-  // 创建直接的文件URL
-  const fileUrl = URL.createObjectURL(file);
-  
-  // 先加载一个隐藏的图像以获取尺寸和设置originalImage
-  const hiddenImg = new Image();
-  hiddenImg.onload = function() {
-    // 保存原始图像对象到watermarkState，确保水印渲染可以使用
-    updateState({
-      originalImage: hiddenImg,
-      originalImageWidth: hiddenImg.width,
-      originalImageHeight: hiddenImg.height
-    });
+  try {
+    // 创建直接的文件URL
+    const fileUrl = URL.createObjectURL(file);
     
-    console.log(`保存原始图像对象: ${hiddenImg.width}x${hiddenImg.height}`);
-    
-    // 设置预览图像
-    previewImage.src = fileUrl;
-  };
-  hiddenImg.src = fileUrl;
-  
-  // 设置加载事件
-  previewImage.onload = function() {
-    console.log('图片加载完成，显示预览');
-    previewImage.style.display = 'block';
-    
-    if (noImageMessage) {
-      noImageMessage.style.display = 'none';
-    }
-    
-    // 如果是GIF，添加标识
+    // 标记当前为GIF
     if (isGif) {
-      previewImage.classList.add('gif-image');
-      if (gifBadge) gifBadge.style.display = 'block';
+      updateState({
+        isGif: true
+      });
     } else {
-      previewImage.classList.remove('gif-image');
-      if (gifBadge) gifBadge.style.display = 'none';
+      updateState({
+        isGif: false
+      });
     }
     
-    // 确保originalImage已设置
-    if (!watermarkState.originalImage) {
-      const img = new Image();
-      img.onload = function() {
-        updateState({
-          originalImage: img,
-          originalImageWidth: img.width,
-          originalImageHeight: img.height
-        });
-        
-        console.log(`设置缺失的原始图像对象: ${img.width}x${img.height}`);
-        
-        // 更新水印位置
-        setTimeout(() => {
-          updateWatermark();
-          console.log('图片加载完成，更新水印位置');
-        }, 100);
-      };
-      img.src = fileUrl;
-    } else {
-      // 更新水印位置
-      setTimeout(() => {
-        updateWatermark();
-        console.log('图片加载完成，更新水印位置');
-      }, 100);
-    }
-  };
-  
-  // 设置错误处理
-  previewImage.onerror = function(error) {
-    console.error('加载预览图片失败:', error);
+    // 先加载一个隐藏的图像以获取尺寸和设置originalImage
+    const hiddenImg = new Image();
     
-    // 创建一个备用静态图像
-    try {
-      // 创建一个临时Canvas
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = 500;
-      tempCanvas.height = 500;
-      const ctx = tempCanvas.getContext('2d');
+    hiddenImg.onload = function() {
+      // 检查这是否是最新的显示请求
+      if (window.currentDisplayId !== displayId) {
+        console.log('图片加载完成，但不是最新的显示请求，忽略');
+        return;
+      }
       
-      // 绘制一个简单的背景
-      ctx.fillStyle = '#f0f0f0';
-      ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+      // 保存原始图像对象到watermarkState，确保水印渲染可以使用
+      updateState({
+        originalImage: hiddenImg,
+        originalImageWidth: hiddenImg.width,
+        originalImageHeight: hiddenImg.height
+      });
       
-      // 绘制错误信息
-      ctx.fillStyle = '#333333';
-      ctx.font = '16px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('图片加载失败', tempCanvas.width / 2, tempCanvas.height / 2 - 10);
-      ctx.fillText(file.name, tempCanvas.width / 2, tempCanvas.height / 2 + 20);
+      console.log(`保存原始图像对象: ${hiddenImg.width}x${hiddenImg.height}`);
       
-      // 转换为数据URL并设置为图片源
-      const dataUrl = tempCanvas.toDataURL('image/png');
-      previewImage.src = dataUrl;
+      // 设置预览图像
+      previewImage.src = fileUrl;
+    };
+    
+    hiddenImg.onerror = function(error) {
+      console.error('加载隐藏图像失败:', error);
+      // 仍然尝试直接显示
+      previewImage.src = fileUrl;
+    };
+    
+    hiddenImg.src = fileUrl;
+    
+    // 设置加载事件
+    previewImage.onload = function() {
+      // 检查这是否是最新的显示请求
+      if (window.currentDisplayId !== displayId) {
+        console.log('预览图片加载完成，但不是最新的显示请求，忽略');
+        return;
+      }
+      
+      console.log('图片加载完成，显示预览');
       previewImage.style.display = 'block';
       
       if (noImageMessage) {
         noImageMessage.style.display = 'none';
       }
-    } catch (canvasError) {
-      console.error('创建备用图像失败:', canvasError);
+      
+      // 如果是GIF，添加标识
+      if (isGif) {
+        previewImage.classList.add('gif-image');
+        if (gifBadge) gifBadge.style.display = 'block';
+      } else {
+        previewImage.classList.remove('gif-image');
+        if (gifBadge) gifBadge.style.display = 'none';
+      }
+      
+      // 确保originalImage已设置
+      if (!watermarkState.originalImage) {
+        const img = new Image();
+        img.onload = function() {
+          // 检查这是否是最新的显示请求
+          if (window.currentDisplayId !== displayId) {
+            console.log('originalImage加载完成，但不是最新的显示请求，忽略');
+            return;
+          }
+          
+          updateState({
+            originalImage: img,
+            originalImageWidth: img.width,
+            originalImageHeight: img.height
+          });
+          
+          console.log(`设置缺失的原始图像对象: ${img.width}x${img.height}`);
+          
+          // 立即更新水印位置，不使用延迟
+          console.log('立即更新水印 - 来自缺失originalImage');
+          
+          // 恢复保存的水印状态
+          restoreWatermarkState(savedWatermarkState);
+          
+          updateWatermark();
+        };
+        img.src = fileUrl;
+      } else {
+        // 立即更新水印位置，不使用延迟
+        console.log('立即更新水印 - 来自预览显示');
+        
+        // 恢复保存的水印状态
+        restoreWatermarkState(savedWatermarkState);
+        
+        updateWatermark();
+        
+        // 强制在短暂延迟后再次更新水印，确保水印容器尺寸正确
+        setTimeout(() => {
+          // 检查这是否是最新的显示请求
+          if (window.currentDisplayId !== displayId) {
+            console.log('延迟更新水印，但不是最新的显示请求，忽略');
+            return;
+          }
+          
+          console.log('延迟二次更新水印以确保布局正确');
+          
+          // 再次恢复保存的水印状态
+          restoreWatermarkState(savedWatermarkState);
+          
+          updateWatermark();
+        }, 50);
+      }
+    };
+    
+    // 设置错误处理
+    previewImage.onerror = function(error) {
+      console.error('加载预览图片失败:', error);
+      
+      // 创建一个备用静态图像
+      try {
+        // 创建一个临时Canvas
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 500;
+        tempCanvas.height = 500;
+        const ctx = tempCanvas.getContext('2d');
+        
+        // 绘制一个简单的背景
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        
+        // 绘制错误信息
+        ctx.fillStyle = '#333333';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('图片加载失败', tempCanvas.width / 2, tempCanvas.height / 2 - 10);
+        ctx.fillText(file.name, tempCanvas.width / 2, tempCanvas.height / 2 + 20);
+        
+        // 转换为数据URL并设置为图片源
+        const dataUrl = tempCanvas.toDataURL('image/png');
+        previewImage.src = dataUrl;
+        previewImage.style.display = 'block';
+        
+        if (noImageMessage) {
+          noImageMessage.style.display = 'none';
+        }
+        
+        // 仍然尝试显示水印
+        setTimeout(() => {
+          updateWatermark();
+        }, 100);
+        
+      } catch (canvasError) {
+        console.error('创建备用图像失败:', canvasError);
+        if (noImageMessage) {
+          noImageMessage.textContent = '加载图片失败';
+          noImageMessage.style.display = 'block';
+        }
+      }
+    };
+  } catch (e) {
+    console.error('创建预览图像时发生错误:', e);
+    if (noImageMessage) {
+      noImageMessage.textContent = '加载图片失败: ' + e.message;
+      noImageMessage.style.display = 'block';
+    }
+  }
+}
+
+/**
+ * 恢复保存的水印状态
+ * @param {Object} savedState - 保存的水印状态
+ */
+function restoreWatermarkState(savedState) {
+  if (!savedState) return;
+  
+  // 只恢复水印相关的设置
+  const watermarkKeys = [
+    'type', 'text', 'fontSize', 'opacity', 'rotation', 'color',
+    'relativePosition', 'watermarkImage', 'tileSpacing'
+  ];
+  
+  watermarkKeys.forEach(key => {
+    if (savedState[key] !== undefined) {
+      watermarkState[key] = savedState[key];
+    }
+  });
+}
+
+/**
+ * 处理GIF图像
+ * @param {File} gifFile - GIF文件
+ * @param {Object} savedWatermarkState - 保存的水印状态，用于恢复
+ */
+function processGif(gifFile, savedWatermarkState = null) {
+  console.log('处理GIF文件:', gifFile.name);
+  
+  // 如果传入了保存的水印状态，先保存一个本地副本
+  const localSavedState = savedWatermarkState ? { ...savedWatermarkState } : { ...watermarkState };
+  
+  // 确保水印容器可见
+  const watermarkContainer = document.getElementById('watermark-container');
+  if (watermarkContainer) {
+    watermarkContainer.style.display = 'flex';
+    watermarkContainer.style.zIndex = '99999';
+    watermarkContainer.style.pointerEvents = 'auto';
+  }
+  
+  // 获取GIF处理模块
+  if (!window.processGif) {
+    console.error('GIF处理模块未加载');
+    displaySimplePreview(gifFile);
+    return;
+  }
+  
+  // 使用水印状态中的选项创建处理选项
+  const gifOptions = {
+    applyWatermark: true,  // 强制应用水印
+    isPreview: true,
+    text: watermarkState.text,
+    color: watermarkState.color,
+    fontSize: watermarkState.fontSize,
+    opacity: watermarkState.opacity,
+    rotation: watermarkState.rotation,
+    position: watermarkState.relativePosition,
+    type: watermarkState.type,
+    watermarkImage: watermarkState.watermarkImage,
+    tileSpacing: watermarkState.tileSpacing,
+    isGif: true,
+    onProgress: (progress) => {
+      // 可选: 在这里更新处理进度UI
+      const noImageMessage = document.getElementById('no-image-message');
       if (noImageMessage) {
-        noImageMessage.textContent = '加载图片失败';
+        noImageMessage.textContent = `处理GIF中... ${Math.round(progress.progress * 100)}%`;
         noImageMessage.style.display = 'block';
       }
     }
   };
+  
+  // 显示处理状态
+  const noImageMessage = document.getElementById('no-image-message');
+  if (noImageMessage) {
+    noImageMessage.textContent = '正在处理GIF动画...';
+    noImageMessage.style.display = 'block';
+  }
+  
+  // 从gifwrap模块导入处理函数
+  import('./gifwrap/gif-processor.js')
+    .then((module) => {
+      // 调用处理函数
+      module.processGif(gifFile, gifOptions)
+        .then(result => {
+          console.log('GIF处理完成');
+          
+          // 缓存处理结果
+          if (!watermarkState.processed) {
+            updateState({ processed: {} });
+          }
+          
+          // 保存处理结果到缓存
+          watermarkState.processed[gifFile.name] = result;
+          
+          // 显示处理后的GIF
+          displayPreviewImage(result.blobUrl, true, {
+            originalSource: gifFile,
+            fileName: gifFile.name,
+            currentFile: gifFile
+          });
+          
+          // 恢复保存的水印状态
+          setTimeout(() => {
+            restoreWatermarkState(localSavedState);
+            updateWatermark();
+            console.log('GIF处理后恢复水印状态并更新显示');
+            
+            // 确保水印可见
+            setTimeout(() => {
+              updateWatermark();
+            }, 100);
+          }, 50);
+        })
+        .catch(error => {
+          console.error('处理GIF出错:', error);
+          
+          // 回退到简单预览
+          displaySimplePreview(gifFile);
+          
+          // 恢复保存的水印状态
+          setTimeout(() => {
+            restoreWatermarkState(localSavedState);
+            updateWatermark();
+          }, 100);
+        });
+    })
+    .catch(error => {
+      console.error('加载GIF处理模块失败:', error);
+      
+      // 回退到简单预览
+      displaySimplePreview(gifFile);
+      
+      // 恢复保存的水印状态
+      setTimeout(() => {
+        restoreWatermarkState(localSavedState);
+        updateWatermark();
+      }, 100);
+    });
 } 

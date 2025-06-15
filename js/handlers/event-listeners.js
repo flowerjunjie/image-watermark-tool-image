@@ -92,7 +92,7 @@ export function initEventListeners() {
           processingModal.style.display = 'flex';
           const modalTitle = processingModal.querySelector('.modal-title');
           if (modalTitle) modalTitle.textContent = '处理文件夹中...';
-          if (processingStatus) processingStatus.textContent = `正在加载文件夹内容...`;
+          if (processingStatus) processingStatus.textContent = `正在加载文件夹内容...共${this.files.length}个文件`;
           
           // 重置进度条
           if (modalProgressBar) {
@@ -102,7 +102,7 @@ export function initEventListeners() {
           
           // 设置倒计时
           if (modalCountdown) {
-            modalCountdown.textContent = '自动关闭: 30';
+            modalCountdown.textContent = '自动关闭: 60';
           }
           
           // 设置安全超时，确保模态框最终会关闭
@@ -112,10 +112,19 @@ export function initEventListeners() {
               processingModal.style.display = 'none';
               showStatus('文件夹处理已完成（安全机制触发）');
             }
-          }, 30000); // 30秒后强制关闭
+          }, 60000); // 60秒后强制关闭
           
           // 延迟一下再处理文件，让进度条有时间显示
           setTimeout(() => {
+            // 确保显示"正在处理"的状态
+            if (modalProgressBar) {
+              modalProgressBar.style.width = '10%';
+              modalProgressBar.textContent = '10%';
+            }
+            if (processingStatus) {
+              processingStatus.textContent = `正在处理文件夹内容...共${this.files.length}个文件`;
+            }
+            
             handleImageFiles(this.files)
               .then(() => {
                 // 处理完成后清除安全超时
@@ -124,6 +133,7 @@ export function initEventListeners() {
                 // 确保模态框关闭
                 if (processingModal && processingModal.style.display === 'flex') {
                   processingModal.style.display = 'none';
+                  showStatus('文件夹处理完成', true);
                 }
               })
               .catch(error => {
@@ -169,7 +179,8 @@ export function initEventListeners() {
       // GIF特殊处理选项 - 确保保留动画效果
       const gifOptions = {
         preserveAnimation: true, // 指定保留GIF动画
-        quality: 10 // GIF处理质量
+        quality: 10, // GIF处理质量
+        applyWatermark: true // 确保应用水印到GIF
       };
       
       // 普通图片选项
@@ -180,6 +191,7 @@ export function initEventListeners() {
       // 根据文件类型选择适当的选项
       const options = {
         isDownload: true, // 标记为下载模式
+        applyWatermark: true, // 明确应用水印
         quality: isGif ? gifOptions.quality : imageOptions.quality,
         // 对于GIF，使用保留动画的选项
         ...(isGif ? gifOptions : {}),
@@ -195,8 +207,15 @@ export function initEventListeners() {
         tileSpacing: watermarkState.tileSpacing
       };
       
+      console.log('下载处理选项:', JSON.stringify({
+        isGif: isGif,
+        applyWatermark: options.applyWatermark,
+        isDownload: options.isDownload,
+        quality: options.quality
+      }));
+      
       // 处理图片并下载
-      processImage(currentFile, true, options)
+      processImage(currentFile, options)
         .then(result => {
           console.log('图片处理结果:', result);
           

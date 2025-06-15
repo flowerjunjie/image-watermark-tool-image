@@ -129,15 +129,16 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('初始化水印控制');
       initWatermarkControls();
       updateInitStatus('水印控制', '成功');
+      
+      // 初始化完成
+      console.log('水印工具初始化完成');
+      window.watermarkInitialized = true;
+      
+      // 添加全局的水印保护机制
+      initWatermarkProtection();
     } catch (error) {
       updateInitStatus('水印控制', '失败', error);
     }
-    
-    // 标记为已初始化
-    initialized = true;
-    // 设置全局标志，用于检测模块是否成功加载
-    window.watermarkInitialized = true;
-    console.log('水印工具初始化完成');
     
     // 隐藏错误容器（如果没有错误）
     const errorContainer = document.getElementById('error-container');
@@ -153,6 +154,93 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 });
+
+/**
+ * 初始化水印可见性保护机制
+ * 定期检查水印容器是否可见，如果不可见则重新显示
+ */
+function initWatermarkProtection() {
+  console.log('初始化水印保护机制');
+  
+  // 创建一个检查水印容器的函数
+  function checkWatermarkVisibility() {
+    const watermarkContainer = document.getElementById('watermark-container');
+    
+    if (watermarkContainer) {
+      // 检查水印容器是否存在且样式是否正确
+      const displayStyle = window.getComputedStyle(watermarkContainer).display;
+      const zIndexStyle = parseInt(window.getComputedStyle(watermarkContainer).zIndex) || 0;
+      
+      console.log('检查水印可见性:', {
+        display: displayStyle,
+        zIndex: zIndexStyle
+      });
+      
+      // 如果水印容器不可见或z-index过低，强制设置正确的样式
+      if (displayStyle === 'none' || zIndexStyle < 9999) {
+        console.log('水印可能不可见，强制更新样式');
+        watermarkContainer.style.display = 'flex';
+        watermarkContainer.style.zIndex = '99999';
+        watermarkContainer.style.pointerEvents = 'auto';
+        
+        // 尝试更新水印
+        if (typeof updateWatermark === 'function') {
+          console.log('强制重新应用水印');
+          updateWatermark();
+        }
+      }
+    } else {
+      console.warn('水印容器不存在');
+    }
+  }
+  
+  // 定期检查水印容器状态
+  const checkInterval = setInterval(checkWatermarkVisibility, 1000);
+  
+  // 在页面关闭时清除定时器
+  window.addEventListener('beforeunload', () => {
+    clearInterval(checkInterval);
+  });
+  
+  // 监听DOM变化，以便在节点被移除或修改时立即恢复水印
+  const observer = new MutationObserver((mutations) => {
+    // 检查变化是否涉及水印容器
+    const shouldCheckWatermark = mutations.some(mutation => {
+      // 检查是否有节点被移除
+      if (mutation.removedNodes.length > 0) {
+        for (const node of mutation.removedNodes) {
+          if (node.id === 'watermark-container' || 
+              (node.querySelector && node.querySelector('#watermark-container'))) {
+            return true;
+          }
+        }
+      }
+      
+      // 检查水印容器的属性是否被修改
+      if (mutation.target.id === 'watermark-container') {
+        return true;
+      }
+      
+      return false;
+    });
+    
+    // 如果涉及水印容器，立即检查
+    if (shouldCheckWatermark) {
+      checkWatermarkVisibility();
+    }
+  });
+  
+  // 开始监听整个文档的变化
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['style', 'class']
+  });
+  
+  // 立即执行一次检查
+  checkWatermarkVisibility();
+}
 
 // 动态加载JSZip库
 export function loadJSZip() {

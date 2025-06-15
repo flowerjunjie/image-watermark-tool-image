@@ -48,6 +48,26 @@ main {
   flex-direction: column; /* 垂直排列 */
 }
 
+.preview-container {
+  position: relative !important;
+  width: 100%;
+  height: 70vh; /* 固定高度 */
+  margin: 0 auto 20px auto; /* 添加底部间距 */
+  flex-grow: 1; /* 让预览区域占据更多空间 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  -webkit-user-select: none; /* 防止文本选择，添加Safari支持 */
+  user-select: none; /* 防止文本选择 */
+  touch-action: none; /* 防止触摸设备上的默认行为 */
+  overflow: visible !important; /* 允许水印溢出容器 */
+  background-color: transparent !important; /* 确保背景是透明的，使用!important确保优先级 */
+  z-index: 10 !important; /* 确保在适当的层级 */
+  border: 1px dashed #ddd; /* 添加边框以便于识别预览区域 */
+  border-radius: 4px;
+  min-height: 400px; /* 确保最小高度 */
+}
+
 .preview-area {
   flex: 1;
   background-color: white;
@@ -380,31 +400,12 @@ select {
   min-width: 80px;
 }
 
-.preview-container {
-  position: relative;
-  width: 100%;
-  height: 70vh; /* 固定高度 */
-  margin: 0 auto 20px auto; /* 添加底部间距 */
-  flex-grow: 1; /* 让预览区域占据更多空间 */
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  user-select: none; /* 防止文本选择 */
-  touch-action: none; /* 防止触摸设备上的默认行为 */
-  overflow: visible; /* 内部容器不需要滚动条，改为visible */
-  background-color: transparent !important; /* 确保背景是透明的，使用!important确保优先级 */
-  z-index: 5; /* 确保在适当的层级 */
-  border: 1px dashed #ddd; /* 添加边框以便于识别预览区域 */
-  border-radius: 4px;
-  min-height: 400px; /* 确保最小高度 */
-}
-
 .preview-image {
   max-width: 95%;
   max-height: 65vh; /* 调整高度 */
   display: block;
   position: relative; /* 添加相对定位 */
-  z-index: 5; /* 确保在水印容器下方 */
+  z-index: 5 !important; /* 确保在水印容器下方 */
   box-shadow: 0 4px 12px rgba(0,0,0,0.15); /* 添加阴影 */
   border-radius: 4px; /* 圆角 */
   object-fit: contain; /* 保持图片比例 */
@@ -412,13 +413,11 @@ select {
 
 #watermark-container {
   position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
+  /* 移除固定的top/left/transform，这些将由JS动态设置 */
   width: 100% !important;
   height: 100% !important;
   pointer-events: auto !important;
-  z-index: 9999 !important;
+  z-index: 999999 !important; /* 显著提高z-index确保在最顶层 */
   display: flex !important; /* 改为flex布局 */
   justify-content: center;
   align-items: center;
@@ -428,9 +427,11 @@ select {
 .watermark {
   position: absolute;
   pointer-events: none;
+  -webkit-user-select: none;
   user-select: none;
   transform-origin: center;
   white-space: nowrap;
+  z-index: 999999 !important; /* 添加最高显示层级 */
 }
 
 .draggable-watermark {
@@ -438,14 +439,26 @@ select {
   transform-origin: center;
   transform: translate(-50%, -50%);
   white-space: nowrap;
+  -webkit-user-select: none;
   user-select: none;
   pointer-events: auto;
-  z-index: 9999;
+  z-index: 999999 !important; /* 提高z-index确保在最顶层 */
   padding: 10px; /* 增加内边距便于拖动 */
   cursor: move; /* 显示移动光标 */
   border: 2px dashed transparent; /* 透明边框 */
   border-radius: 4px;
   transition: border 0.2s ease; /* 添加过渡效果 */
+  touch-action: none; /* 防止触摸设备上的默认行为 */
+  will-change: transform, left, top; /* 提示浏览器这些属性将会改变，优化性能 */
+}
+
+/* 拖动中的水印样式 */
+.draggable-watermark.dragging {
+  opacity: 0.8; /* 拖动时稍微透明 */
+  border: 2px solid rgba(0, 0, 255, 0.8); /* 拖动时边框 */
+  background-color: rgba(0, 0, 255, 0.1); /* 拖动时背景色 */
+  box-shadow: 0 0 10px rgba(0, 0, 255, 0.3); /* 拖动时阴影 */
+  transition: none; /* 拖动时禁用过渡效果，避免延迟 */
 }
 
 .draggable-watermark:hover {
@@ -810,6 +823,7 @@ footer {
 /* 确保只有一个水印显示 */
 #watermark-element {
   pointer-events: auto !important;
+  z-index: 999999 !important;
 }
 
 /* 水印拖动控制元素样式 */
@@ -830,11 +844,15 @@ footer {
 /* 防止水印重叠 */
 #watermark-container {
   pointer-events: auto;
+  z-index: 999999 !important; /* 添加最高显示层级 */
 }
 
+/* 移除这个可能导致水印元素被隐藏的规则 */
+/*
 #watermark-container > *:not(#watermark-element) {
   display: none !important;
 }
+*/
 
 /* 缩略图加载指示器 */
 .thumbnail-loading {
@@ -1216,4 +1234,9 @@ footer {
   line-height: 16px;
   margin-left: 5px;
   cursor: help;
+}
+
+/* 确保预览图像不会覆盖水印 */
+#preview-image, #preview-canvas {
+  z-index: 5 !important;
 } 
