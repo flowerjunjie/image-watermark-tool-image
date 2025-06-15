@@ -42,13 +42,36 @@ export function updateWatermark() {
       return;
     }
     
+    // 获取当前图片尺寸
+    let currentImageWidth = 0;
+    let currentImageHeight = 0;
+    
+    if (previewImageAvailable) {
+      currentImageWidth = previewImage.naturalWidth || previewImage.offsetWidth;
+      currentImageHeight = previewImage.naturalHeight || previewImage.offsetHeight;
+    } else if (previewCanvasAvailable) {
+      currentImageWidth = previewCanvas.width || previewCanvas.offsetWidth;
+      currentImageHeight = previewCanvas.height || previewCanvas.offsetHeight;
+    }
+    
+    // 确保尺寸有效
+    if (currentImageWidth <= 0 || currentImageHeight <= 0) {
+      console.warn('图片尺寸无效，使用默认值');
+      currentImageWidth = 800;
+      currentImageHeight = 600;
+    }
+    
+    // 更新状态中的图像尺寸
+    watermarkState.imageWidth = currentImageWidth;
+    watermarkState.imageHeight = currentImageHeight;
+    
     console.log('更新水印，预览图像状态:', {
       previewImageAvailable: previewImageAvailable,
       previewCanvasAvailable: previewCanvasAvailable,
       imageDisplay: previewImage ? previewImage.style.display : 'element不存在',
       imageComplete: previewImage ? previewImage.complete : 'element不存在',
-      imageWidth: previewImage ? previewImage.width : 0,
-      imageHeight: previewImage ? previewImage.height : 0,
+      imageWidth: currentImageWidth,
+      imageHeight: currentImageHeight,
       watermarkType: watermarkState.type,
       hasWatermarkImage: !!watermarkState.watermarkImage
     });
@@ -60,6 +83,36 @@ export function updateWatermark() {
     } else if (previewCanvasAvailable) {
       watermarkContainer.style.width = `${previewCanvas.offsetWidth}px`;
       watermarkContainer.style.height = `${previewCanvas.offsetHeight}px`;
+    }
+    
+    // 允许水印位置超出图片边界，确保水印可以完全覆盖图片
+    if (watermarkState.relativePosition) {
+      // 不再限制水印位置必须在图片内
+      // 允许相对位置超出0-100范围，这样水印可以贴近图片边缘
+      
+      // 只在初始化时确保水印在合理位置
+      if (!watermarkState.positionInitialized) {
+        // 获取水印尺寸估计值（可以从状态或默认值获取）
+        const estimatedWatermarkWidth = watermarkState.fontSize * 5 || 100; // 估算文本宽度
+        const estimatedWatermarkHeight = watermarkState.fontSize * 1.5 || 50; // 估算文本高度
+        
+        // 如果首次定位且位置在默认值50,50，则保持居中
+        if (watermarkState.relativePosition.x === 50 && watermarkState.relativePosition.y === 50) {
+          // 保持居中位置，不做调整
+        } else {
+          // 确保位置在允许的大范围内，使水印可以自由移动
+          watermarkState.relativePosition.x = Math.max(-150, Math.min(250, watermarkState.relativePosition.x));
+          watermarkState.relativePosition.y = Math.max(-150, Math.min(250, watermarkState.relativePosition.y));
+        }
+        
+        // 标记已初始化位置
+        watermarkState.positionInitialized = true;
+      }
+      
+      console.log('水印相对位置:', {
+        x: watermarkState.relativePosition.x,
+        y: watermarkState.relativePosition.y
+      });
     }
     
     // 清空水印容器
@@ -272,9 +325,13 @@ export function updateWatermarkPosition() {
       watermarkState.relativePosition = { x: 50, y: 50 };
     }
     
-    // 确保相对位置在有效范围内 (0-100)
-    watermarkState.relativePosition.x = Math.max(0, Math.min(100, watermarkState.relativePosition.x));
-    watermarkState.relativePosition.y = Math.max(0, Math.min(100, watermarkState.relativePosition.y));
+    // 大幅扩展允许的相对位置范围，使水印可以在图片任何位置移动
+    watermarkState.relativePosition.x = Math.max(-150, Math.min(250, watermarkState.relativePosition.x));
+    watermarkState.relativePosition.y = Math.max(-150, Math.min(250, watermarkState.relativePosition.y));
+    
+    // 获取图片的实际显示尺寸（可能与原始尺寸不同）
+    const displayedWidth = previewImage ? previewImage.offsetWidth : previewWidth;
+    const displayedHeight = previewImage ? previewImage.offsetHeight : previewHeight;
     
     switch (positionChoice) {
       case 'top-left':
@@ -282,44 +339,44 @@ export function updateWatermarkPosition() {
         y = watermarkHeight / 2 + (watermarkState.marginY || 20);
         // 保存相对位置
         watermarkState.relativePosition = {
-          x: (x / previewWidth) * 100,
-          y: (y / previewHeight) * 100
+          x: (x / displayedWidth) * 100,
+          y: (y / displayedHeight) * 100
         };
         break;
         
       case 'top-right':
-        x = previewWidth - watermarkWidth / 2 - (watermarkState.marginX || 20);
+        x = displayedWidth - watermarkWidth / 2 - (watermarkState.marginX || 20);
         y = watermarkHeight / 2 + (watermarkState.marginY || 20);
         // 保存相对位置
         watermarkState.relativePosition = {
-          x: (x / previewWidth) * 100,
-          y: (y / previewHeight) * 100
+          x: (x / displayedWidth) * 100,
+          y: (y / displayedHeight) * 100
         };
         break;
         
       case 'bottom-left':
         x = watermarkWidth / 2 + (watermarkState.marginX || 20);
-        y = previewHeight - watermarkHeight / 2 - (watermarkState.marginY || 20);
+        y = displayedHeight - watermarkHeight / 2 - (watermarkState.marginY || 20);
         // 保存相对位置
         watermarkState.relativePosition = {
-          x: (x / previewWidth) * 100,
-          y: (y / previewHeight) * 100
+          x: (x / displayedWidth) * 100,
+          y: (y / displayedHeight) * 100
         };
         break;
         
       case 'bottom-right':
-        x = previewWidth - watermarkWidth / 2 - (watermarkState.marginX || 20);
-        y = previewHeight - watermarkHeight / 2 - (watermarkState.marginY || 20);
+        x = displayedWidth - watermarkWidth / 2 - (watermarkState.marginX || 20);
+        y = displayedHeight - watermarkHeight / 2 - (watermarkState.marginY || 20);
         // 保存相对位置
         watermarkState.relativePosition = {
-          x: (x / previewWidth) * 100,
-          y: (y / previewHeight) * 100
+          x: (x / displayedWidth) * 100,
+          y: (y / displayedHeight) * 100
         };
         break;
         
       case 'center':
-        x = previewWidth / 2;
-        y = previewHeight / 2;
+        x = displayedWidth / 2;
+        y = displayedHeight / 2;
         // 保存相对位置
         watermarkState.relativePosition = {
           x: 50,
@@ -332,12 +389,31 @@ export function updateWatermarkPosition() {
         // 使用相对位置
         if (watermarkState.relativePosition) {
           // 计算基于图片尺寸的绝对位置
-          x = (watermarkState.relativePosition.x / 100) * previewWidth;
-          y = (watermarkState.relativePosition.y / 100) * previewHeight;
+          x = (watermarkState.relativePosition.x / 100) * displayedWidth;
+          y = (watermarkState.relativePosition.y / 100) * displayedHeight;
+          
+          // 考虑水印尺寸，确保不会超出图片边界
+          // 获取当前缩放比例
+          let currentScale = watermarkState.scale !== undefined ? watermarkState.scale : 1.0;
+          
+          // 计算水印的实际尺寸（考虑缩放）
+          const scaledWidth = watermarkWidth * currentScale;
+          const scaledHeight = watermarkHeight * currentScale;
+          
+          // 允许水印的中心点超出图片范围，以便水印可以靠近边缘位置
+          // 扩大可移动范围，使水印可以靠边或部分超出边界
+          const offsetX = scaledWidth / 2;
+          const offsetY = scaledHeight / 2;
+          x = Math.max(-offsetX, Math.min(x, displayedWidth + offsetX));
+          y = Math.max(-offsetY, Math.min(y, displayedHeight + offsetY));
+          
+          // 更新相对位置，确保它们反映实际位置
+          watermarkState.relativePosition.x = (x / displayedWidth) * 100;
+          watermarkState.relativePosition.y = (y / displayedHeight) * 100;
         } else {
           // 默认使用中心位置
-          x = previewWidth / 2;
-          y = previewHeight / 2;
+          x = displayedWidth / 2;
+          y = displayedHeight / 2;
           
           // 更新状态
           watermarkState.relativePosition = { x: 50, y: 50 };
@@ -352,7 +428,7 @@ export function updateWatermarkPosition() {
     currentWatermarkElement.style.top = `${y}px`;
     currentWatermarkElement.style.left = `${x}px`;
     
-    // 基本变换
+    // 基本变换 - 使用translate(-50%, -50%)可能导致定位问题，改为使用绝对坐标
     let transform = 'translate(-50%, -50%)';
     
     // 如果有旋转，应用旋转
@@ -393,31 +469,14 @@ export function updateWatermarkPosition() {
       transform,
       previousTransform: currentTransform,
       relativePosition: watermarkState.relativePosition,
-      imageSize: { width: previewWidth, height: previewHeight }
+      imageSize: { width: previewWidth, height: previewHeight },
+      displaySize: { width: displayedWidth, height: displayedHeight }
     });
     
     // 确保水印容器可见
     watermarkContainer.style.display = 'flex';
-    watermarkContainer.style.zIndex = '999999';
-    watermarkContainer.style.pointerEvents = 'auto';
-    
-    // 确保水印元素可见
-    currentWatermarkElement.style.display = 'block';
-    currentWatermarkElement.style.zIndex = '999999';
-    
   } catch (error) {
     console.error('更新水印位置时出错:', error);
-    
-    // 错误恢复：确保水印容器可见
-    try {
-      const watermarkContainer = document.getElementById('watermark-container');
-      if (watermarkContainer) {
-        watermarkContainer.style.display = 'flex';
-        watermarkContainer.style.zIndex = '999999';
-      }
-    } catch (e) {
-      console.error('尝试恢复水印容器失败:', e);
-    }
   }
 }
 

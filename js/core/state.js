@@ -195,6 +195,7 @@ export function resetState() {
   watermarkState.currentIndex = 0;
   watermarkState.processed = [];
   watermarkState.relativePosition = { x: 50, y: 50 }; // x从30改为50
+  watermarkState.positionInitialized = false; // 水印位置是否已初始化
   watermarkState.relativeSize = 1;
   watermarkState.sizeAdjusted = false;
   watermarkState.quality = 0.92;

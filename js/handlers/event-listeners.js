@@ -17,6 +17,67 @@ let currentFile = null;
 export function initEventListeners() {
   console.log('初始化事件监听器');
   
+  // 应用到所有按钮点击事件
+  const applyToAllBtn = document.getElementById('apply-to-all-btn');
+  if (applyToAllBtn) {
+    applyToAllBtn.addEventListener('click', function() {
+      if (!watermarkState.files || watermarkState.files.length <= 1) {
+        showMessage('需要至少两张图片才能应用设置');
+        return;
+      }
+      
+      // 显示确认对话框
+      if (!confirm('这将覆盖所有其他图片的水印设置，是否继续？')) {
+        return;
+      }
+      
+      // 保存当前图片的水印设置
+      saveCurrentImageSettings();
+      
+      // 获取当前图片的文件名
+      const currentFileName = watermarkState.files[watermarkState.currentIndex].name;
+      const currentSettings = watermarkState.processedSettings[currentFileName];
+      
+      if (!currentSettings) {
+        showMessage('无法获取当前图片的水印设置');
+        return;
+      }
+      
+      // 获取当前图片的尺寸（用于相对位置计算）
+      const currentImageWidth = watermarkState.imageWidth;
+      const currentImageHeight = watermarkState.imageHeight;
+      
+      // 应用到所有其他图片
+      let appliedCount = 0;
+      for (let i = 0; i < watermarkState.files.length; i++) {
+        if (i !== watermarkState.currentIndex) {
+          const fileName = watermarkState.files[i].name;
+          
+          // 复制当前设置到其他图片，但确保相对位置在有效范围内
+          const adjustedSettings = {...currentSettings};
+          
+          // 确保相对位置在0-100范围内
+          if (adjustedSettings.relativePosition) {
+            adjustedSettings.relativePosition.x = Math.max(0, Math.min(100, adjustedSettings.relativePosition.x));
+            adjustedSettings.relativePosition.y = Math.max(0, Math.min(100, adjustedSettings.relativePosition.y));
+          } else {
+            adjustedSettings.relativePosition = { x: 50, y: 50 };
+          }
+          
+          // 保存调整后的设置
+          watermarkState.processedSettings[fileName] = adjustedSettings;
+          appliedCount++;
+        }
+      }
+      
+      // 显示成功消息
+      showMessage(`已将当前水印设置应用到其他 ${appliedCount} 张图片`);
+      
+      // 更新水印显示
+      updateWatermark();
+    });
+  }
+  
   // 恢复保存的背景色设置
   const savedBackgroundColor = localStorage.getItem('previewBackgroundColor');
   if (savedBackgroundColor) {

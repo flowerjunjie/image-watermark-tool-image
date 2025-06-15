@@ -118,8 +118,60 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化GIF处理器
     try {
       console.log('初始化GIF处理器');
-      initGifProcessor();
-      updateInitStatus('GIF处理器', '成功');
+      // 确保GIF处理相关库可用
+      const gifLibsAvailable = window.gifwrap && 
+                               window.omggif && 
+                               window.imageQ;
+                               
+      if (!gifLibsAvailable) {
+        console.warn('GIF处理相关库未全部加载，等待库加载...');
+        
+        // 等待库加载
+        setTimeout(() => {
+          if (window.gifwrap && window.omggif && window.imageQ) {
+            console.log('GIF处理相关库已加载，初始化GIF处理器...');
+            
+            // 初始化GIF处理器
+            const initResult = initGifProcessor();
+            
+            // 将GIF处理函数暴露到全局作用域
+            import('./utils/gifwrap/gif-processor.js')
+              .then(module => {
+                if (module && module.processGif) {
+                  window.processGif = module.processGif;
+                  console.log('GIF处理函数已暴露到全局');
+                }
+              })
+              .catch(err => {
+                console.error('无法加载GIF处理模块:', err);
+              });
+              
+            console.log('GIF处理器初始化结果:', initResult);
+            updateInitStatus('GIF处理器', initResult ? '成功' : '部分成功');
+          } else {
+            console.error('GIF处理相关库加载超时');
+            updateInitStatus('GIF处理器', '部分失败', new Error('库加载超时'));
+          }
+        }, 1000);
+      } else {
+        // 直接初始化
+        const initResult = initGifProcessor();
+        
+        // 将GIF处理函数暴露到全局作用域
+        import('./utils/gifwrap/gif-processor.js')
+          .then(module => {
+            if (module && module.processGif) {
+              window.processGif = module.processGif;
+              console.log('GIF处理函数已暴露到全局');
+            }
+          })
+          .catch(err => {
+            console.error('无法加载GIF处理模块:', err);
+          });
+          
+        console.log('GIF处理器初始化结果:', initResult);
+        updateInitStatus('GIF处理器', '成功');
+      }
     } catch (error) {
       updateInitStatus('GIF处理器', '失败', error);
     }

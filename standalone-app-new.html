@@ -340,52 +340,6 @@
         
         <!-- 水印定位和缩放控制 -->
         <div class="control-group">
-          <h3>水印位置</h3>
-          <div class="position-controls">
-            <div class="radio-group">
-              <label><input type="radio" name="position" value="custom" checked> <span>自定义位置</span></label>
-              <label><input type="radio" name="position" value="top-left"> <span>左上角</span></label>
-              <label><input type="radio" name="position" value="top-right"> <span>右上角</span></label>
-              <label><input type="radio" name="position" value="bottom-left"> <span>左下角</span></label>
-              <label><input type="radio" name="position" value="bottom-right"> <span>右下角</span></label>
-              <label><input type="radio" name="position" value="center"> <span>居中</span></label>
-              <label><input type="radio" name="position" value="tile"> <span>平铺</span></label>
-            </div>
-            
-            <div id="margin-controls">
-              <div class="slider-control">
-                <label>水平边距 <span class="tooltip-icon" title="水印距离边缘的水平距离">?</span></label>
-                <input type="range" id="margin-x-slider" min="0" max="100" value="20">
-                <div class="slider-value">
-                  <input type="number" id="margin-x-value" min="0" max="100" value="20">
-                  <span>px</span>
-                </div>
-              </div>
-              
-              <div class="slider-control">
-                <label>垂直边距 <span class="tooltip-icon" title="水印距离边缘的垂直距离">?</span></label>
-                <input type="range" id="margin-y-slider" min="0" max="100" value="20">
-                <div class="slider-value">
-                  <input type="number" id="margin-y-value" min="0" max="100" value="20">
-                  <span>px</span>
-                </div>
-              </div>
-            </div>
-            
-            <div id="tile-controls" style="display: none;">
-              <div class="slider-control">
-                <label>平铺间距 <span class="tooltip-icon" title="水印之间的间距">?</span></label>
-                <input type="range" id="tile-spacing-slider" min="50" max="300" value="150">
-                <div class="slider-value">
-                  <input type="number" id="tile-spacing-value" min="50" max="300" value="150">
-                  <span>px</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="control-group">
           <h3>水印缩放</h3>
           <div class="scale-controls">
             <div class="radio-group">
@@ -429,12 +383,15 @@
         <div class="bg-color-button bg-light-yellow" data-color="#fffbe6" title="浅黄背景"></div>
       </div>
       
+      <!-- 应用到所有按钮 -->
+      <button class="button" id="apply-to-all-btn" style="background-color: #ff4949; color: white; font-weight: bold; margin-top: 10px; width: 100%; max-width: 150px;">应用到所有</button>
+      
       <div class="preview-container" id="preview-container">
         <div id="no-image-message" style="text-align: center; padding: 40px; font-size: 18px; color: #666; background-color: #f9f9f9; border-radius: 8px; border: 2px dashed #ddd; width: 80%; max-width: 400px; margin: 0 auto; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">请上传图片进行预览</div>
         <div id="gif-badge" class="gif-badge" style="display: none;">GIF</div>
         <img id="preview-image" class="preview-image" style="display: none;">
         <canvas id="preview-canvas" class="preview-image" style="display: none;"></canvas>
-        <div id="watermark-container" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; pointer-events: auto; z-index: 9999; display: flex; justify-content: center; align-items: center;"></div>
+        <div id="watermark-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: auto; z-index: 9999; display: flex; overflow: visible;"></div>
       </div>
       
       <div class="thumbnails-container" id="thumbnails-container" style="display: none;"></div>
