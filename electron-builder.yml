@@ -1,0 +1,81 @@
+appId: com.image-watermark-tool.app
+productName: 图片水印工具
+copyright: Copyright © 2025 Image Watermark Tool Team
+
+# 构建相关配置
+directories:
+  output: dist
+  buildResources: build
+files:
+  - "**/*"
+  - "!**/*.{ts,map,scss}"
+  - "!**/node_modules/**/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/**/{test,__tests__,tests,powered-test,example,examples}"
+  - "!**/node_modules/**/*.d.ts"
+  - "!**/node_modules/**/.bin"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.editorconfig"
+  - "!**/._*"
+  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
+  - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
+  - "!**/{appveyor.yml,.travis.yml,circle.yml}"
+  - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+  - "!**/*.md"
+  - "!**/docs/**"
+  - "!**/*.{log,tlog}"
+
+# 压缩设置
+compression: maximum
+asar: true
+asarUnpack:
+  - "**/node_modules/canvas/**/*"
+
+# 额外资源
+extraResources:
+  - from: "public/libs"
+    to: "libs"
+    filter: ["**/*"]
+
+# 文件关联
+fileAssociations:
+  - ext: ["jpg", "jpeg", "png", "gif"]
+    name: "图片文件"
+    description: "图片文件"
+    role: "Editor"
+
+# Windows配置
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  requestedExecutionLevel: asInvoker
+
+# macOS配置
+mac:
+  category: public.app-category.graphics-design
+  target: dmg
+
+# Linux配置
+linux:
+  target:
+    - AppImage
+  category: Graphics
+
+# 安装程序配置
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "图片水印工具"
+  deleteAppDataOnUninstall: true
+  perMachine: false
+  differentialPackage: true
+  license: LICENSE
+
+# 发布相关设置
+publish: null
+
+# 构建优化
+electronDist: node_modules/electron/dist 

@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>图片水印工具 - 独立版</title>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; worker-src 'self' blob:;">
+  <title>图片水印工具 - 桌面版</title>
   <!-- 引入CSS -->
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/thumbnail-styles.css">
-  <link rel="icon" href="public/libs/favicon.ico" type="image/x-icon">
+  <link rel="icon" href="public/images/icon.ico" type="image/x-icon">
   
   <!-- 错误处理和调试 -->
   <script>
@@ -69,6 +70,25 @@
       return false; // 阻止默认行为
     };
     
+    // 检测是否在Electron环境中运行
+    window.isElectron = typeof window !== 'undefined' && 
+                       typeof window.process === 'object' && 
+                       typeof window.process.type === 'string' || 
+                       typeof window.electronAPI !== 'undefined';
+    
+    // 防止Chrome扩展连接错误
+    window.addEventListener('error', function(event) {
+      if (event.message && (
+          event.message.includes('Could not establish connection') || 
+          event.message.includes('Receiving end does not exist')
+      )) {
+        // 这是Chrome扩展相关的错误，可以忽略
+        event.preventDefault();
+        console.log('忽略Chrome扩展连接错误');
+        return true;
+      }
+    });
+    
     // 库加载函数
     function loadScript(localUrl, cdnUrl, id) {
       return new Promise((resolve, reject) => {
@@ -122,7 +142,8 @@
       loadScript('public/libs/omggif.min.js', 'https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js', 'omggif'),
       loadScript('public/libs/image-q.min.js', 'https://cdn.jsdelivr.net/npm/image-q@4.0.0/dist/umd/image-q.min.js', 'imageq'),
       loadScript('public/libs/gif.js', 'public/libs/gif.min.js', 'gifjs'),
-      loadScript('public/libs/gif.worker.js', 'public/libs/gif.worker.min.js', 'gifworker')
+      loadScript('public/libs/gif.worker.js', 'public/libs/gif.worker.min.js', 'gifworker'),
+      loadScript('public/libs/fabric.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js', 'fabricjs')
     ]).then(() => {
       console.log('所有库加载成功');
       
@@ -156,9 +177,19 @@
         console.error('初始化GIF处理器失败:', error);
       }
       
+      // 加载渲染器脚本（Electron环境）
+      if (window.isElectron) {
+        console.log('Electron环境检测成功，加载渲染器脚本');
+        const rendererScript = document.createElement('script');
+        rendererScript.src = 'renderer.js';
+        rendererScript.type = 'text/javascript';
+        document.body.appendChild(rendererScript);
+      }
+      
       // 继续正常的初始化
       const appScript = document.createElement('script');
       appScript.src = 'js/main.js';
+      document.body.appendChild(appScript);
       
     }).catch(error => {
       console.error('库加载失败:', error);
@@ -198,7 +229,7 @@
               }, 3000);
             }
           }
-        }, 1500);
+        }, 5000);
       } catch (error) {
         console.error('创建GIF容器失败:', error);
       }
@@ -500,7 +531,32 @@
   </div>
   
   <!-- 引入JavaScript模块 -->
-  <script type="module" src="js/main.js"></script>
+  <script src="js/main.js"></script>
+  
+  <!-- GIF水印处理脚本 -->
+  <script src="js/utils/gif-watermarker.js"></script>
+  <script src="js/utils/gif-watermark-ui.js"></script>
+  
+  <!-- 初始化GIF水印功能 -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // 设置全局标志，跟踪GIF水印UI初始化状态
+      window.gifWatermarkUIInitialized = false;
+      
+      // 延迟初始化，确保其他脚本已加载
+      setTimeout(function() {
+        if (!window.gifWatermarkUIInitialized && window.GifWatermarkUI && typeof window.GifWatermarkUI.init === 'function') {
+          console.log('初始化GIF水印UI');
+          window.GifWatermarkUI.init();
+          window.gifWatermarkUIInitialized = true;
+        } else if (window.gifWatermarkUIInitialized) {
+          console.log('GIF水印UI已初始化，跳过');
+        } else {
+          console.warn('GIF水印UI未加载');
+        }
+      }, 1000);
+    });
+  </script>
   
   <!-- 模态对话框自动关闭倒计时脚本 -->
   <script>

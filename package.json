@@ -6,10 +6,12 @@
   "author": "Image Watermark Tool Team",
   "license": "MIT",
   "devDependencies": {
+    "canvas": "^3.1.0",
+    "electron": "28.2.1",
+    "electron-builder": "^24.9.1",
     "gifwrap": "^0.10.1"
   },
   "dependencies": {
-    "canvas": "^3.1.0",
     "file-saver": "^2.0.5",
     "image-q": "^4.0.0",
     "jszip": "^3.10.1",
@@ -17,15 +19,105 @@
     "pixelmatch": "^7.1.0"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "dist": "electron-builder --win --publish never",
+    "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true}); console.log('Cleaned dist directory');\"",
+    "pack-installer": "npm run clean && electron-builder --win -c.extraMetadata.main=main.js --publish never",
+    "pack-small": "npm run clean && electron-builder --win --x64 --config.compression=maximum --config.asar=true --config.removePackageScripts=true --publish never",
+    "optimize": "node optimize-deps.js",
+    "build-small": "npm run optimize && npm run pack-small"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/flowerjunjie/image-watermark-tool-image.git"
   },
-  "keywords": [],
+  "keywords": [
+    "watermark",
+    "image",
+    "gif",
+    "batch-processing"
+  ],
   "bugs": {
     "url": "https://github.com/flowerjunjie/image-watermark-tool-image/issues"
   },
-  "homepage": "https://github.com/flowerjunjie/image-watermark-tool-image#readme"
+  "homepage": "https://github.com/flowerjunjie/image-watermark-tool-image#readme",
+  "build": {
+    "appId": "com.image-watermark-tool.app",
+    "productName": "图片水印工具",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+    ],
+    "asar": true,
+    "asarUnpack": [],
+    "compression": "maximum",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "图片水印工具",
+      "deleteAppDataOnUninstall": true,
+      "perMachine": false,
+      "differentialPackage": true
+    },
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "target": "dmg"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Graphics"
+    },
+    "extraResources": [
+      {
+        "from": "public/libs",
+        "to": "libs",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "jpg",
+          "jpeg",
+          "png",
+          "gif"
+        ],
+        "name": "图片文件",
+        "description": "图片文件",
+        "role": "Editor"
+      }
+    ]
+  }
 }

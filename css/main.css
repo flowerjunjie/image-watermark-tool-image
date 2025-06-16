@@ -426,12 +426,14 @@ select {
 
 .watermark {
   position: absolute;
-  pointer-events: none;
   -webkit-user-select: none;
   user-select: none;
   transform-origin: center;
   white-space: nowrap;
   z-index: 999999 !important; /* 添加最高显示层级 */
+  pointer-events: auto !important; /* 确保可点击拖动 */
+  cursor: move !important; /* 鼠标显示为可移动 */
+  display: block !important; /* 确保显示 */
 }
 
 .draggable-watermark {
@@ -898,18 +900,20 @@ footer {
   color: transparent !important;
 }
 
-/* 防止水印重叠 */
+/* 水印容器样式 */
 #watermark-container {
-  pointer-events: auto;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: auto !important;
   z-index: 999999 !important; /* 添加最高显示层级 */
+  overflow: visible !important; /* 允许水印溢出容器 */
+  display: flex !important;
+  justify-content: center;
+  align-items: center;
 }
-
-/* 移除这个可能导致水印元素被隐藏的规则 */
-/*
-#watermark-container > *:not(#watermark-element) {
-  display: none !important;
-}
-*/
 
 /* 缩略图加载指示器 */
 .thumbnail-loading {
