@@ -395,34 +395,8 @@ export function initEventListeners() {
         return;
       }
       
-      // 获取选中的缩略图（如果有）
-      const selectedThumbnails = document.querySelectorAll('.thumbnail.selected');
-      let filesToProcess = [];
-      
-      if (selectedThumbnails && selectedThumbnails.length > 0) {
-        // 有选中的缩略图，只处理选中的图片
-        selectedThumbnails.forEach(thumbnail => {
-          const index = parseInt(thumbnail.getAttribute('data-index'));
-          if (!isNaN(index) && index >= 0 && index < watermarkState.files.length) {
-            filesToProcess.push(watermarkState.files[index]);
-          }
-        });
-        
-        if (filesToProcess.length === 0) {
-          // 如果没有成功获取到选中图片，使用当前图片
-          if (watermarkState.currentIndex !== undefined && 
-              watermarkState.currentIndex >= 0 && 
-              watermarkState.currentIndex < watermarkState.files.length) {
-            filesToProcess.push(watermarkState.files[watermarkState.currentIndex]);
-          } else {
-            showMessage('未能获取选中的图片');
-            return;
-          }
-        }
-      } else {
-        // 没有选中的缩略图，处理所有图片
-        filesToProcess = [...watermarkState.files];
-      }
+      // 批量下载时始终处理所有图片，不考虑选择状态
+      const filesToProcess = [...watermarkState.files];
       
       // 显示处理模态框
       const processingModal = document.getElementById('processing-modal');
@@ -802,8 +776,7 @@ function generateHelpContent() {
       <h3>下载操作</h3>
       <ul>
         <li><strong>单张下载</strong>：点击"下载单张图片"按钮下载当前显示的图片。</li>
-        <li><strong>多选下载</strong>：按住Ctrl键(Windows)或⌘键(Mac)点击缩略图可以选择多个图片，然后点击"批量下载(ZIP)"按钮只下载选中的图片。</li>
-        <li><strong>全部下载</strong>：如果没有选择任何缩略图，点击"批量下载(ZIP)"按钮会将所有处理后的图片打包下载。</li>
+        <li><strong>批量下载</strong>：点击"批量下载(ZIP)"按钮将所有处理后的图片打包下载。</li>
         <li><strong>应用到所有</strong>：点击"应用到所有"按钮可以将当前图片的水印设置应用到所有其他图片。</li>
       </ul>
     </div>
@@ -819,7 +792,6 @@ function generateHelpContent() {
     <div class="help-section">
       <h3>使用技巧</h3>
       <ul>
-        <li><strong>多选缩略图</strong>：按住Ctrl键(Windows)或⌘键(Mac)可以选择多个缩略图进行批量下载。</li>
         <li><strong>调整背景</strong>：点击右上角的颜色按钮可以更改预览区域的背景色，便于查看不同背景下的水印效果。</li>
         <li><strong>鼠标滚轮</strong>：在水印上使用鼠标滚轮可以调整水印大小。</li>
         <li><strong>水印位置</strong>：拖动水印可以精确调整位置，水印位置会应用到后续上传的图片。</li>

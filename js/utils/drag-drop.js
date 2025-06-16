@@ -2360,6 +2360,102 @@ initDragAndDrop();
 // 初始化水印拖拽功能
 initWatermarkDragging();
 
+/**
+ * 创建并添加缩略图到缩略图容器
+ * @param {File|Object} file - 文件对象
+ * @param {number} index - 文件索引
+ */
+function createAndAddThumbnail(file, index) {
+  if (!file || typeof index !== 'number') {
+    console.error('创建缩略图失败: 无效的文件或索引', file, index);
+    return;
+  }
+
+  const thumbnailsContainer = document.getElementById('thumbnails-container');
+  if (!thumbnailsContainer) {
+    console.error('未找到缩略图容器');
+    return;
+  }
+
+  const thumbnailDiv = document.createElement('div');
+  thumbnailDiv.classList.add('thumbnail');
+  thumbnailDiv.setAttribute('data-index', index);
+  thumbnailDiv.setAttribute('title', file.name || `图片 ${index + 1}`);
+  thumbnailDiv.tabIndex = 0; // 使其可聚焦，便于键盘操作
+
+  // 设置当前索引的缩略图为"active"
+  if (index === watermarkState.currentIndex) {
+    thumbnailDiv.classList.add('active');
+  }
+
+  // 缩略图点击事件
+  thumbnailDiv.addEventListener('click', (event) => {
+    // 移除所有缩略图的"active"类
+    document.querySelectorAll('.thumbnail').forEach(thumb => {
+      thumb.classList.remove('active');
+    });
+
+    // 将当前缩略图设为"active"
+    thumbnailDiv.classList.add('active');
+
+    // 更新当前索引
+    watermarkState.currentIndex = index;
+    
+    // 加载图片
+    loadImage(watermarkState.files[index]);
+    
+    // 更新文件信息
+    updateFileInfo(watermarkState.files[index]);
+    
+    // 记录选择的图片
+    logAction('选择图片', { index: index, filename: file.name || `图片 ${index + 1}` });
+  });
+
+  // 创建图像元素
+  const img = document.createElement('img');
+  img.classList.add('thumbnail-img');
+  img.alt = file.name || `图片 ${index + 1}`;
+  thumbnailDiv.appendChild(img);
+
+  // 创建文件名标签
+  const fileNameLabel = document.createElement('div');
+  fileNameLabel.classList.add('thumbnail-filename');
+  fileNameLabel.title = file.name || `图片 ${index + 1}`;
+  fileNameLabel.textContent = file.name || `图片 ${index + 1}`;
+  thumbnailDiv.appendChild(fileNameLabel);
+
+  // 添加到容器
+  thumbnailsContainer.appendChild(thumbnailDiv);
+
+  // 如果文件已经有了blobUrl，直接设置
+  if (file.blobUrl) {
+    img.src = file.blobUrl;
+  } else if (file instanceof File) {
+    // 为文件创建缩略图
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.src = e.target.result;
+      
+      // 缓存blobUrl到文件对象
+      if (!file.blobUrl) {
+        file.blobUrl = e.target.result;
+      }
+    };
+    reader.onerror = (error) => {
+      console.error('读取文件失败:', error);
+      img.src = 'assets/file-icon.svg';
+      thumbnailDiv.classList.add('thumbnail-error');
+    };
+    reader.readAsDataURL(file);
+  } else {
+    console.error('无法创建缩略图:', file);
+    img.src = 'assets/file-icon.svg';
+    thumbnailDiv.classList.add('thumbnail-error');
+  }
+
+  return thumbnailDiv;
+}
+
 // 导出函数
 export { 
   initDragAndDrop,

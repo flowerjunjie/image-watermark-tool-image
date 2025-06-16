@@ -1,0 +1,8 @@
+/**
+ * Minified by jsDelivr using Terser v5.39.0.
+ * Original file: /npm/gifwrap@0.10.1/src/index.js
+ *
+ * Do NOT use SRI with dynamically generated files! More information: https://www.jsdelivr.com/using-sri-with-dynamic-files
+ */
+"use strict";const BitmapImage=require("./bitmapimage"),{Gif:Gif,GifError:GifError}=require("./gif"),{GifCodec:GifCodec}=require("./gifcodec"),{GifFrame:GifFrame}=require("./gifframe"),GifUtil=require("./gifutil");module.exports={BitmapImage:BitmapImage,Gif:Gif,GifCodec:GifCodec,GifFrame:GifFrame,GifUtil:GifUtil,GifError:GifError};
+//# sourceMappingURL=/sm/6c6fbf508f5a404788b246601a38ef771903d3b78b0a2bbbc361520c35ccae1c.map

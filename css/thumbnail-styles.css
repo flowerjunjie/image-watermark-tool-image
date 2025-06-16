@@ -167,20 +167,6 @@
   position: relative;
 }
 
-/* 多选提示 */
-#thumbnails-container::before {
-  content: "Ctrl+点击可多选";
-  position: absolute;
-  top: 5px;
-  right: 10px;
-  font-size: 10px;
-  color: #666;
-  background-color: rgba(255, 255, 255, 0.7);
-  padding: 2px 5px;
-  border-radius: 3px;
-  z-index: 5;
-}
-
 /* 文件统计容器 */
 .file-stats-container {
   margin: 10px 0;
