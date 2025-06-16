@@ -421,13 +421,24 @@ export function updateWatermarkPosition() {
             // 更新相对位置为居中
             watermarkState.relativePosition = { x: 50, y: 50 };
           } else {
-            // 限制水印在安全边界内
-            x = Math.max(minX, Math.min(maxX, x));
-            y = Math.max(minY, Math.min(maxY, y));
+            // "应用到所有"功能的处理：维持严格的相对位置
+            // 计算是否来自"应用到所有"功能 - 如果是，则尊重原始百分比位置，不进行安全边界限制
+            const isFromApplyToAll = watermarkState.fromApplyToAll === true;
             
-            // 更新相对位置，确保它们反映实际位置
-            watermarkState.relativePosition.x = (x / displayedWidth) * 100;
-            watermarkState.relativePosition.y = (y / displayedHeight) * 100;
+            if (isFromApplyToAll) {
+              // 严格使用相对位置，不进行边界检查，确保各个图片上水印位置一致
+              x = (watermarkState.relativePosition.x / 100) * displayedWidth;
+              y = (watermarkState.relativePosition.y / 100) * displayedHeight;
+              console.log('应用到所有模式: 保持严格的相对位置', watermarkState.relativePosition);
+            } else {
+              // 普通模式：限制水印在安全边界内
+              x = Math.max(minX, Math.min(maxX, x));
+              y = Math.max(minY, Math.min(maxY, y));
+              
+              // 更新相对位置，确保它们反映实际位置
+              watermarkState.relativePosition.x = (x / displayedWidth) * 100;
+              watermarkState.relativePosition.y = (y / displayedHeight) * 100;
+            }
           }
         } else {
           // 默认使用中心位置

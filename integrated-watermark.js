@@ -828,6 +828,47 @@ function initWatermarkFunctions() {
       return;
     }
     
+    // 获取当前图片的文件名
+    const currentFileName = window.watermarkState.files[index].name;
+    
+    // 只有当是"应用到所有"的设置时才应用保存的设置
+    if (window.watermarkState.processedSettings && 
+        window.watermarkState.processedSettings[currentFileName] && 
+        window.watermarkState.processedSettings[currentFileName].fromApplyToAll === true) {
+      
+      console.log(`加载图片 ${currentFileName} 的应用到所有水印设置`);
+      
+      // 保存原始图像对象、尺寸和其他不应该被覆盖的属性
+      const originalImage = window.watermarkState.originalImage;
+      const imageWidth = window.watermarkState.imageWidth;
+      const imageHeight = window.watermarkState.imageHeight;
+      const files = window.watermarkState.files;
+      const currentIndex = index;  // 使用传入的索引，而不是watermarkState.currentIndex
+      const processed = window.watermarkState.processed;
+      const processedSettings = window.watermarkState.processedSettings;
+      
+      // 检查并记录是否是"应用到所有"设置
+      const isFromApplyToAll = window.watermarkState.processedSettings[currentFileName].fromApplyToAll === true;
+      
+      // 应用保存的设置
+      const savedSettings = window.watermarkState.processedSettings[currentFileName];
+      Object.assign(window.watermarkState, savedSettings);
+      
+      // 恢复不应该被覆盖的属性
+      window.watermarkState.originalImage = originalImage;
+      window.watermarkState.imageWidth = imageWidth;
+      window.watermarkState.imageHeight = imageHeight;
+      window.watermarkState.files = files;
+      window.watermarkState.currentIndex = currentIndex;
+      window.watermarkState.processed = processed;
+      window.watermarkState.processedSettings = processedSettings;
+      
+      // 确保保留标志
+      window.watermarkState.fromApplyToAll = isFromApplyToAll;
+      
+      console.log('已加载 "应用到所有" 设置');
+    }
+    
     // 隐藏提示信息
     noImageMessage.style.display = 'none';
     
@@ -950,7 +991,7 @@ function initWatermarkFunctions() {
           // 更新当前索引
           window.watermarkState.currentIndex = index;
           
-          // 显示选中图片
+          // 显示选中图片但不记录位置
           window.showImage(index);
           
           // 更新缩略图选中状态
@@ -999,6 +1040,98 @@ function initEventListeners() {
     
     fileInput.addEventListener('change', function() {
       handleFiles(this.files);
+    });
+  }
+  
+  // 应用到所有按钮点击事件
+  const applyToAllBtn = document.getElementById('apply-to-all-btn');
+  if (applyToAllBtn) {
+    console.log('设置应用到所有按钮事件');
+    
+    applyToAllBtn.addEventListener('click', function() {
+      if (!window.watermarkState.files || window.watermarkState.files.length <= 1) {
+        window.showStatusMessage('需要至少两张图片才能应用设置');
+        return;
+      }
+      
+      // 显示确认对话框
+      if (!confirm('这将覆盖所有其他图片的水印设置，是否继续？')) {
+        return;
+      }
+      
+      // 保存当前图片的设置
+      const currentIndex = window.watermarkState.currentIndex;
+      const currentFileName = window.watermarkState.files[currentIndex].name;
+      
+      // 当前水印状态
+      const currentSettings = {
+        type: window.watermarkState.type,
+        text: window.watermarkState.text,
+        color: window.watermarkState.color,
+        fontSize: window.watermarkState.fontSize,
+        opacity: window.watermarkState.opacity,
+        rotation: window.watermarkState.rotation,
+        relativePosition: { ...window.watermarkState.relativePosition },
+        scale: window.watermarkState.scale,
+        watermarkImage: window.watermarkState.watermarkImage,
+        watermarkImageSize: window.watermarkState.watermarkImageSize,
+        tileSpacing: window.watermarkState.tileSpacing
+      };
+      
+      // 保存当前设置到当前文件名
+      if (!window.watermarkState.processedSettings) {
+        window.watermarkState.processedSettings = {};
+      }
+      window.watermarkState.processedSettings[currentFileName] = {...currentSettings};
+      
+      // 保存原始索引
+      const originalIndex = window.watermarkState.currentIndex;
+      
+      // 应用到所有其他图片
+      let appliedCount = 0;
+      
+      // 显示处理中状态
+      const statusMessage = document.getElementById('status-message');
+      if (statusMessage) {
+        statusMessage.textContent = '正在应用水印设置到所有图片...';
+        statusMessage.style.display = 'block';
+      }
+      
+      // 应用设置到其他图片
+      for (let i = 0; i < window.watermarkState.files.length; i++) {
+        if (i !== originalIndex) {
+          const fileName = window.watermarkState.files[i].name;
+          
+          // 创建设置的深拷贝，确保完全独立
+          const adjustedSettings = {...currentSettings};
+          
+          // 确保相对位置在0-100范围内
+          if (adjustedSettings.relativePosition) {
+            adjustedSettings.relativePosition.x = Math.max(0, Math.min(100, adjustedSettings.relativePosition.x));
+            adjustedSettings.relativePosition.y = Math.max(0, Math.min(100, adjustedSettings.relativePosition.y));
+          } else {
+            adjustedSettings.relativePosition = { x: 50, y: 50 };
+          }
+          
+          // 添加标志，表示这个设置是从"应用到所有"功能产生的
+          adjustedSettings.fromApplyToAll = true;
+          
+          // 保存设置到其他图片
+          window.watermarkState.processedSettings[fileName] = adjustedSettings;
+          
+          // 增加计数
+          appliedCount++;
+        }
+      }
+      
+      // 恢复原始索引
+      window.watermarkState.currentIndex = originalIndex;
+      
+      // 显示成功消息
+      window.showStatusMessage(`已将当前水印设置应用到其他 ${appliedCount} 张图片`);
+      
+      // 更新缩略图
+      window.updateThumbnails();
     });
   }
   

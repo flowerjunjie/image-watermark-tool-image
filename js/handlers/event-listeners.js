@@ -47,10 +47,13 @@ export function initEventListeners() {
       const currentImageWidth = watermarkState.imageWidth;
       const currentImageHeight = watermarkState.imageHeight;
       
+      // 保存当前选中的图片索引，稍后会恢复
+      const originalIndex = watermarkState.currentIndex;
+      
       // 应用到所有其他图片
       let appliedCount = 0;
       for (let i = 0; i < watermarkState.files.length; i++) {
-        if (i !== watermarkState.currentIndex) {
+        if (i !== originalIndex) {
           const fileName = watermarkState.files[i].name;
           
           // 复制当前设置到其他图片，但确保相对位置在有效范围内
@@ -64,11 +67,22 @@ export function initEventListeners() {
             adjustedSettings.relativePosition = { x: 50, y: 50 };
           }
           
+          // 添加标志，表示这个设置是从"应用到所有"功能产生的
+          adjustedSettings.fromApplyToAll = true;
+          
           // 保存调整后的设置
           watermarkState.processedSettings[fileName] = adjustedSettings;
+          
+          // 在保存设置后，立即将当前索引切换到目标图片，并应用设置
+          watermarkState.currentIndex = i;
+          
+          // 不调用updateWatermark，而是在所有设置应用完后一次性更新
           appliedCount++;
         }
       }
+      
+      // 恢复到原始选中的图片
+      watermarkState.currentIndex = originalIndex;
       
       // 显示成功消息
       showMessage(`已将当前水印设置应用到其他 ${appliedCount} 张图片`);
