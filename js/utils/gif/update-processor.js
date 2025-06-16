@@ -39,7 +39,7 @@ function switchToNewGifProcessor() {
     console.log('切换到新的GIF处理器实现...');
     
     // 导入新的GIF处理器
-    import('../gifwrap/gif-processor.js').then(module => {
+    import('./gif-processor-new.js').then(module => {
       console.log('成功导入新的GIF处理器');
       
       // 替换全局函数

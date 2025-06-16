@@ -120,7 +120,9 @@
       loadScript('public/libs/jszip.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'jszip'),
       loadScript('public/libs/gifwrap.min.js', 'https://cdn.jsdelivr.net/npm/gifwrap@0.10.1/umd/gifwrap.min.js', 'gifwrap'),
       loadScript('public/libs/omggif.min.js', 'https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js', 'omggif'),
-      loadScript('public/libs/image-q.min.js', 'https://cdn.jsdelivr.net/npm/image-q@4.0.0/dist/umd/image-q.min.js', 'imageq')
+      loadScript('public/libs/image-q.min.js', 'https://cdn.jsdelivr.net/npm/image-q@4.0.0/dist/umd/image-q.min.js', 'imageq'),
+      loadScript('public/libs/gif.js', 'public/libs/gif.min.js', 'gifjs'),
+      loadScript('public/libs/gif.worker.js', 'public/libs/gif.worker.min.js', 'gifworker')
     ]).then(() => {
       console.log('所有库加载成功');
       
@@ -128,6 +130,20 @@
       const testScript = document.createElement('script');
       testScript.src = 'public/libs/gifwrap-test.js';
       document.head.appendChild(testScript);
+      
+      // 主动调用更新GIF处理器函数
+      import('./js/utils/gif/update-processor.js')
+        .then(module => {
+          if (typeof module.updateGifProcessor === 'function') {
+            console.log('主动调用GIF处理器更新函数');
+            module.updateGifProcessor();
+          } else {
+            console.warn('GIF处理器更新函数不可用');
+          }
+        })
+        .catch(err => {
+          console.error('加载GIF处理器更新模块失败:', err);
+        });
       
     }).catch(error => {
       console.error('库加载失败:', error);
