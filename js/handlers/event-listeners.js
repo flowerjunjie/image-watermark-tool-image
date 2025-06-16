@@ -238,8 +238,18 @@ export function initEventListeners() {
   
   if (downloadBtn) {
     downloadBtn.addEventListener('click', function() {
-      if (!currentFile) {
+      // 使用watermarkState.files和currentIndex获取当前文件
+      if (!watermarkState.files || watermarkState.files.length === 0 || 
+          watermarkState.currentIndex === undefined || watermarkState.currentIndex < 0 || 
+          watermarkState.currentIndex >= watermarkState.files.length) {
         showMessage('请先上传图片');
+        return;
+      }
+      
+      // 获取当前选中的文件
+      const currentFile = watermarkState.files[watermarkState.currentIndex];
+      if (!currentFile) {
+        showMessage('无法获取当前图片');
         return;
       }
       
@@ -385,6 +395,35 @@ export function initEventListeners() {
         return;
       }
       
+      // 获取选中的缩略图（如果有）
+      const selectedThumbnails = document.querySelectorAll('.thumbnail.selected');
+      let filesToProcess = [];
+      
+      if (selectedThumbnails && selectedThumbnails.length > 0) {
+        // 有选中的缩略图，只处理选中的图片
+        selectedThumbnails.forEach(thumbnail => {
+          const index = parseInt(thumbnail.getAttribute('data-index'));
+          if (!isNaN(index) && index >= 0 && index < watermarkState.files.length) {
+            filesToProcess.push(watermarkState.files[index]);
+          }
+        });
+        
+        if (filesToProcess.length === 0) {
+          // 如果没有成功获取到选中图片，使用当前图片
+          if (watermarkState.currentIndex !== undefined && 
+              watermarkState.currentIndex >= 0 && 
+              watermarkState.currentIndex < watermarkState.files.length) {
+            filesToProcess.push(watermarkState.files[watermarkState.currentIndex]);
+          } else {
+            showMessage('未能获取选中的图片');
+            return;
+          }
+        }
+      } else {
+        // 没有选中的缩略图，处理所有图片
+        filesToProcess = [...watermarkState.files];
+      }
+      
       // 显示处理模态框
       const processingModal = document.getElementById('processing-modal');
       const modalProgressBar = document.getElementById('modal-progress-bar');
@@ -395,7 +434,7 @@ export function initEventListeners() {
         processingModal.style.display = 'flex';
         const modalTitle = processingModal.querySelector('.modal-title');
         if (modalTitle) modalTitle.textContent = '批量处理中...';
-        if (processingStatus) processingStatus.textContent = '准备批量处理...';
+        if (processingStatus) processingStatus.textContent = `准备批量处理${filesToProcess.length}张图片...`;
         
         // 重置进度条
         if (modalProgressBar) {
@@ -430,7 +469,7 @@ export function initEventListeners() {
         };
         
         // 批量处理图片
-        batchProcessImages(watermarkState.files, (progress) => {
+        batchProcessImages(filesToProcess, (progress) => {
           // 更新进度
           if (modalProgressBar && processingStatus) {
             const percent = Math.round(progress.progress * 100);
@@ -747,57 +786,54 @@ function generateHelpContent() {
         <li><strong>水印类型</strong>：可选择文字水印、平铺水印或图片水印。</li>
         <li><strong>文字水印</strong>：输入水印文字，调整大小、颜色、透明度和旋转角度。</li>
         <li><strong>平铺水印</strong>：设置文字内容，调整大小、颜色、透明度、旋转角度和平铺间距。</li>
-        <li><strong>图片水印</strong>：上传一张图片作为水印，调整大小、透明度和旋转角度。</li>
-        <li>默认水印大小已优化为36px，提供更好的可见性。</li>
+        <li><strong>图片水印</strong>：上传一个图片作为水印，调整水印图片大小。</li>
       </ul>
     </div>
     
     <div class="help-section">
       <h3>水印定位</h3>
-      <p>水印可以通过以下方式调整位置和大小：</p>
       <ul>
-        <li><strong>拖动定位</strong>：直接用鼠标拖动水印到需要的位置。</li>
-        <li><strong>鼠标滚轮缩放</strong>：在水印上滚动鼠标滚轮可以调整水印大小。</li>
+        <li><strong>拖拽定位</strong>：直接用鼠标拖动水印到所需位置。</li>
+        <li><strong>水印缩放</strong>：选择固定大小或相对图片大小的比例。</li>
       </ul>
     </div>
     
     <div class="help-section">
-      <h3>批量处理</h3>
-      <p>批量处理多张图片的步骤：</p>
-      <ol>
-        <li>上传多张图片或一个图片文件夹。</li>
-        <li>设置好水印的类型、内容和样式。</li>
-        <li>点击"开始批量处理"按钮，等待处理完成。</li>
-        <li>处理完成后，点击"批量下载"按钮，将会下载包含所有处理后图片的ZIP文件。</li>
-        <li>批量处理时会显示"处理中..."进度提示，请耐心等待完成。</li>
-      </ol>
-    </div>
-    
-    <div class="help-section">
-      <h3>图片背景设置</h3>
-      <p>为减轻眼睛疲劳，可以选择不同的预览背景色：</p>
+      <h3>下载操作</h3>
       <ul>
-        <li><strong>白色背景</strong>：默认背景色，适合大多数图片。</li>
-        <li><strong>浅灰背景</strong>：中性背景色，减少眼部疲劳。</li>
-        <li><strong>浅蓝背景</strong>：冷色调背景，适合长时间查看。</li>
-        <li><strong>浅绿背景</strong>：护眼色，减少屏幕蓝光。</li>
-        <li><strong>浅黄背景</strong>：暖色调背景，适合夜间使用。</li>
+        <li><strong>单张下载</strong>：点击"下载单张图片"按钮下载当前显示的图片。</li>
+        <li><strong>多选下载</strong>：按住Ctrl键(Windows)或⌘键(Mac)点击缩略图可以选择多个图片，然后点击"批量下载(ZIP)"按钮只下载选中的图片。</li>
+        <li><strong>全部下载</strong>：如果没有选择任何缩略图，点击"批量下载(ZIP)"按钮会将所有处理后的图片打包下载。</li>
+        <li><strong>应用到所有</strong>：点击"应用到所有"按钮可以将当前图片的水印设置应用到所有其他图片。</li>
       </ul>
     </div>
     
     <div class="help-section">
-      <h3>图片质量设置</h3>
-      <p>可以调整输出图片的质量，默认为92%的高质量设置。质量越高，图片越清晰但文件体积越大。</p>
+      <h3>GIF支持</h3>
+      <ul>
+        <li><strong>GIF水印</strong>：可以为GIF动图添加水印，保留原始动画效果。</li>
+        <li><strong>质量调整</strong>：可以调整GIF的质量参数，平衡文件大小和质量。</li>
+      </ul>
     </div>
     
     <div class="help-section">
-      <h3>注意事项</h3>
+      <h3>使用技巧</h3>
       <ul>
-        <li>对于小图片（宽度或高度小于300像素），水印大小会自动调整。</li>
-        <li>批量处理大量图片可能需要一些时间，请耐心等待。</li>
-        <li>本工具在本地处理图片，不会上传到服务器，保证您的图片隐私安全。</li>
-        <li>批量下载功能会保留原始图片格式，不进行格式转换。</li>
+        <li><strong>多选缩略图</strong>：按住Ctrl键(Windows)或⌘键(Mac)可以选择多个缩略图进行批量下载。</li>
+        <li><strong>调整背景</strong>：点击右上角的颜色按钮可以更改预览区域的背景色，便于查看不同背景下的水印效果。</li>
+        <li><strong>鼠标滚轮</strong>：在水印上使用鼠标滚轮可以调整水印大小。</li>
+        <li><strong>水印位置</strong>：拖动水印可以精确调整位置，水印位置会应用到后续上传的图片。</li>
       </ul>
     </div>
   `;
+}
+
+// 文件加载时显示多选提示
+export function showMultiSelectionTip() {
+  // 只有当有多张图片时才显示提示
+  if (watermarkState.files && watermarkState.files.length > 1) {
+    setTimeout(() => {
+      showStatus('提示: 按住Ctrl或⌘点击缩略图可以多选图片进行批量下载', true);
+    }, 1500); // 延迟显示，让用户先看到其他消息
+  }
 } 

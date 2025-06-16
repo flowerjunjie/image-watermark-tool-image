@@ -8,6 +8,9 @@ import { watermarkState, updateState, applyFirstImageSettings, saveFirstImageSet
 import { updateWatermark } from '../core/watermark.js';
 import { showError, showMessage, showStatus } from '../ui/messages.js';
 
+// 引入显示多选提示函数
+import { showMultiSelectionTip } from '../handlers/event-listeners.js';
+
 /**
  * 初始化拖放功能
  */
@@ -278,213 +281,198 @@ if (typeof window !== 'undefined') {
  * @returns {Promise} - 返回一个Promise，在处理完成时resolve
  */
 function handleImageFiles(files) {
+  console.log('处理拖放的图片文件:', files.length);
+  
+  // 检查是否有文件
+  if (!files || files.length === 0) {
+    showError('没有选择任何文件');
+    return Promise.resolve([]);
+  }
+  
+  // 更新状态
+  updateState({ 
+    files: [], // 先清空
+    currentIndex: 0,
+    processed: {}
+  });
+  
+  // 清空现有的缩略图
+  const thumbnailsContainer = document.getElementById('thumbnails-container');
+  if (thumbnailsContainer) {
+    thumbnailsContainer.innerHTML = '';
+    thumbnailsContainer.style.display = 'none'; // 先隐藏，等有内容再显示
+  }
+  
+  // 记录开始时间
+  const startTime = Date.now();
+  
+  // 过滤出图片文件
+  const imageFiles = Array.from(files).filter(file => 
+    file.type.startsWith('image/') || 
+    file.name.toLowerCase().match(/\.(jpe?g|png|gif|bmp|webp|svg|ico)$/i)
+  );
+  
+  // 如果有文件被过滤掉，显示提示
+  if (imageFiles.length < files.length) {
+    showMessage(`已过滤 ${files.length - imageFiles.length} 个非图片文件`);
+  }
+  
+  if (imageFiles.length === 0) {
+    showError('没有可用的图片文件');
+    return Promise.resolve([]);
+  }
+  
+  // 文件扩展名统计
+  const extensionCount = {};
+  const errorStats = { 
+    total: 0, 
+    types: {} // 记录不同类型的错误
+  };
+  
+  // 更新状态
+  updateState({ 
+    files: imageFiles,
+    currentIndex: 0,
+    processed: {}
+  });
+  
+  // 统计文件扩展名
+  imageFiles.forEach(file => {
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    extensionCount[ext] = extensionCount[ext] ? extensionCount[ext] + 1 : 1;
+  });
+  
+  // 显示文件统计
+  displayFileStatistics(extensionCount, imageFiles.length, files.length, errorStats);
+  
+  // 创建和处理缩略图
   return new Promise((resolve, reject) => {
     try {
-      // 常见图片文件扩展名列表
-      const validImageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.tiff', '.tif', '.ico', '.heic', '.heif', '.raw', '.psd', '.cr2', '.nef', '.arw'];
-      
-      // 检查是否为文件夹上传
-      let hasFolderStructure = false;
-      for (let i = 0; i < files.length; i++) {
-        if (files[i].webkitRelativePath) {
-          hasFolderStructure = true;
-          break;
-        }
-      }
-      
-      if (hasFolderStructure) {
-        console.log('检测到文件夹上传，保留目录结构');
-      }
-      
-      // 过滤出图片文件 - 同时检查MIME类型和文件扩展名
-      const imageFiles = Array.from(files).filter(file => {
-        // 通过MIME类型判断
-        const isImageMime = file.type.startsWith('image/');
-        
-        // 通过文件扩展名判断
-        const fileName = file.name.toLowerCase();
-        const hasImageExtension = validImageExtensions.some(ext => fileName.endsWith(ext));
-        
-        // 统计所有尝试处理的文件
-        console.log(`文件: ${fileName}, MIME类型: ${file.type}, 是否为图片(MIME): ${isImageMime}, 是否有图片扩展名: ${hasImageExtension}`);
-        
-        // 满足任一条件即认为是图片
-        return isImageMime || hasImageExtension;
-      });
-      
-      // 记录被过滤掉的文件
-      const filteredOutFiles = Array.from(files).filter(file => {
-        const isImageMime = file.type.startsWith('image/');
-        const fileName = file.name.toLowerCase();
-        const hasImageExtension = validImageExtensions.some(ext => fileName.endsWith(ext));
-        return !(isImageMime || hasImageExtension);
-      });
-      
-      // 显示被过滤掉的文件信息
-      if (filteredOutFiles.length > 0) {
-        console.warn(`已过滤掉 ${filteredOutFiles.length} 个非图片文件:`, filteredOutFiles.map(f => f.name).join(', '));
-      }
-      
-      // 显示总体过滤统计
-      console.log(`总文件数: ${files.length}, 图片文件: ${imageFiles.length}, 非图片文件: ${filteredOutFiles.length}`);
-      
-      if (imageFiles.length === 0) {
-        showError('未找到有效的图片文件');
-        
-        // 隐藏进度模态框（如果已显示）
-        const processingModal = document.getElementById('processing-modal');
-        if (processingModal && processingModal.style.display === 'flex') {
-          processingModal.style.display = 'none';
-        }
-        
-        reject(new Error('未找到有效的图片文件'));
-        return;
-      }
-      
-      // 显示图片数量
-      console.log(`加载了 ${imageFiles.length} 张图片`);
-      
-      // 统计文件扩展名
-      const extensionCount = {};
-      imageFiles.forEach(file => {
-        // 获取文件名和扩展名
-        const fileName = file.name;
-        const fileExt = fileName.lastIndexOf('.') > 0 ? 
-          fileName.substring(fileName.lastIndexOf('.')).toLowerCase() : 
-          '无扩展名';
-        
-        // 计数
-        extensionCount[fileExt] = (extensionCount[fileExt] || 0) + 1;
-      });
-      
-      // 显示扩展名统计信息
-      console.log('文件扩展名统计:', extensionCount);
-      let extensionSummary = '文件类型统计: ';
-      for (const [ext, count] of Object.entries(extensionCount)) {
-        extensionSummary += `${ext}: ${count}张, `;
-      }
-      extensionSummary = extensionSummary.slice(0, -2); // 移除末尾的逗号和空格
-      
-      // 获取处理状态元素
-      const processingStatus = document.getElementById('processing-status');
-      const processingModal = document.getElementById('processing-modal');
-      const modalProgressBar = document.getElementById('modal-progress-bar');
-      
-      // 显示扩展名统计信息
-      if (processingStatus) {
-        processingStatus.textContent = `${extensionSummary}`;
-        // 2秒后更新回正常状态
-        setTimeout(() => {
-          processingStatus.textContent = `正在加载 0/${imageFiles.length} 图片文件...`;
-        }, 2000);
-      }
-      
-      // 在UI中显示文件统计信息
-      displayFileStatistics(extensionCount, imageFiles.length, files.length, { total: 0, types: {} });
-      
-      // 如果图片数量较多或存在文件夹结构，显示处理模态框
-      const totalFiles = imageFiles.length;
-      if (totalFiles > 10 || hasFolderStructure) {
-        if (processingModal) {
-          const modalTitle = processingModal.querySelector('.modal-title');
-          if (modalTitle) {
-            modalTitle.textContent = hasFolderStructure ? 
-              '处理文件夹中...' : '处理中...';
-          }
-          if (processingStatus) {
-            processingStatus.textContent = hasFolderStructure ?
-              `正在处理文件夹内容... 0/${totalFiles}` : 
-              `正在加载 0/${totalFiles} 图片文件...`;
-          }
-          
-          // 重置进度条
-          if (modalProgressBar) {
-            modalProgressBar.style.width = '0%';
-            modalProgressBar.textContent = '0%';
-          }
-          
-          // 确保模态框显示
-          processingModal.style.display = 'flex';
-        }
-      }
-      
-      // 检查是否是首次加载图片
-      const isFirstLoad = !watermarkState.files || watermarkState.files.length === 0;
-      
-      // 更新状态
-      updateState({
-        files: imageFiles,
-        currentIndex: 0,
-        initialSettingsApplied: isFirstLoad ? false : watermarkState.initialSettingsApplied
-      });
-      
-      // 如果是首次加载图片，重置处理过的设置
-      if (isFirstLoad) {
-        watermarkState.processedSettings = {};
-        watermarkState.firstImageSettings = null;
-      }
-      
       // 显示缩略图容器
-      const thumbnailsContainer = document.getElementById('thumbnails-container');
       if (thumbnailsContainer) {
         thumbnailsContainer.style.display = 'flex';
-        thumbnailsContainer.innerHTML = '';
       }
       
-      // 生成缩略图，并显示进度
-      let processedCount = 0;
+      // 如果是多张图片，显示正在批量处理的消息
+      if (imageFiles.length > 1) {
+        showStatus(`正在处理 ${imageFiles.length} 张图片...`, true);
+      }
       
+      // 处理第一个图片
+      setTimeout(() => {
+        // 处理第一个图片
+        createThumbnail(imageFiles[0], 0)
+          .then(result => {
+            console.log('第一张缩略图创建完成');
+            
+            if (thumbnailsContainer) {
+              // 添加第一个缩略图
+              thumbnailsContainer.appendChild(result.thumbnail);
+              
+              // 选中第一个缩略图
+              result.thumbnail.classList.add('selected');
+            }
+            
+            // 保存第一张图片的设置
+            if (imageFiles.length > 1) {
+              saveFirstImageSettings();
+            }
+            
+            // 处理剩余的图片
+            if (imageFiles.length > 1) {
+              processThumbnails(1);
+            } else {
+              // 如果只有一张图片，显示处理完成
+              const endTime = Date.now();
+              const processingTime = (endTime - startTime) / 1000;
+              showStatus(`图片处理完成，耗时 ${processingTime.toFixed(1)} 秒`, true);
+              resolve(imageFiles);
+            }
+          })
+          .catch(error => {
+            console.error('创建第一个缩略图时出错:', error);
+            showError('处理图片时出错: ' + error.message);
+            errorStats.total++;
+            
+            // 记录错误类型
+            const errorType = error.name || '未知错误';
+            errorStats.types[errorType] = errorStats.types[errorType] ? errorStats.types[errorType] + 1 : 1;
+            
+            // 尝试处理下一个图片
+            if (imageFiles.length > 1) {
+              processThumbnails(1);
+            } else {
+              reject(error);
+            }
+          });
+      }, 100);
+      
+      // 处理剩余缩略图的函数
       const processThumbnails = (startIndex) => {
-        const batchSize = 5; // 每批处理的图片数
-        const endIndex = Math.min(startIndex + batchSize, imageFiles.length);
+        console.log(`开始处理从索引 ${startIndex} 开始的剩余图片...`);
         
-        for (let i = startIndex; i < endIndex; i++) {
-          createThumbnail(imageFiles[i], i);
-          processedCount++;
-          
-          // 更新进度
-          if ((totalFiles > 10 || hasFolderStructure) && processingModal && modalProgressBar && processingStatus) {
-            const progress = Math.round((processedCount / totalFiles) * 100);
-            modalProgressBar.style.width = `${progress}%`;
-            modalProgressBar.textContent = `${progress}%`;
-            processingStatus.textContent = hasFolderStructure ?
-              `正在处理文件夹内容... ${processedCount}/${totalFiles}` :
-              `正在加载 ${processedCount}/${totalFiles} 图片文件...`;
-          }
+        // 批量处理剩余的图片
+        const promises = [];
+        
+        for (let i = startIndex; i < imageFiles.length; i++) {
+          promises.push(
+            createThumbnail(imageFiles[i], i)
+              .then(result => {
+                if (thumbnailsContainer) {
+                  thumbnailsContainer.appendChild(result.thumbnail);
+                }
+                return result;
+              })
+              .catch(error => {
+                console.error(`处理索引 ${i} 的图片时出错:`, error);
+                errorStats.total++;
+                
+                // 记录错误类型
+                const errorType = error.name || '未知错误';
+                errorStats.types[errorType] = errorStats.types[errorType] ? errorStats.types[errorType] + 1 : 1;
+                
+                return null; // 错误时返回null，不中断整个Promise.all
+              })
+          );
         }
         
-        // 如果还有未处理的图片，继续处理下一批
-        if (endIndex < imageFiles.length) {
-          setTimeout(() => processThumbnails(endIndex), 10);
-        } else {
-          // 所有图片都已处理完成
-          if ((totalFiles > 10 || hasFolderStructure) && processingModal) {
-            processingModal.style.display = 'none';
-          }
-          
-          // 处理当前选中的图片
-          processCurrentImage();
-          
-          // 完成处理，解析Promise
-          resolve();
-        }
+        // 等待所有图片处理完成
+        Promise.all(promises)
+          .then(results => {
+            // 过滤出成功的结果
+            const successResults = results.filter(result => result !== null);
+            
+            // 计算处理时间
+            const endTime = Date.now();
+            const processingTime = (endTime - startTime) / 1000;
+            
+            console.log(`所有图片处理完成，共 ${successResults.length} 张成功，${errorStats.total} 张失败，耗时 ${processingTime.toFixed(1)} 秒`);
+            
+            // 更新文件统计
+            displayFileStatistics(extensionCount, imageFiles.length, files.length, errorStats);
+            
+            // 显示处理完成消息
+            const message = errorStats.total > 0
+              ? `图片处理完成，共 ${successResults.length} 张成功，${errorStats.total} 张失败，耗时 ${processingTime.toFixed(1)} 秒`
+              : `${imageFiles.length} 张图片处理完成，耗时 ${processingTime.toFixed(1)} 秒`;
+              
+            showStatus(message, errorStats.total === 0);
+            
+            // 显示多选提示
+            showMultiSelectionTip();
+            
+            // 完成Promise
+            resolve(imageFiles);
+          })
+          .catch(error => {
+            console.error('处理缩略图时出错:', error);
+            showError('批量处理图片时出错: ' + error.message);
+            reject(error);
+          });
       };
-      
-      // 开始处理第一批图片
-      processThumbnails(0);
     } catch (error) {
-      console.error('处理图片文件时出错:', error);
-      
-      // 确保关闭处理模态框
-      const processingModal = document.getElementById('processing-modal');
-      if (processingModal && processingModal.style.display === 'flex') {
-        processingModal.style.display = 'none';
-      }
-      
-      // 显示错误消息
-      showError(`处理图片文件时出错: ${error.message}`);
-      
-      // 拒绝Promise
+      console.error('创建缩略图容器时出错:', error);
+      showError('处理图片时出错: ' + error.message);
       reject(error);
     }
   });
@@ -494,108 +482,102 @@ function handleImageFiles(files) {
  * 创建缩略图
  * @param {File} file - 图片文件
  * @param {number} index - 图片索引
+ * @returns {Promise<{thumbnail: HTMLElement}>} - 返回缩略图元素的Promise
  */
 function createThumbnail(file, index) {
-  // 创建缩略图容器
-  const thumbnailsContainer = document.getElementById('thumbnails-container');
-  const thumbnail = document.createElement('div');
-  thumbnail.className = 'thumbnail';
-  thumbnail.dataset.index = index;
-  thumbnail.dataset.filename = file.name;
-  
-  // 设置初始激活状态
-  if (index === 0) {
-    thumbnail.classList.add('active');
-  }
-  
-  // 创建缩略图图片
-  const img = document.createElement('img');
-  img.alt = file.name;
-  
-  // 添加加载指示器
-  const loadingIndicator = document.createElement('div');
-  loadingIndicator.className = 'thumbnail-loading';
-  loadingIndicator.innerHTML = '<div class="spinner"></div>';
-  thumbnail.appendChild(loadingIndicator);
-  
-  // 创建文件名标签
-  const fileName = document.createElement('div');
-  fileName.className = 'file-name';
-  fileName.textContent = file.name.length > 15 ? file.name.substring(0, 12) + '...' : file.name;
-  fileName.title = file.name; // 添加完整文件名作为提示
-  
-  // 判断是否为GIF
-  const isGif = file.name.toLowerCase().endsWith('.gif') || file.type === 'image/gif';
-  
-  // 创建标识容器用于特定文件类型
-  let typeBadge = null;
-  if (isGif) {
-    typeBadge = document.createElement('div');
-    typeBadge.className = 'thumbnail-gif-badge';
-    typeBadge.textContent = 'GIF';
-  } else if (file.name.toLowerCase().endsWith('.png')) {
-    typeBadge = document.createElement('div');
-    typeBadge.className = 'thumbnail-png-badge';
-    typeBadge.textContent = 'PNG';
-  } else if (file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
-    typeBadge = document.createElement('div');
-    typeBadge.className = 'thumbnail-jpg-badge';
-    typeBadge.textContent = 'JPG';
-  }
-  
-  // 如果有类型标识，添加到缩略图
-  if (typeBadge) {
-    thumbnail.appendChild(typeBadge);
-  }
-  
-  // 添加点击事件 - 使用新的处理方式
-  thumbnail.addEventListener('click', (event) => {
-    // 允许重复点击同一个缩略图
-    handleThumbnailClick(event, thumbnail, index, file);
-  });
-  
-  // 添加到容器
-  thumbnail.appendChild(img);
-  thumbnail.appendChild(fileName);
-  thumbnailsContainer.appendChild(thumbnail);
-  
-  // 异步加载图片
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    // 检查DOM元素是否仍然存在
-    if (!thumbnail.isConnected) {
-      console.log('缩略图元素已从DOM中移除，不再继续加载图片');
-      return;
+  return new Promise((resolve, reject) => {
+    // 创建缩略图容器
+    const thumbnail = document.createElement('div');
+    thumbnail.className = 'thumbnail';
+    thumbnail.setAttribute('data-index', index);
+    
+    // 创建加载指示器
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'thumbnail-loading';
+    loadingIndicator.innerHTML = '<div class="spinner"></div>';
+    thumbnail.appendChild(loadingIndicator);
+    
+    // 创建文件名标签
+    const fileName = document.createElement('div');
+    fileName.className = 'file-name';
+    fileName.textContent = file.name;
+    thumbnail.appendChild(fileName);
+    
+    // 添加类型标识 (GIF, PNG, JPG等)
+    const fileType = file.type || '';
+    const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    
+    if (fileExt === '.gif' || fileType === 'image/gif') {
+      const gifBadge = document.createElement('div');
+      gifBadge.className = 'thumbnail-gif-badge';
+      gifBadge.textContent = 'GIF';
+      thumbnail.appendChild(gifBadge);
+    } else if (fileExt === '.png' || fileType === 'image/png') {
+      const pngBadge = document.createElement('div');
+      pngBadge.className = 'thumbnail-png-badge';
+      pngBadge.textContent = 'PNG';
+      thumbnail.appendChild(pngBadge);
+    } else if (fileExt === '.jpg' || fileExt === '.jpeg' || fileType === 'image/jpeg') {
+      const jpgBadge = document.createElement('div');
+      jpgBadge.className = 'thumbnail-jpg-badge';
+      jpgBadge.textContent = 'JPG';
+      thumbnail.appendChild(jpgBadge);
     }
     
-    img.src = e.target.result;
+    // 添加点击事件
+    thumbnail.addEventListener('click', function(event) {
+      handleThumbnailClick(event, thumbnail, index, file);
+    });
     
-    // 图片加载完成后移除加载指示器
-    img.onload = function() {
-      if (loadingIndicator && loadingIndicator.parentNode === thumbnail) {
-        thumbnail.removeChild(loadingIndicator);
-      }
+    // 创建文件读取器
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+      // 创建图片元素
+      const img = document.createElement('img');
+      
+      // 图片加载完成时
+      img.onload = function() {
+        // 移除加载指示器
+        if (loadingIndicator.parentNode === thumbnail) {
+          thumbnail.removeChild(loadingIndicator);
+        }
+        
+        // 添加图片到缩略图
+        thumbnail.insertBefore(img, fileName);
+        
+        // 解析Promise
+        resolve({ thumbnail });
+      };
+      
+      // 图片加载失败时
+      img.onerror = function() {
+        console.error('无法加载图片:', file.name);
+        if (loadingIndicator.parentNode === thumbnail) {
+          loadingIndicator.innerHTML = '<div class="error-icon">!</div>';
+        }
+        
+        // 拒绝Promise
+        reject(new Error(`无法加载图片: ${file.name}`));
+      };
+      
+      // 设置图片源
+      img.src = e.target.result;
     };
     
-    // 错误处理
-    img.onerror = function() {
-      console.error('无法加载缩略图:', file.name);
-      if (loadingIndicator && loadingIndicator.parentNode === thumbnail) {
+    reader.onerror = function() {
+      console.error('无法读取文件:', file.name);
+      if (loadingIndicator.parentNode === thumbnail) {
         loadingIndicator.innerHTML = '<div class="error-icon">!</div>';
       }
+      
+      // 拒绝Promise
+      reject(new Error(`无法读取文件: ${file.name}`));
     };
-  };
-  
-  // 错误处理
-  reader.onerror = function() {
-    console.error('无法读取文件:', file.name);
-    if (loadingIndicator && loadingIndicator.parentNode === thumbnail) {
-      loadingIndicator.innerHTML = '<div class="error-icon">!</div>';
-    }
-  };
-  
-  // 开始读取文件
-  reader.readAsDataURL(file);
+    
+    // 开始读取文件
+    reader.readAsDataURL(file);
+  });
 }
 
 /**
@@ -608,8 +590,13 @@ function createThumbnail(file, index) {
 function handleThumbnailClick(event, thumbnail, index, file) {
   console.log('缩略图点击事件:', {index: index, filename: file.name});
   
-  // 如果已经选中，不做任何操作
-  if (thumbnail.classList.contains('selected')) {
+  // 检查是否按下Ctrl键或Command键（Mac）
+  const isMultipleSelection = event.ctrlKey || event.metaKey;
+  
+  // 如果使用多选模式且该缩略图已经选中，则取消选中并返回
+  if (isMultipleSelection && thumbnail.classList.contains('selected')) {
+    thumbnail.classList.remove('selected');
+    console.log('取消选中缩略图:', index, file.name);
     return;
   }
   
@@ -627,10 +614,20 @@ function handleThumbnailClick(event, thumbnail, index, file) {
       return;
     }
     
-    // 保存当前选中的缩略图
-    const currentThumbnail = document.querySelector('.thumbnail.selected');
-    if (currentThumbnail) {
-      currentThumbnail.classList.remove('selected');
+    // 多选模式下，保持其他缩略图的选中状态，只添加当前缩略图的选中状态
+    if (isMultipleSelection) {
+      thumbnail.classList.add('selected');
+      console.log('添加选中缩略图（多选模式）:', index, file.name);
+      // 多选模式下不更改预览，只更新选中状态
+      return;
+    }
+    
+    // 单选模式：清除所有已选中的缩略图
+    const selectedThumbnails = document.querySelectorAll('.thumbnail.selected');
+    if (selectedThumbnails) {
+      selectedThumbnails.forEach(thumb => {
+        thumb.classList.remove('selected');
+      });
     }
     
     // 选中当前缩略图

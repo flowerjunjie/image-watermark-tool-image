@@ -23,6 +23,24 @@
   box-shadow: 0 0 0 2px rgba(0, 120, 215, 0.5);
 }
 
+/* 选中多个缩略图时的样式 */
+.thumbnail.selected::before {
+  content: "✓";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background-color: #0078d7;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 10px;
+  z-index: 10;
+}
+
 .thumbnail.processing::after {
   content: "";
   position: absolute;
@@ -146,6 +164,21 @@
   margin: 20px 0;
   max-height: 300px;
   overflow-y: auto;
+  position: relative;
+}
+
+/* 多选提示 */
+#thumbnails-container::before {
+  content: "Ctrl+点击可多选";
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  font-size: 10px;
+  color: #666;
+  background-color: rgba(255, 255, 255, 0.7);
+  padding: 2px 5px;
+  border-radius: 3px;
+  z-index: 5;
 }
 
 /* 文件统计容器 */
