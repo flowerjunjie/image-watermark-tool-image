@@ -128,22 +128,37 @@
       
       // 加载测试脚本
       const testScript = document.createElement('script');
-      testScript.src = 'public/libs/gifwrap-test.js';
-      document.head.appendChild(testScript);
+      testScript.src = 'js/utils/test-scripts/gifwrap-test.js';
+      testScript.type = 'text/javascript';
+      testScript.async = true;
+      document.body.appendChild(testScript);
       
-      // 主动调用更新GIF处理器函数
-      import('./js/utils/gif/update-processor.js')
-        .then(module => {
-          if (typeof module.updateGifProcessor === 'function') {
-            console.log('主动调用GIF处理器更新函数');
-            module.updateGifProcessor();
-          } else {
-            console.warn('GIF处理器更新函数不可用');
-          }
-        })
-        .catch(err => {
-          console.error('加载GIF处理器更新模块失败:', err);
-        });
+      // 主动初始化GIF处理器
+      try {
+        // 导入GIF更新处理器
+        import('./js/utils/gif/update-processor.js')
+          .then(module => {
+            if (module && typeof module.updateGifProcessor === 'function') {
+              console.log('主动初始化GIF处理器');
+              module.updateGifProcessor();
+            }
+          })
+          .catch(err => {
+            console.error('导入GIF更新处理器失败:', err);
+          });
+          
+        // 如果存在全局方法，也调用它
+        if (typeof window.initGifProcessor === 'function') {
+          console.log('调用全局GIF处理器初始化');
+          window.initGifProcessor();
+        }
+      } catch (error) {
+        console.error('初始化GIF处理器失败:', error);
+      }
+      
+      // 继续正常的初始化
+      const appScript = document.createElement('script');
+      appScript.src = 'js/main.js';
       
     }).catch(error => {
       console.error('库加载失败:', error);

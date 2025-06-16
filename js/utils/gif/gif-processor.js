@@ -1379,6 +1379,126 @@ function processGifFramesDirect(frames, options) {
 }
 
 /**
+ * 从给定的ArrayBuffer创建GIF
+ * @param {ArrayBuffer} buffer - GIF数据
+ * @returns {Promise<Object>} - GIF对象
+ */
+async function gif(buffer) {
+  try {
+    // 检查gif.js库是否可用
+    if (typeof window.GIF === 'undefined') {
+      console.warn('gif.js库不可用，尝试使用备用方法');
+      return parseGifUsingGifwrap(buffer);
+    }
+    
+    // 创建一个blob URL
+    const blob = new Blob([buffer], { type: 'image/gif' });
+    const blobUrl = URL.createObjectURL(blob);
+    
+    // 尝试使用gif.js解析GIF
+    try {
+      // 防止fromArrayBuffer错误
+      if (window.GIF && typeof window.GIF.fromArrayBuffer === 'function') {
+        const gifData = await window.GIF.fromArrayBuffer(buffer);
+        return {
+          width: gifData.width,
+          height: gifData.height,
+          frames: gifData.frames,
+          frameCount: gifData.frames.length,
+          loopCount: gifData.loopCount || 0,
+          source: 'gif.js'
+        };
+      } else {
+        console.warn('gif.js的fromArrayBuffer方法不可用，使用替代方法');
+        throw new Error('fromArrayBuffer方法不可用');
+      }
+    } catch (error) {
+      console.warn(`使用gif.js解析失败: ${error.message}`);
+      
+      // 尝试使用gifwrap库
+      return parseGifUsingGifwrap(buffer);
+    } finally {
+      // 清理URL
+      URL.revokeObjectURL(blobUrl);
+    }
+  } catch (error) {
+    console.error('GIF解析失败:', error);
+    // 创建一个简单的回退对象，确保不会抛出额外错误
+    return {
+      width: 1,
+      height: 1,
+      frames: [],
+      frameCount: 0,
+      loopCount: 0,
+      source: 'fallback',
+      error: error.message
+    }; 
+  }
+}
+
+/**
+ * 使用gifwrap库解析GIF
+ * @param {ArrayBuffer} buffer - GIF数据
+ * @returns {Promise<Object>} - GIF对象
+ */
+function parseGifUsingGifwrap(buffer) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 检查gifwrap是否可用
+      if (typeof gifwrap === 'undefined' || !gifwrap.GifReader) {
+        console.error('gifwrap库不可用');
+        throw new Error('gifwrap库不可用');
+      }
+      
+      // 将ArrayBuffer转换为Uint8Array
+      const uint8Array = new Uint8Array(buffer);
+      
+      // 创建GifReader
+      const reader = new gifwrap.GifReader(uint8Array);
+      
+      // 提取基本信息
+      const width = reader.width;
+      const height = reader.height;
+      const frameCount = reader.numFrames();
+      const loopCount = reader.loopCount();
+      
+      const frames = [];
+      
+      // 提取每一帧
+      for (let i = 0; i < frameCount; i++) {
+        const frameInfo = reader.frameInfo(i);
+        frames.push({
+          imageData: null, // gifwrap不直接提供ImageData
+          delay: frameInfo.delay * 10, // 转换为毫秒
+          disposal: frameInfo.disposal
+        });
+      }
+      
+      resolve({
+        width,
+        height,
+        frames,
+        frameCount,
+        loopCount,
+        source: 'gifwrap'
+      });
+    } catch (error) {
+      console.error('使用gifwrap解析GIF失败:', error);
+      // 返回一个简单的回退对象
+      resolve({
+        width: 1,
+        height: 1,
+        frames: [],
+        frameCount: 0,
+        loopCount: 0,
+        source: 'fallback',
+        error: error.message
+      });
+    }
+  });
+}
+
+/**
  * 初始化GIF处理器
  */
 export function initGifProcessor() {
