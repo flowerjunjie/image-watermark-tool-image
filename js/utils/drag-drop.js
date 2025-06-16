@@ -33,143 +33,13 @@ function initDragAndDrop() {
     watermarkImageArea.addEventListener('drop', handleWatermarkImageDrop);
     watermarkImageArea.addEventListener('click', handleWatermarkImageClick);
   }
-  
-  // 初始化锁超时检测
-  initLockTimeoutDetection();
 }
 
-/**
- * 初始化锁超时检测 - 防止界面卡死
- */
-function initLockTimeoutDetection() {
-  // 全局错误处理 - 确保锁被释放
-  window.addEventListener('error', function(event) {
-    console.error('全局错误，强制释放锁:', event.error || event.message);
-    forceClearAllLocks();
-  });
-  
-  // 定期检查锁状态，防止长时间锁定，缩短检查间隔以更快发现和释放锁
-  setInterval(() => {
-    checkAndClearStaleLocks();
-  }, 1000); // 每1秒检查一次
-  
-  // 初始化锁状态
-  window.lockTimestamps = {
-    thumbnailClickLock: 0,
-    currentlySwitchingImage: 0
-  };
-  
-  // 重写锁设置逻辑，记录时间戳
-  const originalThumbnailClickLockDescriptor = Object.getOwnPropertyDescriptor(window, 'thumbnailClickLock') || {
-    configurable: true,
-    get: function() { return window._thumbnailClickLock || false; },
-    set: function(value) { window._thumbnailClickLock = value; }
-  };
-  
-  const originalSwitchingImageDescriptor = Object.getOwnPropertyDescriptor(window, 'currentlySwitchingImage') || {
-    configurable: true,
-    get: function() { return window._currentlySwitchingImage || false; },
-    set: function(value) { window._currentlySwitchingImage = value; }
-  };
-  
-  // 重新定义属性，添加时间戳记录
-  Object.defineProperty(window, 'thumbnailClickLock', {
-    configurable: true,
-    get: originalThumbnailClickLockDescriptor.get,
-    set: function(value) {
-      if (value === true) {
-        window.lockTimestamps.thumbnailClickLock = Date.now();
-      }
-      originalThumbnailClickLockDescriptor.set.call(this, value);
-    }
-  });
-  
-  Object.defineProperty(window, 'currentlySwitchingImage', {
-    configurable: true,
-    get: originalSwitchingImageDescriptor.get,
-    set: function(value) {
-      if (value === true) {
-        window.lockTimestamps.currentlySwitchingImage = Date.now();
-      }
-      originalSwitchingImageDescriptor.set.call(this, value);
-    }
-  });
-  
-  console.log('已初始化锁超时检测机制');
-}
+// 已移除锁超时检测机制
 
-/**
- * 检查并清除过期的锁
- */
-function checkAndClearStaleLocks() {
-  const now = Date.now();
-  const maxLockTime = 10000; // 10秒最大锁定时间
-  
-  // 检查缩略图点击锁 - 降低超时时间以更快释放锁
-  if (window.thumbnailClickLock) {
-    const lockDuration = now - window.lockTimestamps.thumbnailClickLock;
-    if (lockDuration > maxLockTime) {
-      console.warn('检测到缩略图点击锁超时(' + lockDuration + 'ms)，强制释放');
-      window.thumbnailClickLock = false;
-      
-      // 同时释放可能存在的其他相关锁
-      window.currentlySwitchingImage = false;
-    } else if (lockDuration > 3000) { // 降低阈值到3秒
-      console.warn('检测到缩略图点击锁时间较长(' + lockDuration + 'ms)，尝试提前释放');
-      window.thumbnailClickLock = false;
-    }
-  }
-  
-  // 检查图像切换锁 - 降低超时时间以更快释放锁
-  if (window.currentlySwitchingImage) {
-    const lockDuration = now - window.lockTimestamps.currentlySwitchingImage;
-    if (lockDuration > maxLockTime) {
-      console.warn('检测到图像切换锁超时(' + lockDuration + 'ms)，强制释放');
-      window.currentlySwitchingImage = false;
-    } else if (lockDuration > 3000) { // 降低阈值到3秒
-      console.warn('检测到图像切换锁时间较长(' + lockDuration + 'ms)，尝试提前释放');
-      window.currentlySwitchingImage = false;
-    }
-  }
-}
+// 已移除检查锁功能
 
-/**
- * 强制清除所有锁
- */
-function forceClearAllLocks() {
-  console.warn('强制清除所有锁');
-  window.thumbnailClickLock = false;
-  window.currentlySwitchingImage = false;
-  
-  // 尝试恢复UI状态
-  try {
-    // 移除所有缩略图的处理中状态
-    document.querySelectorAll('.thumbnail.processing').forEach(thumb => {
-      thumb.classList.remove('processing');
-    });
-    
-    // 确保水印容器可见
-    const watermarkContainer = document.getElementById('watermark-container');
-    if (watermarkContainer) {
-      watermarkContainer.style.display = 'flex';
-      watermarkContainer.style.zIndex = '999999';
-    }
-    
-    // 如果有图像但未显示，尝试显示
-    const previewImage = document.getElementById('preview-image');
-    const noImageMessage = document.getElementById('no-image-message');
-    
-    if (previewImage && previewImage.src && previewImage.style.display === 'none') {
-      previewImage.style.display = 'block';
-      if (noImageMessage) noImageMessage.style.display = 'none';
-    }
-    
-    // 更新水印
-    updateWatermark();
-  } catch (e) {
-    console.error('恢复UI状态时出错:', e);
-  }
-}
+// 已移除强制清除锁功能
 
 /**
  * 处理拖放经过事件
@@ -729,48 +599,19 @@ function createThumbnail(file, index) {
 }
 
 /**
- * 处理缩略图点击事件 - 加强锁定机制
+ * 处理缩略图点击事件
+ * @param {Event} event - 事件对象
+ * @param {HTMLElement} thumbnail - 缩略图元素
+ * @param {number} index - 图片索引
+ * @param {File} file - 图片文件
  */
 function handleThumbnailClick(event, thumbnail, index, file) {
-  console.log('缩略图点击事件:', {index: index, filename: file.name, 
-    thumbnailClickLock: window.thumbnailClickLock,
-    currentlySwitchingImage: window.currentlySwitchingImage
-  });
+  console.log('缩略图点击事件:', {index: index, filename: file.name});
   
   // 如果已经选中，不做任何操作
   if (thumbnail.classList.contains('selected')) {
     return;
   }
-  
-  // 检查锁状态
-  if (window.thumbnailClickLock || window.currentlySwitchingImage) {
-    console.warn('点击被忽略，有锁定状态:', {
-      thumbnailClickLock: window.thumbnailClickLock,
-      currentlySwitchingImage: window.currentlySwitchingImage
-    });
-    
-    // 检查锁的时长，如果太长则强制释放
-    const now = Date.now();
-    if (window.lockTimestamps) {
-      const thumbnailLockTime = window.lockTimestamps.thumbnailClickLock || 0;
-      const switchingLockTime = window.lockTimestamps.currentlySwitchingImage || 0;
-      
-      // 如果锁存在超过3秒，强制释放
-      if ((now - thumbnailLockTime > 3000) || (now - switchingLockTime > 3000)) {
-        console.warn('锁定状态超时，强制释放');
-        forceClearAllLocks();
-      } else {
-        // 暂时忽略点击，不要立即释放锁
-        return;
-      }
-    } else {
-      // 如果没有时间戳记录，直接释放锁
-      forceClearAllLocks();
-    }
-  }
-  
-  // 设置锁，防止重复点击
-  window.thumbnailClickLock = true;
   
   try {
     // 获取预览区域元素
@@ -783,7 +624,6 @@ function handleThumbnailClick(event, thumbnail, index, file) {
     // 如果没有预览元素，直接返回
     if (!previewImage && !previewCanvas) {
       console.error('预览元素不存在');
-      window.thumbnailClickLock = false;
       return;
     }
     
@@ -923,26 +763,17 @@ function handleThumbnailClick(event, thumbnail, index, file) {
             // 最后一次确保相对位置和水印类型正确
             restoreWatermarkState(localSavedState);
             updateWatermark();
-            
-            // 完成处理，释放锁
-            window.thumbnailClickLock = false;
           }, 100);
         },
         onError: function(error) {
           console.error('图片加载失败:', error);
-          window.thumbnailClickLock = false;
-          showError('无法加载选中的图片');
+          showError('图片加载失败: ' + error);
         }
       });
     }
   } catch (error) {
-    console.error('缩略图点击处理出错:', error);
-    
-    // 确保释放锁
-    window.thumbnailClickLock = false;
-    
-    // 显示错误消息
-    showError('无法加载选中的图片');
+    console.error('缩略图点击处理错误:', error);
+    showError('处理图片时出错: ' + error.message);
   }
 }
 

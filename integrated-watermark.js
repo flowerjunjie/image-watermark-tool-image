@@ -831,12 +831,11 @@ function initWatermarkFunctions() {
     // 获取当前图片的文件名
     const currentFileName = window.watermarkState.files[index].name;
     
-    // 只有当是"应用到所有"的设置时才应用保存的设置
+    // 应用保存的设置（有"应用到所有"标记或常规保存的设置）
     if (window.watermarkState.processedSettings && 
-        window.watermarkState.processedSettings[currentFileName] && 
-        window.watermarkState.processedSettings[currentFileName].fromApplyToAll === true) {
+        window.watermarkState.processedSettings[currentFileName]) {
       
-      console.log(`加载图片 ${currentFileName} 的应用到所有水印设置`);
+      console.log(`加载图片 ${currentFileName} 的保存设置`);
       
       // 保存原始图像对象、尺寸和其他不应该被覆盖的属性
       const originalImage = window.watermarkState.originalImage;
@@ -852,7 +851,10 @@ function initWatermarkFunctions() {
       
       // 应用保存的设置
       const savedSettings = window.watermarkState.processedSettings[currentFileName];
-      Object.assign(window.watermarkState, savedSettings);
+      
+      // 使用深拷贝确保数据完整性
+      const settingsCopy = JSON.parse(JSON.stringify(savedSettings));
+      Object.assign(window.watermarkState, settingsCopy);
       
       // 恢复不应该被覆盖的属性
       window.watermarkState.originalImage = originalImage;
@@ -866,7 +868,11 @@ function initWatermarkFunctions() {
       // 确保保留标志
       window.watermarkState.fromApplyToAll = isFromApplyToAll;
       
-      console.log('已加载 "应用到所有" 设置');
+      if (isFromApplyToAll) {
+        console.log('已加载 "应用到所有" 设置，保持准确位置');
+      } else {
+        console.log('已加载图片特定设置');
+      }
     }
     
     // 隐藏提示信息
@@ -1103,13 +1109,11 @@ function initEventListeners() {
           const fileName = window.watermarkState.files[i].name;
           
           // 创建设置的深拷贝，确保完全独立
-          const adjustedSettings = {...currentSettings};
+          const adjustedSettings = JSON.parse(JSON.stringify(currentSettings));
           
-          // 确保相对位置在0-100范围内
-          if (adjustedSettings.relativePosition) {
-            adjustedSettings.relativePosition.x = Math.max(0, Math.min(100, adjustedSettings.relativePosition.x));
-            adjustedSettings.relativePosition.y = Math.max(0, Math.min(100, adjustedSettings.relativePosition.y));
-          } else {
+          // 保持原始相对位置，不做限制范围调整
+          // 这样可以确保水印位置在不同图片上保持一致
+          if (!adjustedSettings.relativePosition) {
             adjustedSettings.relativePosition = { x: 50, y: 50 };
           }
           

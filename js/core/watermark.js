@@ -325,9 +325,8 @@ export function updateWatermarkPosition() {
       watermarkState.relativePosition = { x: 50, y: 50 };
     }
     
-    // 大幅扩展允许的相对位置范围，使水印可以在图片任何位置移动
-    watermarkState.relativePosition.x = Math.max(-150, Math.min(250, watermarkState.relativePosition.x));
-    watermarkState.relativePosition.y = Math.max(-150, Math.min(250, watermarkState.relativePosition.y));
+    // 保持相对位置的原始值，不作任何限制或修改
+    // 这样确保位置在不同图片间保持一致
     
     // 获取图片的实际显示尺寸（可能与原始尺寸不同）
     const displayedWidth = previewImage ? previewImage.offsetWidth : previewWidth;
@@ -388,6 +387,7 @@ export function updateWatermarkPosition() {
       default:
         // 使用相对位置
         if (watermarkState.relativePosition) {
+          // 如果是"应用到所有"设置，使用精确的相对位置
           // 计算基于图片尺寸的绝对位置
           x = (watermarkState.relativePosition.x / 100) * displayedWidth;
           y = (watermarkState.relativePosition.y / 100) * displayedHeight;
@@ -421,24 +421,13 @@ export function updateWatermarkPosition() {
             // 更新相对位置为居中
             watermarkState.relativePosition = { x: 50, y: 50 };
           } else {
-            // "应用到所有"功能的处理：维持严格的相对位置
-            // 计算是否来自"应用到所有"功能 - 如果是，则尊重原始百分比位置，不进行安全边界限制
-            const isFromApplyToAll = watermarkState.fromApplyToAll === true;
-            
-            if (isFromApplyToAll) {
-              // 严格使用相对位置，不进行边界检查，确保各个图片上水印位置一致
-              x = (watermarkState.relativePosition.x / 100) * displayedWidth;
-              y = (watermarkState.relativePosition.y / 100) * displayedHeight;
-              console.log('应用到所有模式: 保持严格的相对位置', watermarkState.relativePosition);
-            } else {
-              // 普通模式：限制水印在安全边界内
-              x = Math.max(minX, Math.min(maxX, x));
-              y = Math.max(minY, Math.min(maxY, y));
-              
-              // 更新相对位置，确保它们反映实际位置
-              watermarkState.relativePosition.x = (x / displayedWidth) * 100;
-              watermarkState.relativePosition.y = (y / displayedHeight) * 100;
-            }
+            // 始终使用严格的相对位置，无论是否来自"应用到所有"
+            // 这样所有图片上的水印位置都将一致
+           
+            // 严格使用相对位置，不进行边界检查，确保在各个图片上水印位置一致
+            x = (watermarkState.relativePosition.x / 100) * displayedWidth;
+            y = (watermarkState.relativePosition.y / 100) * displayedHeight;
+            console.log('保持严格的相对位置', watermarkState.relativePosition);
           }
         } else {
           // 默认使用中心位置
@@ -454,11 +443,11 @@ export function updateWatermarkPosition() {
     // 保存当前的transform，以便提取旋转部分
     const currentTransform = currentWatermarkElement.style.transform || '';
     
-    // 设置新位置
-    currentWatermarkElement.style.top = `${y}px`;
-    currentWatermarkElement.style.left = `${x}px`;
+    // 设置新位置 - 确保位置精确
+    currentWatermarkElement.style.top = `${Math.round(y)}px`;
+    currentWatermarkElement.style.left = `${Math.round(x)}px`;
     
-    // 基本变换 - 使用translate(-50%, -50%)可能导致定位问题，改为使用绝对坐标
+    // 基本变换 - 保持精确的变换以确保一致性
     let transform = 'translate(-50%, -50%)';
     
     // 如果有旋转，应用旋转
@@ -858,17 +847,17 @@ function makeDraggable(element) {
       const relativeY = ((newY - rect.top) / rect.height) * 100;
       
       console.log('水印拖动 - 相对位置:', {
-        x: Math.max(0, Math.min(100, relativeX)).toFixed(2),
-        y: Math.max(0, Math.min(100, relativeY)).toFixed(2),
+        x: relativeX.toFixed(6),  // 保留更高精度
+        y: relativeY.toFixed(6),
         referenceWidth: rect.width,
         referenceHeight: rect.height
       });
       
-      // 更新状态
+      // 更新状态 - 不限制位置范围，保持精确值
       updateState({
         relativePosition: {
-          x: Math.max(0, Math.min(100, relativeX)),
-          y: Math.max(0, Math.min(100, relativeY))
+          x: relativeX,
+          y: relativeY
         }
       });
     } else {
