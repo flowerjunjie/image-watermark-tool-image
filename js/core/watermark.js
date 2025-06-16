@@ -400,16 +400,35 @@ export function updateWatermarkPosition() {
           const scaledWidth = watermarkWidth * currentScale;
           const scaledHeight = watermarkHeight * currentScale;
           
-          // 允许水印的中心点超出图片范围，以便水印可以靠近边缘位置
-          // 扩大可移动范围，使水印可以靠边或部分超出边界
-          const offsetX = scaledWidth / 2;
-          const offsetY = scaledHeight / 2;
-          x = Math.max(-offsetX, Math.min(x, displayedWidth + offsetX));
-          y = Math.max(-offsetY, Math.min(y, displayedHeight + offsetY));
+          // 计算水印的最大尺寸（考虑旋转）：对角线的一半
+          const maxRadius = Math.sqrt(Math.pow(scaledWidth, 2) + Math.pow(scaledHeight, 2)) / 2;
           
-          // 更新相对位置，确保它们反映实际位置
-          watermarkState.relativePosition.x = (x / displayedWidth) * 100;
-          watermarkState.relativePosition.y = (y / displayedHeight) * 100;
+          // 额外的安全边距
+          const margin = 5; 
+          
+          // 限制水印中心点位置，确保水印完全在图片内
+          const minX = maxRadius + margin;
+          const minY = maxRadius + margin;
+          const maxX = displayedWidth - maxRadius - margin;
+          const maxY = displayedHeight - maxRadius - margin;
+          
+          // 如果图片太小，无法容纳水印（甚至在旋转之后），强制居中
+          if (minX > maxX || minY > maxY) {
+            // 图片太小，水印必须居中
+            x = displayedWidth / 2;
+            y = displayedHeight / 2;
+            
+            // 更新相对位置为居中
+            watermarkState.relativePosition = { x: 50, y: 50 };
+          } else {
+            // 限制水印在安全边界内
+            x = Math.max(minX, Math.min(maxX, x));
+            y = Math.max(minY, Math.min(maxY, y));
+            
+            // 更新相对位置，确保它们反映实际位置
+            watermarkState.relativePosition.x = (x / displayedWidth) * 100;
+            watermarkState.relativePosition.y = (y / displayedHeight) * 100;
+          }
         } else {
           // 默认使用中心位置
           x = displayedWidth / 2;
@@ -608,8 +627,33 @@ function renderImageWatermark(ctx, x, y, canvasWidth, canvasHeight) {
   const watermarkImageHeight = watermarkState.watermarkImage.height;
   
   // 计算水印图片的目标尺寸（基于图片的百分比和缩放比例）
-  const targetWidth = (canvasWidth * watermarkState.watermarkImageSize / 100) * watermarkState.scale;
-  const targetHeight = (targetWidth / watermarkImageWidth) * watermarkImageHeight;
+  let targetWidth = (canvasWidth * watermarkState.watermarkImageSize / 100) * watermarkState.scale;
+  let targetHeight = (targetWidth / watermarkImageWidth) * watermarkImageHeight;
+  
+  // 确保水印不超过图片大小的80%，防止过大
+  const maxWidth = canvasWidth * 0.8;
+  const maxHeight = canvasHeight * 0.8;
+  
+  // 如果水印太大，进行等比例缩小
+  if (targetWidth > maxWidth) {
+    const ratio = maxWidth / targetWidth;
+    targetWidth = maxWidth;
+    targetHeight = targetHeight * ratio;
+  }
+  
+  if (targetHeight > maxHeight) {
+    const ratio = maxHeight / targetHeight;
+    targetHeight = maxHeight;
+    targetWidth = targetWidth * ratio;
+  }
+  
+  // 确保水印不会太小，至少为图片大小的5%
+  const minSize = Math.min(canvasWidth, canvasHeight) * 0.05;
+  if (targetWidth < minSize && targetHeight < minSize) {
+    const ratio = minSize / Math.max(targetWidth, targetHeight);
+    targetWidth *= ratio;
+    targetHeight *= ratio;
+  }
   
   // 设置旋转中心点到水印位置
   ctx.translate(x, y);
@@ -1010,23 +1054,23 @@ function calculatePosition(canvasWidth, canvasHeight, watermarkWidth, watermarkH
     switch (options.position) {
       case WatermarkPosition.TOP_LEFT:
       case 'top-left':
-        x = watermarkWidth / 2 + options.marginX;
-        y = watermarkHeight / 2 + options.marginY;
+        x = watermarkWidth / 2 + (options.marginX || 10);
+        y = watermarkHeight / 2 + (options.marginY || 10);
         break;
       case WatermarkPosition.TOP_RIGHT:
       case 'top-right':
-        x = canvasWidth - watermarkWidth / 2 - options.marginX;
-        y = watermarkHeight / 2 + options.marginY;
+        x = canvasWidth - watermarkWidth / 2 - (options.marginX || 10);
+        y = watermarkHeight / 2 + (options.marginY || 10);
         break;
       case WatermarkPosition.BOTTOM_LEFT:
       case 'bottom-left':
-        x = watermarkWidth / 2 + options.marginX;
-        y = canvasHeight - watermarkHeight / 2 - options.marginY;
+        x = watermarkWidth / 2 + (options.marginX || 10);
+        y = canvasHeight - watermarkHeight / 2 - (options.marginY || 10);
         break;
       case WatermarkPosition.BOTTOM_RIGHT:
       case 'bottom-right':
-        x = canvasWidth - watermarkWidth / 2 - options.marginX;
-        y = canvasHeight - watermarkHeight / 2 - options.marginY;
+        x = canvasWidth - watermarkWidth / 2 - (options.marginX || 10);
+        y = canvasHeight - watermarkHeight / 2 - (options.marginY || 10);
         break;
       case WatermarkPosition.CENTER:
       case 'center':
@@ -1037,6 +1081,29 @@ function calculatePosition(canvasWidth, canvasHeight, watermarkWidth, watermarkH
         // 默认使用中心位置
         break;
     }
+  }
+
+  // 确保水印完全在画布内部（考虑旋转角度可能增加的最大尺寸）
+  // 计算考虑旋转后的最大半径：对角线的一半
+  const rotationAngle = options.rotation || 0;
+  let maxRadius = Math.sqrt(Math.pow(watermarkWidth, 2) + Math.pow(watermarkHeight, 2)) / 2;
+  
+  // 限制水印位置，确保不会超出画布边界
+  const margin = 5; // 额外的安全边距
+  const minX = maxRadius + margin;
+  const minY = maxRadius + margin;
+  const maxX = canvasWidth - maxRadius - margin;
+  const maxY = canvasHeight - maxRadius - margin;
+  
+  // 如果画布太小无法容纳水印（甚至是旋转后的），则强制居中并适当缩放
+  if (minX > maxX || minY > maxY) {
+    // 画布太小，水印必须居中
+    x = canvasWidth / 2;
+    y = canvasHeight / 2;
+  } else {
+    // 限制在安全边界内
+    x = Math.max(minX, Math.min(maxX, x));
+    y = Math.max(minY, Math.min(maxY, y));
   }
 
   return { x, y };
@@ -1094,6 +1161,47 @@ function drawRotatedText(ctx, text, x, y, angle) {
  * @param {Number} angle - 旋转角度
  */
 function drawRotatedImage(ctx, image, x, y, width, height, angle) {
+  // 获取画布尺寸
+  const canvasWidth = ctx.canvas.width;
+  const canvasHeight = ctx.canvas.height;
+  
+  // 计算旋转后的水印尺寸（对角线长度）
+  const rotatedWidth = Math.abs(width * Math.cos(angle * Math.PI / 180)) + Math.abs(height * Math.sin(angle * Math.PI / 180));
+  const rotatedHeight = Math.abs(width * Math.sin(angle * Math.PI / 180)) + Math.abs(height * Math.cos(angle * Math.PI / 180));
+  
+  // 检查旋转后的水印是否会超出画布
+  const maxWidth = canvasWidth * 0.9; // 留出10%的边距
+  const maxHeight = canvasHeight * 0.9; // 留出10%的边距
+  
+  // 如果水印太大，需要缩小
+  let scale = 1;
+  if (rotatedWidth > maxWidth || rotatedHeight > maxHeight) {
+    const scaleX = maxWidth / rotatedWidth;
+    const scaleY = maxHeight / rotatedHeight;
+    scale = Math.min(scaleX, scaleY);
+    
+    // 调整水印尺寸
+    width *= scale;
+    height *= scale;
+    
+    console.log(`水印过大，缩小到${scale.toFixed(2)}倍以适应画布`);
+  }
+  
+  // 确保水印不会太小（最小为画布较短边的5%）
+  const minSize = Math.min(canvasWidth, canvasHeight) * 0.05;
+  if (width < minSize && height < minSize) {
+    const minScale = minSize / Math.min(width, height);
+    width *= minScale;
+    height *= minScale;
+    
+    console.log(`水印过小，放大到${minScale.toFixed(2)}倍以保持可见性`);
+  }
+  
+  // 确保水印位置不会导致部分显示在画布外
+  x = Math.max(width/2, Math.min(canvasWidth - width/2, x));
+  y = Math.max(height/2, Math.min(canvasHeight - height/2, y));
+  
+  // 应用变换
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle * Math.PI / 180);
@@ -1244,9 +1352,30 @@ function updateWatermarkSize(watermarkElement) {
     
     if (watermarkType === 'image') {
       // 调整图片水印大小
-      const imageSize = watermarkState.watermarkImageSize || 40; // 默认40%
+      let imageSize = watermarkState.watermarkImageSize || 40; // 默认40%
       const maxDimension = Math.min(previewWidth, previewHeight);
-      const size = (maxDimension * imageSize) / 100;
+      
+      // 对于非常小的图片，增加水印的相对大小，确保可见性
+      if (maxDimension < 200) {
+        // 对于小图，水印大小最小为图片的20%
+        const minSize = 20;
+        imageSize = Math.max(imageSize, minSize);
+      } 
+      // 对于非常大的图片，减小水印的相对大小，防止过大
+      else if (maxDimension > 1000) {
+        // 对于大图，水印大小最大为图片的30%
+        const maxSize = 30;
+        imageSize = Math.min(imageSize, maxSize);
+      }
+      
+      // 根据图片尺寸计算水印的最终大小
+      let size = (maxDimension * imageSize) / 100;
+      
+      // 为极端情况设置绝对最小值和最大值
+      const absoluteMinSize = 20; // 最小20像素
+      const absoluteMaxSize = 500; // 最大500像素
+      
+      size = Math.max(absoluteMinSize, Math.min(absoluteMaxSize, size));
       
       console.log('调整图片水印大小:', {
         imageSize: imageSize + '%',
@@ -1261,12 +1390,9 @@ function updateWatermarkSize(watermarkElement) {
         return;
       }
       
-      // 监听图片加载完成事件，以获取正确的宽高比
-      imgElement.onload = function() {
-        const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight;
-        console.log('水印图片加载完成，宽高比:', aspectRatio);
-        
-        // 设置水印元素大小
+      // 设置水印大小的函数
+      const setWatermarkSize = (aspectRatio) => {
+        // 设置水印元素大小，保持原始宽高比
         if (aspectRatio >= 1) {
           // 宽度大于高度
           watermarkElement.style.width = `${size}px`;
@@ -1279,30 +1405,23 @@ function updateWatermarkSize(watermarkElement) {
         
         console.log('水印元素大小已设置:', {
           width: watermarkElement.style.width,
-          height: watermarkElement.style.height
+          height: watermarkElement.style.height,
+          aspectRatio
         });
+      };
+      
+      // 监听图片加载完成事件，以获取正确的宽高比
+      imgElement.onload = function() {
+        const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight;
+        console.log('水印图片加载完成，宽高比:', aspectRatio);
+        setWatermarkSize(aspectRatio);
       };
       
       // 如果图片已经加载完成，立即设置大小
       if (imgElement.complete) {
         const aspectRatio = imgElement.naturalWidth / imgElement.naturalHeight || 1;
         console.log('水印图片已加载，直接使用宽高比:', aspectRatio);
-        
-        // 设置水印元素大小
-        if (aspectRatio >= 1) {
-          // 宽度大于高度
-          watermarkElement.style.width = `${size}px`;
-          watermarkElement.style.height = `${size / aspectRatio}px`;
-        } else {
-          // 高度大于宽度
-          watermarkElement.style.width = `${size * aspectRatio}px`;
-          watermarkElement.style.height = `${size}px`;
-        }
-        
-        console.log('水印元素大小已设置:', {
-          width: watermarkElement.style.width,
-          height: watermarkElement.style.height
-        });
+        setWatermarkSize(aspectRatio);
       }
     }
     // 文本水印不需要调整大小，它由字体大小决定

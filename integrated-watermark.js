@@ -2303,13 +2303,32 @@ window.renderWatermarkOnCanvas = function(canvas, ctx) {
         
         img.onload = function() {
           // 获取水印位置（相对百分比转换为像素）
-          const x = (window.watermarkState.relativePosition.x / 100) * width;
-          const y = (window.watermarkState.relativePosition.y / 100) * height;
+          let x = (window.watermarkState.relativePosition.x / 100) * width;
+          let y = (window.watermarkState.relativePosition.y / 100) * height;
           
           // 计算水印图片大小
           const sizePercent = window.watermarkState.watermarkImageSize || 30;
-          const maxWidth = (width * sizePercent) / 100;
-          const maxHeight = (height * sizePercent) / 100;
+          
+          // 根据图片尺寸调整水印大小百分比
+          let adjustedSizePercent = sizePercent;
+          
+          // 对于非常小的图片，增加水印的相对大小，确保可见性
+          if (width < 200 || height < 200) {
+            // 对于小图，水印大小最小为图片的20%
+            const minSize = 20;
+            adjustedSizePercent = Math.max(adjustedSizePercent, minSize);
+          } 
+          // 对于非常大的图片，减小水印的相对大小，防止过大
+          else if (width > 1000 || height > 1000) {
+            // 对于大图，水印大小最大为图片的30%
+            const maxSize = 30;
+            adjustedSizePercent = Math.min(adjustedSizePercent, maxSize);
+          }
+          
+          // 限制图片尺寸，最小为图片较短边的5%，最大为较短边的80%
+          const minDimension = Math.min(width, height);
+          const maxWidth = (width * adjustedSizePercent) / 100;
+          const maxHeight = (height * adjustedSizePercent) / 100;
           
           // 保持纵横比的图片尺寸计算
           let watermarkWidth = img.width;
@@ -2327,6 +2346,52 @@ window.renderWatermarkOnCanvas = function(canvas, ctx) {
             watermarkWidth *= ratio;
           }
           
+          // 确保水印不会太小（最小为图片较短边的5%）
+          const minSize = minDimension * 0.05;
+          if (watermarkWidth < minSize && watermarkHeight < minSize) {
+            const minScale = minSize / Math.max(watermarkWidth, watermarkHeight);
+            watermarkWidth *= minScale;
+            watermarkHeight *= minScale;
+          }
+          
+          // 应用缩放
+          const scale = window.watermarkState.scale || 1;
+          watermarkWidth *= scale;
+          watermarkHeight *= scale;
+          
+          // 计算旋转后的最大尺寸（对角线长度的一半）
+          const rotation = window.watermarkState.rotation || 0;
+          const rotatedWidth = Math.abs(watermarkWidth * Math.cos(rotation * Math.PI / 180)) + 
+                             Math.abs(watermarkHeight * Math.sin(rotation * Math.PI / 180));
+          const rotatedHeight = Math.abs(watermarkWidth * Math.sin(rotation * Math.PI / 180)) + 
+                              Math.abs(watermarkHeight * Math.cos(rotation * Math.PI / 180));
+          
+          // 确保水印完全在图片内
+          const margin = 5; // 安全边距
+          const minX = rotatedWidth / 2 + margin;
+          const minY = rotatedHeight / 2 + margin;
+          const maxX = width - rotatedWidth / 2 - margin;
+          const maxY = height - rotatedHeight / 2 - margin;
+          
+          // 如果图片太小无法容纳水印，强制居中
+          if (minX > maxX || minY > maxY) {
+            // 图片太小，水印必须居中
+            x = width / 2;
+            y = height / 2;
+            
+            // 进一步缩小水印以适应图片
+            const scaleX = (width - 2 * margin) / rotatedWidth;
+            const scaleY = (height - 2 * margin) / rotatedHeight;
+            const adjustScale = Math.min(scaleX, scaleY, 1); // 不要放大，只缩小
+            
+            watermarkWidth *= adjustScale;
+            watermarkHeight *= adjustScale;
+          } else {
+            // 限制在安全边界内
+            x = Math.max(minX, Math.min(maxX, x));
+            y = Math.max(minY, Math.min(maxY, y));
+          }
+          
           // 保存当前上下文状态
           ctx.save();
           
@@ -2337,14 +2402,9 @@ window.renderWatermarkOnCanvas = function(canvas, ctx) {
           ctx.translate(x, y);
           
           // 旋转
-          const rotation = window.watermarkState.rotation || 0;
           ctx.rotate((rotation * Math.PI) / 180);
           
-          // 应用缩放
-          const scale = window.watermarkState.scale || 1;
-          ctx.scale(scale, scale);
-          
-          // 绘制居中的水印图片
+          // 绘制居中的水印图片（不再需要缩放，因为已经调整了watermarkWidth和watermarkHeight）
           ctx.drawImage(
             img, 
             -watermarkWidth / 2, 
