@@ -147,6 +147,111 @@
     ]).then(() => {
       console.log('所有库加载成功');
       
+      // 确保omggif库正确初始化
+      if (window.omggif) {
+        console.log('检查omggif库状态:', window.omggif);
+        
+        // 如果omggif库已加载但GifReader不可用，尝试修复
+        if (!window.omggif.GifReader && typeof window.omggif === 'object') {
+          console.log('尝试修复omggif库...');
+          
+          // 方法1: 尝试加载默认导出
+          if (window.omggif.default && window.omggif.default.GifReader) {
+            window.omggif.GifReader = window.omggif.default.GifReader;
+            console.log('已从default导出获取GifReader');
+          } 
+          // 方法2: 尝试加载完整版本的omggif
+          else {
+            // 加载额外的omggif版本
+            const omggifScript = document.createElement('script');
+            omggifScript.src = 'https://unpkg.com/omggif@1.0.10/omggif.js';
+            omggifScript.async = false;
+            omggifScript.onload = function() {
+              console.log('已加载完整版omggif');
+              // 如果直接暴露了GifReader，把它放到window.omggif中
+              if (window.GifReader && !window.omggif.GifReader) {
+                window.omggif.GifReader = window.GifReader;
+                console.log('已将全局GifReader赋值给window.omggif.GifReader');
+              }
+            };
+            document.head.appendChild(omggifScript);
+          }
+        }
+      } else {
+        console.warn('omggif库未加载成功，尝试加载备用版本');
+        const omggifScript = document.createElement('script');
+        omggifScript.src = 'https://unpkg.com/omggif@1.0.10/omggif.js';
+        omggifScript.onload = function() {
+          console.log('已加载备用omggif库');
+          if (window.GifReader) {
+            if (!window.omggif) window.omggif = {};
+            window.omggif.GifReader = window.GifReader;
+          }
+        };
+        document.head.appendChild(omggifScript);
+      }
+      
+      // 添加全局捕获GifReader错误的处理器
+      window.checkGifReader = function() {
+        try {
+          console.log('诊断GifReader状态:');
+          console.log('- window.GifReader 存在:', !!window.GifReader);
+          console.log('- window.omggif 存在:', !!window.omggif);
+          
+          if (window.omggif) {
+            console.log('- window.omggif 类型:', typeof window.omggif);
+            console.log('- window.omggif.GifReader 存在:', !!window.omggif.GifReader);
+            if (window.omggif.GifReader) {
+              console.log('- window.omggif.GifReader 类型:', typeof window.omggif.GifReader);
+            }
+            
+            if (window.omggif.default) {
+              console.log('- window.omggif.default 存在:', !!window.omggif.default);
+              console.log('- window.omggif.default.GifReader 存在:', !!window.omggif.default.GifReader);
+            }
+          }
+          
+          // 尝试创建测试实例
+          const testBuffer = new Uint8Array(1);
+          let testInstance = null;
+          
+          if (window.GifReader) {
+            try {
+              testInstance = new window.GifReader(testBuffer);
+              console.log('测试 window.GifReader 构造成功');
+            } catch (e) {
+              console.warn('测试 window.GifReader 构造失败:', e);
+            }
+          }
+          
+          if (!testInstance && window.omggif && window.omggif.GifReader) {
+            try {
+              testInstance = new window.omggif.GifReader(testBuffer);
+              console.log('测试 window.omggif.GifReader 构造成功');
+            } catch (e) {
+              console.warn('测试 window.omggif.GifReader 构造失败:', e);
+            }
+          }
+          
+          if (!testInstance && window.omggif && window.omggif.default && window.omggif.default.GifReader) {
+            try {
+              testInstance = new window.omggif.default.GifReader(testBuffer);
+              console.log('测试 window.omggif.default.GifReader 构造成功');
+            } catch (e) {
+              console.warn('测试 window.omggif.default.GifReader 构造失败:', e);
+            }
+          }
+          
+          return !!testInstance;
+        } catch (err) {
+          console.error('诊断GifReader时发生错误:', err);
+          return false;
+        }
+      };
+      
+      // 5秒后执行一次诊断
+      setTimeout(window.checkGifReader, 5000);
+      
       // 加载测试脚本
       const testScript = document.createElement('script');
       testScript.src = 'js/utils/test-scripts/gifwrap-test.js';
@@ -211,25 +316,8 @@
         document.body.appendChild(gifContainer);
         console.log('GIF容器创建成功');
         
-        // 检查是否存在可能卡住的模态框
-        setTimeout(() => {
-          console.log('检查是否有卡住的模态框...');
-          const processingModal = document.getElementById('processing-modal');
-          if (processingModal && processingModal.style.display === 'flex') {
-            console.warn('检测到可能卡住的处理中模态框，强制关闭');
-            processingModal.style.display = 'none';
-            
-            // 显示提示信息
-            const statusMessage = document.getElementById('status-message');
-            if (statusMessage) {
-              statusMessage.textContent = '系统已自动恢复（处理模态框被重置）';
-              statusMessage.style.display = 'block';
-              setTimeout(() => {
-                statusMessage.style.display = 'none';
-              }, 3000);
-            }
-          }
-        }, 5000);
+        // 移除自动关闭模态框的代码，防止下载过程中进度条被关闭
+        console.log('已禁用自动关闭模态框功能');
       } catch (error) {
         console.error('创建GIF容器失败:', error);
       }
@@ -468,9 +556,9 @@
       <div class="progress-container" style="display: block;">
         <div id="modal-progress-bar" class="progress-bar" style="width: 0%">0%</div>
       </div>
-      <!-- 添加取消按钮和倒计时 -->
+      <!-- 修改倒计时为处理状态显示 -->
       <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
-        <div id="modal-countdown" style="font-size: 12px; color: #666;">自动关闭: 10</div>
+        <div id="modal-countdown" style="font-size: 12px; color: #666;">处理进行中...</div>
         <button id="cancel-processing-btn" onclick="return window.emergencyCancel();" style="padding: 5px 15px; background-color: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">取消</button>
       </div>
     </div>
@@ -540,95 +628,39 @@
   <!-- 初始化GIF水印功能 -->
   <script>
     document.addEventListener('DOMContentLoaded', function() {
+      console.log('DOM加载完成，初始化GIF水印功能');
+      
       // 设置全局标志，跟踪GIF水印UI初始化状态
       window.gifWatermarkUIInitialized = false;
       
       // 延迟初始化，确保其他脚本已加载
       setTimeout(function() {
-        if (!window.gifWatermarkUIInitialized && window.GifWatermarkUI && typeof window.GifWatermarkUI.init === 'function') {
+        // 检查GifWatermarkUI模块是否可用
+        if (window.GifWatermarkUI && typeof window.GifWatermarkUI.init === 'function') {
           console.log('初始化GIF水印UI');
           window.GifWatermarkUI.init();
           window.gifWatermarkUIInitialized = true;
-        } else if (window.gifWatermarkUIInitialized) {
-          console.log('GIF水印UI已初始化，跳过');
         } else {
-          console.warn('GIF水印UI未加载');
+          console.warn('GIF水印UI模块未找到，尝试重新加载');
+          
+          // 如果未找到模块，尝试动态加载脚本
+          const script = document.createElement('script');
+          script.src = 'js/utils/gif-watermark-ui.js';
+          script.onload = function() {
+            console.log('GIF水印UI脚本加载成功，正在初始化');
+            if (window.GifWatermarkUI && typeof window.GifWatermarkUI.init === 'function') {
+              window.GifWatermarkUI.init();
+              window.gifWatermarkUIInitialized = true;
+            } else {
+              console.error('GIF水印UI模块加载成功但初始化失败');
+            }
+          };
+          script.onerror = function() {
+            console.error('加载GIF水印UI脚本失败');
+          };
+          document.body.appendChild(script);
         }
       }, 1000);
-    });
-  </script>
-  
-  <!-- 模态对话框自动关闭倒计时脚本 -->
-  <script>
-    // 模态对话框自动关闭倒计时
-    document.addEventListener('DOMContentLoaded', function() {
-      const processingModal = document.getElementById('processing-modal');
-      const modalCountdown = document.getElementById('modal-countdown');
-      
-      if (processingModal && modalCountdown) {
-        // 监听模态对话框显示
-        const observer = new MutationObserver(function(mutations) {
-          mutations.forEach(function(mutation) {
-            if (mutation.attributeName === 'style' && 
-                processingModal.style.display === 'flex') {
-              // 模态对话框显示时，启动倒计时
-              startModalCountdown();
-            }
-          });
-        });
-        
-        // 配置观察器
-        observer.observe(processingModal, { attributes: true });
-        
-        // 倒计时函数
-        function startModalCountdown() {
-          let countdownValue = 30; // 默认30秒
-          
-          // 如果已经有倒计时值，则使用它
-          const countdownText = modalCountdown.textContent;
-          const match = countdownText.match(/\d+/);
-          if (match) {
-            countdownValue = parseInt(match[0], 10);
-          }
-          
-          modalCountdown.textContent = `自动关闭: ${countdownValue}`;
-          
-          // 清除可能存在的旧定时器
-          if (window.modalCountdownTimer) {
-            clearInterval(window.modalCountdownTimer);
-          }
-          
-          // 启动新的定时器
-          window.modalCountdownTimer = setInterval(function() {
-            countdownValue--;
-            
-            // 更新倒计时显示
-            if (modalCountdown) {
-              modalCountdown.textContent = `自动关闭: ${countdownValue}`;
-            }
-            
-            // 倒计时结束时关闭模态框
-            if (countdownValue <= 0) {
-              clearInterval(window.modalCountdownTimer);
-              
-              if (processingModal.style.display === 'flex') {
-                console.log('倒计时结束，自动关闭模态框');
-                processingModal.style.display = 'none';
-                
-                // 显示状态消息
-                const statusMessage = document.getElementById('status-message');
-                if (statusMessage) {
-                  statusMessage.textContent = '处理已完成（自动关闭）';
-                  statusMessage.style.display = 'block';
-                  setTimeout(() => {
-                    statusMessage.style.display = 'none';
-                  }, 3000);
-                }
-              }
-            }
-          }, 1000);
-        }
-      }
     });
   </script>
   
